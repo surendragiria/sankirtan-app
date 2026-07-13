@@ -162,6 +162,22 @@ const App = () => {
   const [importError, setImportError] = useState('');
   const [importSuccess, setImportSuccess] = useState('');
   
+  // NEW: Manual Add/Edit Public Bhajan states (admin)
+  const [showPublicBhajanForm, setShowPublicBhajanForm] = useState(false);
+  const [editingPublicBhajan, setEditingPublicBhajan] = useState(null);
+  const [publicBhajanForm, setPublicBhajanForm] = useState({
+    title: '',
+    lyrics: '',
+    deity: 'Babosa',
+    category: 'Bhajan',
+    dhun: '',
+    scale: '',
+    keywords: [],
+    source: ''
+  });
+  const [publicBhajanFormError, setPublicBhajanFormError] = useState('');
+  const [publicBhajanFormSaving, setPublicBhajanFormSaving] = useState(false);
+  
   // Check if current user is admin (with defensive comparison + debug)
   const isAdmin = useMemo(() => {
     if (!user || !user.uid) return false;
@@ -942,6 +958,16 @@ const App = () => {
         return;
       }
       
+      // Helper: parse keywords (string OR array)
+      const parseKeywords = (kw) => {
+        if (!kw) return [];
+        if (Array.isArray(kw)) return kw.filter(k => k && typeof k === 'string').map(k => k.trim()).filter(k => k);
+        if (typeof kw === 'string') {
+          return kw.split(',').map(k => k.trim()).filter(k => k);
+        }
+        return [];
+      };
+      
       // Normalize each bhajan
       const normalized = bhajanArray.map((b, idx) => {
         return {
@@ -952,8 +978,7 @@ const App = () => {
           category: normalizeCategory(b.category || b.type || 'Bhajan'),
           dhun: (b.dhun || b.tune || b.tarz || b.tarj || '').toString().trim(),
           scale: (b.scale || b.raag || b.raga || '').toString().trim(),
-          keywords: Array.isArray(b.keywords) ? b.keywords : 
-                    Array.isArray(b.tags) ? b.tags : [],
+          keywords: parseKeywords(b.keywords || b.tags),
           source: (b.source || b.sourceUrl || b.url || b.link || '').toString().trim()
         };
       }).filter(b => b.title && b.lyrics); // Only keep valid bhajans
@@ -1111,6 +1136,111 @@ const App = () => {
       console.error('Error deleting public bhajan:', error);
       alert('Could not delete: ' + error.message);
     }
+  };
+
+  // ==============================================
+  // MANUAL ADD/EDIT PUBLIC BHAJAN (Admin only)
+  // ==============================================
+  const openAddPublicBhajan = () => {
+    if (!isAdmin) return;
+    setPublicBhajanForm({
+      title: '',
+      lyrics: '',
+      deity: 'Babosa',
+      category: 'Bhajan',
+      dhun: '',
+      scale: '',
+      keywords: [],
+      source: ''
+    });
+    setEditingPublicBhajan(null);
+    setPublicBhajanFormError('');
+    setShowPublicBhajanForm(true);
+  };
+
+  const openEditPublicBhajan = (bhajan) => {
+    if (!isAdmin) return;
+    setPublicBhajanForm({
+      title: bhajan.title || '',
+      lyrics: bhajan.lyrics || '',
+      deity: bhajan.deity || 'Babosa',
+      category: bhajan.category || 'Bhajan',
+      dhun: bhajan.dhun || '',
+      scale: bhajan.scale || '',
+      keywords: bhajan.keywords || [],
+      source: bhajan.source || ''
+    });
+    setEditingPublicBhajan(bhajan);
+    setPublicBhajanFormError('');
+    setShowPublicBhajanForm(true);
+  };
+
+  const savePublicBhajan = async () => {
+    if (!isAdmin) return;
+    if (!publicBhajanForm.title.trim()) {
+      setPublicBhajanFormError('Please enter a title');
+      return;
+    }
+    if (!publicBhajanForm.lyrics.trim()) {
+      setPublicBhajanFormError('Please enter lyrics');
+      return;
+    }
+
+    try {
+      setPublicBhajanFormSaving(true);
+      setPublicBhajanFormError('');
+      const db = window.firebase.firestore();
+
+      const bhajanData = {
+        title: publicBhajanForm.title.trim(),
+        lyrics: publicBhajanForm.lyrics.trim(),
+        deity: publicBhajanForm.deity,
+        category: publicBhajanForm.category,
+        dhun: publicBhajanForm.dhun.trim(),
+        scale: publicBhajanForm.scale.trim(),
+        keywords: publicBhajanForm.keywords,
+        source: publicBhajanForm.source.trim(),
+        addedByUid: user.uid,
+        updatedAt: window.firebase.firestore.FieldValue.serverTimestamp()
+      };
+
+      if (editingPublicBhajan) {
+        // Update existing
+        await db.collection('publicBhajans').doc(editingPublicBhajan.id).update(bhajanData);
+        console.log('✅ Public bhajan updated');
+        // Update selected if it's the one being viewed
+        if (selectedPublicBhajan && selectedPublicBhajan.id === editingPublicBhajan.id) {
+          setSelectedPublicBhajan({ ...editingPublicBhajan, ...bhajanData });
+        }
+      } else {
+        // Create new
+        bhajanData.saveCount = 0;
+        bhajanData.viewCount = 0;
+        bhajanData.createdAt = window.firebase.firestore.FieldValue.serverTimestamp();
+        await db.collection('publicBhajans').add(bhajanData);
+        console.log('✅ Public bhajan created');
+      }
+
+      setShowPublicBhajanForm(false);
+      setEditingPublicBhajan(null);
+    } catch (error) {
+      console.error('Error saving public bhajan:', error);
+      setPublicBhajanFormError('Could not save: ' + error.message);
+    } finally {
+      setPublicBhajanFormSaving(false);
+    }
+  };
+
+  const togglePublicBhajanKeyword = (keyword) => {
+    setPublicBhajanForm(prev => {
+      const isSelected = prev.keywords.includes(keyword);
+      return {
+        ...prev,
+        keywords: isSelected
+          ? prev.keywords.filter(k => k !== keyword)
+          : [...prev.keywords, keyword]
+      };
+    });
   };
 
   const toggleKeyword = (keyword) => {
@@ -2820,12 +2950,20 @@ const App = () => {
                   ← Dashboard
                 </button>
                 {isAdmin && (
-                  <button
-                    onClick={openAdminPanel}
-                    className="bg-purple-100 hover:bg-purple-200 text-purple-700 font-semibold px-4 py-2 rounded-xl text-sm flex items-center gap-1"
-                  >
-                    🔧 Admin Panel
-                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={openAddPublicBhajan}
+                      className="bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white font-semibold px-4 py-2 rounded-xl text-sm flex items-center gap-1 shadow-md"
+                    >
+                      + Add Bhajan
+                    </button>
+                    <button
+                      onClick={openAdminPanel}
+                      className="bg-purple-100 hover:bg-purple-200 text-purple-700 font-semibold px-4 py-2 rounded-xl text-sm flex items-center gap-1"
+                    >
+                      🔧 Admin Panel
+                    </button>
+                  </div>
                 )}
               </div>
 
@@ -3011,12 +3149,20 @@ const App = () => {
                   ← Back to Public Library
                 </button>
                 {isAdmin && (
-                  <button
-                    onClick={() => deletePublicBhajan(selectedPublicBhajan)}
-                    className="text-red-600 hover:text-red-800 px-3 py-1.5 rounded-lg hover:bg-red-50 text-sm font-semibold"
-                  >
-                    🗑️ Delete (Admin)
-                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => openEditPublicBhajan(selectedPublicBhajan)}
+                      className="text-blue-600 hover:text-blue-800 px-3 py-1.5 rounded-lg hover:bg-blue-50 text-sm font-semibold"
+                    >
+                      ✏️ Edit
+                    </button>
+                    <button
+                      onClick={() => deletePublicBhajan(selectedPublicBhajan)}
+                      className="text-red-600 hover:text-red-800 px-3 py-1.5 rounded-lg hover:bg-red-50 text-sm font-semibold"
+                    >
+                      🗑️ Delete
+                    </button>
+                  </div>
                 )}
               </div>
 
@@ -3144,6 +3290,20 @@ const App = () => {
                     <div className="text-xs">Deities</div>
                   </div>
                 </div>
+              </div>
+
+              {/* Manual Add Bhajan Card */}
+              <div className="bg-white rounded-2xl shadow-lg p-6 mb-6 border-2 border-green-200">
+                <h3 className="text-lg font-bold text-amber-900 mb-3">➕ Add Bhajan Manually</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Add a single bhajan to the Public Library using a form.
+                </p>
+                <button
+                  onClick={openAddPublicBhajan}
+                  className="w-full bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white font-bold py-3 rounded-xl shadow-lg"
+                >
+                  + Add New Public Bhajan
+                </button>
               </div>
 
               {/* JSON Import Section */}
@@ -3274,6 +3434,173 @@ const App = () => {
             </>
           )}
         </main>
+        
+        {/* ==============================================
+            PUBLIC BHAJAN ADD/EDIT MODAL (Admin only)
+            ============================================== */}
+        {showPublicBhajanForm && isAdmin && (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 overflow-y-auto">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full my-8">
+              <div className="p-4 border-b border-orange-100 flex items-center justify-between sticky top-0 bg-white rounded-t-2xl z-10">
+                <h3 className="text-lg font-bold text-amber-900">
+                  {editingPublicBhajan ? '✏️ Edit Public Bhajan' : '➕ Add Public Bhajan'}
+                </h3>
+                <button
+                  onClick={() => {
+                    setShowPublicBhajanForm(false);
+                    setEditingPublicBhajan(null);
+                  }}
+                  className="text-gray-500 hover:text-gray-700 text-2xl leading-none"
+                >
+                  ×
+                </button>
+              </div>
+              
+              <div className="p-6 space-y-4">
+                {/* Title */}
+                <div>
+                  <label className="block text-sm font-semibold text-amber-900 mb-1">
+                    Title <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={publicBhajanForm.title}
+                    onChange={(e) => setPublicBhajanForm({...publicBhajanForm, title: e.target.value})}
+                    className="w-full px-4 py-3 border-2 border-orange-200 rounded-xl focus:ring-4 focus:ring-orange-200 focus:border-orange-400 outline-none text-lg"
+                    placeholder="e.g., ॐ जय जगदीश हरे"
+                  />
+                </div>
+
+                {/* Deity and Category */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-semibold text-amber-900 mb-1">Deity</label>
+                    <select
+                      value={publicBhajanForm.deity}
+                      onChange={(e) => setPublicBhajanForm({...publicBhajanForm, deity: e.target.value})}
+                      className="w-full px-4 py-3 border-2 border-orange-200 rounded-xl outline-none bg-white"
+                    >
+                      {DEITY_OPTIONS.map(d => (
+                        <option key={d.value} value={d.value}>{d.emoji} {d.value}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-amber-900 mb-1">Category</label>
+                    <select
+                      value={publicBhajanForm.category}
+                      onChange={(e) => setPublicBhajanForm({...publicBhajanForm, category: e.target.value})}
+                      className="w-full px-4 py-3 border-2 border-orange-200 rounded-xl outline-none bg-white"
+                    >
+                      {CATEGORY_OPTIONS.map(c => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Dhun */}
+                <div>
+                  <label className="block text-sm font-semibold text-amber-900 mb-1">
+                    तर्ज़ / धुन (Tune)
+                  </label>
+                  <input
+                    type="text"
+                    value={publicBhajanForm.dhun}
+                    onChange={(e) => setPublicBhajanForm({...publicBhajanForm, dhun: e.target.value})}
+                    className="w-full px-4 py-3 border-2 border-orange-200 rounded-xl outline-none"
+                    placeholder="e.g., तर्ज़: तुझे देखा तो..."
+                  />
+                </div>
+
+                {/* Scale */}
+                <div>
+                  <label className="block text-sm font-semibold text-amber-900 mb-1">Scale / Raag</label>
+                  <input
+                    type="text"
+                    value={publicBhajanForm.scale}
+                    onChange={(e) => setPublicBhajanForm({...publicBhajanForm, scale: e.target.value})}
+                    className="w-full px-4 py-3 border-2 border-orange-200 rounded-xl outline-none"
+                    placeholder="e.g., Raag Yaman, C# Scale"
+                  />
+                </div>
+
+                {/* Lyrics */}
+                <div>
+                  <label className="block text-sm font-semibold text-amber-900 mb-1">
+                    Lyrics <span className="text-red-500">*</span>
+                  </label>
+                  <textarea
+                    value={publicBhajanForm.lyrics}
+                    onChange={(e) => setPublicBhajanForm({...publicBhajanForm, lyrics: e.target.value})}
+                    rows={10}
+                    className="w-full px-4 py-3 border-2 border-orange-200 rounded-xl outline-none font-mono text-base"
+                    placeholder="भजन के बोल यहाँ लिखें..."
+                    style={{ lineHeight: '1.8' }}
+                  />
+                </div>
+
+                {/* Keywords */}
+                <div>
+                  <label className="block text-sm font-semibold text-amber-900 mb-2">Keywords</label>
+                  <div className="flex flex-wrap gap-2">
+                    {DEFAULT_KEYWORDS.map(kw => (
+                      <button
+                        key={kw}
+                        type="button"
+                        onClick={() => togglePublicBhajanKeyword(kw)}
+                        className={`px-3 py-1.5 rounded-full text-sm font-medium ${
+                          publicBhajanForm.keywords.includes(kw)
+                            ? 'bg-orange-500 text-white shadow-md'
+                            : 'bg-orange-50 text-amber-800 border border-orange-200 hover:bg-orange-100'
+                        }`}
+                      >
+                        {publicBhajanForm.keywords.includes(kw) ? '✓ ' : ''}#{kw}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Source */}
+                <div>
+                  <label className="block text-sm font-semibold text-amber-900 mb-1">Source URL (optional)</label>
+                  <input
+                    type="url"
+                    value={publicBhajanForm.source}
+                    onChange={(e) => setPublicBhajanForm({...publicBhajanForm, source: e.target.value})}
+                    className="w-full px-4 py-3 border-2 border-orange-200 rounded-xl outline-none"
+                    placeholder="https://youtube.com/... or reference URL"
+                  />
+                </div>
+
+                {publicBhajanFormError && (
+                  <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                    ⚠️ {publicBhajanFormError}
+                  </div>
+                )}
+
+                <div className="flex gap-3 pt-2">
+                  <button
+                    onClick={savePublicBhajan}
+                    disabled={publicBhajanFormSaving || !publicBhajanForm.title.trim() || !publicBhajanForm.lyrics.trim()}
+                    className="flex-1 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white font-bold py-3 rounded-xl shadow-lg disabled:opacity-50"
+                  >
+                    {publicBhajanFormSaving ? 'Saving...' : (editingPublicBhajan ? '💾 Save Changes' : '➕ Add Bhajan')}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowPublicBhajanForm(false);
+                      setEditingPublicBhajan(null);
+                    }}
+                    className="px-6 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 font-semibold"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
