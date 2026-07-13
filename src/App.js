@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 
 // ==============================================
 // SANKIRTAN SAAS - SESSION 2 (My Library Added)
@@ -32,6 +32,55 @@ const DEFAULT_KEYWORDS = [
   'celebration', 'punjabi', 'melody', 'mela', 'birthday',
   'gujarati', 'filmy', 'folk', 'traditional', 'peaceful'
 ];
+
+// Fallback Hindi transliteration map (used when API fails)
+const HINDI_FALLBACK_MAP = {
+  // Common bhajan words
+  'jai': 'जय', 'shri': 'श्री', 'shree': 'श्री', 'om': 'ॐ', 'aum': 'ॐ',
+  'ram': 'राम', 'rama': 'राम', 'krishna': 'कृष्ण', 'krsna': 'कृष्ण',
+  'hari': 'हरि', 'hare': 'हरे', 'radha': 'राधा', 'radhe': 'राधे',
+  'shiv': 'शिव', 'shiva': 'शिव', 'ganesh': 'गणेश', 'ganesha': 'गणेश',
+  'hanuman': 'हनुमान', 'ganpati': 'गणपति',
+  'babosa': 'बाबोसा', 'baba': 'बाबा', 'bhajan': 'भजन',
+  'khatu': 'खाटू', 'shyam': 'श्याम', 'khatushyam': 'खाटूश्याम',
+  'mata': 'माता', 'mataji': 'माताजी', 'devi': 'देवी',
+  'bhagwan': 'भगवान', 'bhagwaan': 'भगवान', 'prabhu': 'प्रभु',
+  'namo': 'नमो', 'namah': 'नमः', 'namaste': 'नमस्ते',
+  'satguru': 'सतगुरु', 'guru': 'गुरु', 'sadguru': 'सद्गुरु',
+  'bhole': 'भोले', 'shankar': 'शंकर', 'mahadev': 'महादेव',
+  'govind': 'गोविन्द', 'gopal': 'गोपाल', 'murari': 'मुरारी',
+  'kanha': 'कान्हा', 'kanhaiya': 'कन्हैया', 'nandlala': 'नंदलाला',
+  'mohan': 'मोहन', 'giridhar': 'गिरधर', 'giridhari': 'गिरधारी',
+  'sita': 'सीता', 'lakshman': 'लक्ष्मण', 'bharat': 'भरत',
+  'bajrangbali': 'बजरंगबली', 'sankat': 'संकट', 'mochan': 'मोचन',
+  'ambe': 'अम्बे', 'ambey': 'अम्बे', 'durga': 'दुर्गा', 'kali': 'काली',
+  'saraswati': 'सरस्वती', 'lakshmi': 'लक्ष्मी', 'parvati': 'पार्वती',
+  'ramdev': 'रामदेव', 'ramdevji': 'रामदेवजी', 'bhairav': 'भैरव',
+  'mandir': 'मंदिर', 'temple': 'मंदिर', 'darshan': 'दर्शन',
+  'aarti': 'आरती', 'arti': 'आरती', 'pooja': 'पूजा', 'puja': 'पूजा',
+  'diya': 'दीया', 'jyoti': 'ज्योति', 'roshni': 'रोशनी',
+  'bhakt': 'भक्त', 'bhakti': 'भक्ति', 'seva': 'सेवा',
+  'daya': 'दया', 'karo': 'करो', 'kripa': 'कृपा',
+  'charno': 'चरणों', 'charan': 'चरण', 'sharan': 'शरण',
+  'darbar': 'दरबार', 'dwar': 'द्वार', 'gate': 'द्वार',
+  'meera': 'मीरा', 'sant': 'संत', 'kabir': 'कबीर', 'tulsi': 'तुलसी',
+  'dhun': 'धुन', 'tarz': 'तर्ज़', 'raag': 'राग',
+  'ke': 'के', 'ka': 'का', 'ki': 'की', 'ko': 'को', 'se': 'से',
+  'me': 'में', 'mai': 'मैं', 'main': 'मैं', 'tum': 'तुम',
+  'hai': 'है', 'hain': 'हैं', 'ho': 'हो', 'hoga': 'होगा',
+  'aaya': 'आया', 'aya': 'आया', 'aayi': 'आयी', 'aayo': 'आयो',
+  'jaao': 'जाओ', 'jao': 'जाओ', 'jai_ho': 'जय हो',
+  'sundar': 'सुंदर', 'pyara': 'प्यारा', 'nyara': 'न्यारा',
+  'balak': 'बालक', 'putra': 'पुत्र', 'beta': 'बेटा',
+  'maa': 'माँ', 'mata': 'माता', 'papa': 'पापा', 'pita': 'पिता',
+  'ghar': 'घर', 'aangan': 'आँगन', 'darwaza': 'दरवाज़ा',
+  'sundar': 'सुंदर', 'suhavan': 'सुहावन', 'manohar': 'मनोहर',
+  'sab': 'सब', 'sabhi': 'सभी', 'hum': 'हम', 'tumhare': 'तुम्हारे',
+  'tera': 'तेरा', 'teri': 'तेरी', 'tere': 'तेरे', 'tujh': 'तुझ',
+  'mera': 'मेरा', 'meri': 'मेरी', 'mere': 'मेरे', 'mujh': 'मुझ',
+  'bhajans': 'भजन', 'kirtan': 'कीर्तन', 'sankirtan': 'संकीर्तन',
+  'satsang': 'सत्संग', 'jagran': 'जागरण', 'mela': 'मेला',
+};
 
 const App = () => {
   // Auth states
@@ -103,6 +152,31 @@ const App = () => {
     keywords: [],
     source: ''
   });
+
+  // NEW: Hindi Typing states
+  const [hindiTypingEnabled, setHindiTypingEnabled] = useState(() => {
+    try {
+      const saved = localStorage.getItem('sankirtan-hindi-typing');
+      return saved === null ? true : saved === 'true';
+    } catch {
+      return true;
+    }
+  });
+  const [transliterationSuggestions, setTransliterationSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [currentWord, setCurrentWord] = useState('');
+  const [suggestionsCache, setSuggestionsCache] = useState({});
+  const [activeTypingField, setActiveTypingField] = useState(null); // 'lyrics', 'title', 'dhun'
+  const suggestionsAbortRef = useRef(null);
+  
+  // Save Hindi typing preference
+  useEffect(() => {
+    try {
+      localStorage.setItem('sankirtan-hindi-typing', hindiTypingEnabled.toString());
+    } catch (e) {
+      console.log('LocalStorage not available');
+    }
+  }, [hindiTypingEnabled]);
 
   // ==============================================
   // FIREBASE INITIALIZATION
@@ -465,6 +539,168 @@ const App = () => {
     } catch (error) {
       console.log('Could not update view count:', error);
     }
+  };
+
+  // ==============================================
+  // HINDI TYPING - GOOGLE INPUT TOOLS API
+  // ==============================================
+  const fetchGoogleSuggestions = async (word) => {
+    if (!word || word.length < 1) {
+      setTransliterationSuggestions([]);
+      return;
+    }
+    
+    const lowerWord = word.toLowerCase();
+    
+    // Check cache first
+    if (suggestionsCache[lowerWord]) {
+      setTransliterationSuggestions(suggestionsCache[lowerWord]);
+      return;
+    }
+    
+    // Abort any pending request
+    if (suggestionsAbortRef.current && suggestionsAbortRef.current.abort) {
+      try {
+        suggestionsAbortRef.current.abort();
+      } catch (e) {}
+    }
+    
+    const controller = new AbortController();
+    suggestionsAbortRef.current = controller;
+    
+    try {
+      const url = `https://inputtools.google.com/request?text=${encodeURIComponent(word)}&itc=hi-t-i0-und&num=5&cp=0&cs=1&ie=utf-8&oe=utf-8`;
+      const response = await fetch(url, { signal: controller.signal });
+      const data = await response.json();
+      
+      if (data && data[0] === 'SUCCESS' && data[1] && data[1][0] && data[1][0][1]) {
+        const suggestions = data[1][0][1].slice(0, 5);
+        setTransliterationSuggestions(suggestions);
+        setSuggestionsCache(prev => ({ ...prev, [lowerWord]: suggestions }));
+      } else {
+        // Fallback to local map
+        const fallback = HINDI_FALLBACK_MAP[lowerWord];
+        setTransliterationSuggestions(fallback ? [fallback] : []);
+      }
+    } catch (err) {
+      if (err.name !== 'AbortError') {
+        console.log('Transliteration API error, using fallback');
+        const fallback = HINDI_FALLBACK_MAP[lowerWord];
+        setTransliterationSuggestions(fallback ? [fallback] : []);
+      }
+    }
+  };
+  
+  // Handle keyboard events (space/enter/period converts word)
+  const handleHindiKeyDown = (e, fieldName) => {
+    if (!hindiTypingEnabled) return;
+    if (e.key !== ' ' && e.key !== 'Enter' && e.key !== '.') return;
+    
+    const target = e.target;
+    const cursorPos = target.selectionStart;
+    const value = target.value;
+    
+    // Find word boundaries
+    let wordStart = cursorPos - 1;
+    while (wordStart > 0 && value[wordStart - 1] !== ' ' && value[wordStart - 1] !== '\n') {
+      wordStart--;
+    }
+    const currentWordText = value.substring(wordStart, cursorPos);
+    
+    // Only convert if word looks like English (ASCII letters only)
+    if (!currentWordText || !/^[a-zA-Z]+$/.test(currentWordText)) {
+      setShowSuggestions(false);
+      return;
+    }
+    
+    const lowerWord = currentWordText.toLowerCase();
+    const cachedSuggestions = suggestionsCache[lowerWord] || 
+      (HINDI_FALLBACK_MAP[lowerWord] ? [HINDI_FALLBACK_MAP[lowerWord]] : null);
+    
+    if (cachedSuggestions && cachedSuggestions.length > 0) {
+      e.preventDefault();
+      const replacement = cachedSuggestions[0];
+      const separator = e.key === '.' ? '.' : (e.key === 'Enter' ? '\n' : ' ');
+      const newValue = value.substring(0, wordStart) + replacement + separator + value.substring(cursorPos);
+      
+      setBhajanForm(prev => ({ ...prev, [fieldName]: newValue }));
+      
+      setShowSuggestions(false);
+      setCurrentWord('');
+      
+      // Restore cursor
+      setTimeout(() => {
+        const newCursor = wordStart + replacement.length + 1;
+        target.selectionStart = newCursor;
+        target.selectionEnd = newCursor;
+      }, 0);
+    } else {
+      setShowSuggestions(false);
+    }
+  };
+  
+  // Track current word for suggestions
+  const handleHindiInput = (e, fieldName) => {
+    const value = e.target.value;
+    setBhajanForm(prev => ({ ...prev, [fieldName]: value }));
+    
+    if (!hindiTypingEnabled) {
+      setShowSuggestions(false);
+      return;
+    }
+    
+    const cursorPos = e.target.selectionStart;
+    let wordStart = cursorPos;
+    while (wordStart > 0 && value[wordStart - 1] !== ' ' && value[wordStart - 1] !== '\n') {
+      wordStart--;
+    }
+    const wordText = value.substring(wordStart, cursorPos);
+    
+    if (wordText && /^[a-zA-Z]+$/.test(wordText) && wordText.length >= 1) {
+      setCurrentWord(wordText);
+      setActiveTypingField(fieldName);
+      
+      // Debounced fetch
+      if (suggestionsAbortRef.current && suggestionsAbortRef.current._timerId) {
+        clearTimeout(suggestionsAbortRef.current._timerId);
+      }
+      const timerId = setTimeout(() => fetchGoogleSuggestions(wordText), 200);
+      suggestionsAbortRef.current = { 
+        _timerId: timerId,
+        abort: () => clearTimeout(timerId)
+      };
+      setShowSuggestions(true);
+    } else {
+      setShowSuggestions(false);
+      setCurrentWord('');
+    }
+  };
+  
+  // Apply a suggestion (tap on chip)
+  const applySuggestion = (suggestion, fieldName) => {
+    const fieldElement = document.getElementById(`hindi-input-${fieldName}`);
+    if (!fieldElement) return;
+    
+    const cursorPos = fieldElement.selectionStart;
+    const value = fieldElement.value;
+    
+    let wordStart = cursorPos;
+    while (wordStart > 0 && value[wordStart - 1] !== ' ' && value[wordStart - 1] !== '\n') {
+      wordStart--;
+    }
+    
+    const newValue = value.substring(0, wordStart) + suggestion + ' ' + value.substring(cursorPos);
+    setBhajanForm(prev => ({ ...prev, [fieldName]: newValue }));
+    
+    setShowSuggestions(false);
+    setCurrentWord('');
+    
+    setTimeout(() => {
+      fieldElement.focus();
+      const newCursor = wordStart + suggestion.length + 1;
+      fieldElement.selectionStart = newCursor;
+      fieldElement.selectionEnd = newCursor;
+    }, 0);
   };
 
   const toggleKeyword = (keyword) => {
@@ -1385,13 +1621,47 @@ const App = () => {
                   <label className="block text-sm font-semibold text-amber-900 mb-1">
                     Title <span className="text-red-500">*</span>
                   </label>
-                  <input
-                    type="text"
-                    value={bhajanForm.title}
-                    onChange={(e) => setBhajanForm({...bhajanForm, title: e.target.value})}
-                    className="w-full px-4 py-3 border-2 border-orange-200 rounded-xl focus:ring-4 focus:ring-orange-200 focus:border-orange-400 outline-none text-lg"
-                    placeholder="e.g., ॐ जय जगदीश हरे"
-                  />
+                  <div className="relative">
+                    <input
+                      id="hindi-input-title"
+                      type="text"
+                      value={bhajanForm.title}
+                      onChange={(e) => handleHindiInput(e, 'title')}
+                      onKeyDown={(e) => handleHindiKeyDown(e, 'title')}
+                      onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+                      onFocus={() => setActiveTypingField('title')}
+                      className="w-full px-4 py-3 border-2 border-orange-200 rounded-xl focus:ring-4 focus:ring-orange-200 focus:border-orange-400 outline-none text-lg"
+                      placeholder={hindiTypingEnabled ? "Type: om jai jagdish hare" : "e.g., ॐ जय जगदीश हरे"}
+                    />
+                    {hindiTypingEnabled && showSuggestions && activeTypingField === 'title' && transliterationSuggestions.length > 0 && (
+                      <div className="mt-1 bg-white border-2 border-orange-300 rounded-lg shadow-lg p-2 flex flex-wrap gap-2 items-center">
+                        <span className="text-xs text-gray-500 mr-1">
+                          <strong>"{currentWord}"</strong> →
+                        </span>
+                        {transliterationSuggestions.map((suggestion, idx) => (
+                          <button
+                            key={idx}
+                            type="button"
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              applySuggestion(suggestion, 'title');
+                            }}
+                            onTouchStart={(e) => {
+                              e.preventDefault();
+                              applySuggestion(suggestion, 'title');
+                            }}
+                            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                              idx === 0
+                                ? 'bg-orange-500 text-white hover:bg-orange-600 shadow-md'
+                                : 'bg-orange-100 text-amber-800 hover:bg-orange-200'
+                            }`}
+                          >
+                            {idx === 0 && '⭐ '}{suggestion}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* Deity and Category */}
@@ -1432,13 +1702,47 @@ const App = () => {
                   <label className="block text-sm font-semibold text-amber-900 mb-1">
                     तर्ज़ / धुन (Tune)
                   </label>
-                  <input
-                    type="text"
-                    value={bhajanForm.dhun}
-                    onChange={(e) => setBhajanForm({...bhajanForm, dhun: e.target.value})}
-                    className="w-full px-4 py-3 border-2 border-orange-200 rounded-xl focus:ring-4 focus:ring-orange-200 focus:border-orange-400 outline-none"
-                    placeholder="e.g., तर्ज़: तुझे देखा तो..."
-                  />
+                  <div className="relative">
+                    <input
+                      id="hindi-input-dhun"
+                      type="text"
+                      value={bhajanForm.dhun}
+                      onChange={(e) => handleHindiInput(e, 'dhun')}
+                      onKeyDown={(e) => handleHindiKeyDown(e, 'dhun')}
+                      onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+                      onFocus={() => setActiveTypingField('dhun')}
+                      className="w-full px-4 py-3 border-2 border-orange-200 rounded-xl focus:ring-4 focus:ring-orange-200 focus:border-orange-400 outline-none"
+                      placeholder={hindiTypingEnabled ? "Type in English, press space" : "e.g., तर्ज़: तुझे देखा तो..."}
+                    />
+                    {hindiTypingEnabled && showSuggestions && activeTypingField === 'dhun' && transliterationSuggestions.length > 0 && (
+                      <div className="mt-1 bg-white border-2 border-orange-300 rounded-lg shadow-lg p-2 flex flex-wrap gap-2 items-center">
+                        <span className="text-xs text-gray-500 mr-1">
+                          <strong>"{currentWord}"</strong> →
+                        </span>
+                        {transliterationSuggestions.map((suggestion, idx) => (
+                          <button
+                            key={idx}
+                            type="button"
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              applySuggestion(suggestion, 'dhun');
+                            }}
+                            onTouchStart={(e) => {
+                              e.preventDefault();
+                              applySuggestion(suggestion, 'dhun');
+                            }}
+                            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                              idx === 0
+                                ? 'bg-orange-500 text-white hover:bg-orange-600 shadow-md'
+                                : 'bg-orange-100 text-amber-800 hover:bg-orange-200'
+                            }`}
+                          >
+                            {idx === 0 && '⭐ '}{suggestion}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* Scale */}
@@ -1455,22 +1759,83 @@ const App = () => {
                   />
                 </div>
 
-                {/* Lyrics */}
+                {/* Lyrics with Hindi Typing */}
                 <div className="mb-4">
-                  <label className="block text-sm font-semibold text-amber-900 mb-1">
-                    Lyrics <span className="text-red-500">*</span>
-                  </label>
-                  <textarea
-                    value={bhajanForm.lyrics}
-                    onChange={(e) => setBhajanForm({...bhajanForm, lyrics: e.target.value})}
-                    rows={10}
-                    className="w-full px-4 py-3 border-2 border-orange-200 rounded-xl focus:ring-4 focus:ring-orange-200 focus:border-orange-400 outline-none font-mono text-base"
-                    placeholder="भजन के बोल यहाँ लिखें..."
-                    style={{ lineHeight: '1.8' }}
-                  />
-                  <p className="text-xs text-gray-500 mt-1">
-                    💡 Tip: Hindi typing support coming in Session 4!
-                  </p>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-sm font-semibold text-amber-900">
+                      Lyrics <span className="text-red-500">*</span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setHindiTypingEnabled(!hindiTypingEnabled)}
+                      className={`text-xs font-semibold px-3 py-1 rounded-full transition-all ${
+                        hindiTypingEnabled
+                          ? 'bg-orange-500 text-white shadow-md'
+                          : 'bg-gray-100 text-gray-600 border border-gray-300'
+                      }`}
+                      title={hindiTypingEnabled ? 'Turn off Hindi typing' : 'Turn on Hindi typing'}
+                    >
+                      {hindiTypingEnabled ? '🇮🇳 हिंदी ON' : '🔤 Hindi OFF'}
+                    </button>
+                  </div>
+                  
+                  {hindiTypingEnabled && (
+                    <div className="mb-2 p-2 bg-orange-50 border border-orange-200 rounded-lg">
+                      <p className="text-xs text-orange-800">
+                        ✨ Type in English, press <kbd className="bg-white px-1.5 py-0.5 rounded border text-xs">space</kbd> to auto-convert to Hindi
+                      </p>
+                      <p className="text-xs text-orange-600 mt-1">
+                        Example: <code className="bg-white px-1 rounded">jai shri babosa</code> → जय श्री बाबोसा
+                      </p>
+                    </div>
+                  )}
+                  
+                  <div className="relative">
+                    <textarea
+                      id="hindi-input-lyrics"
+                      value={bhajanForm.lyrics}
+                      onChange={(e) => handleHindiInput(e, 'lyrics')}
+                      onKeyDown={(e) => handleHindiKeyDown(e, 'lyrics')}
+                      onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+                      onFocus={() => setActiveTypingField('lyrics')}
+                      rows={10}
+                      className="w-full px-4 py-3 border-2 border-orange-200 rounded-xl focus:ring-4 focus:ring-orange-200 focus:border-orange-400 outline-none font-mono text-base"
+                      placeholder={hindiTypingEnabled ? "Type: jai shri babosa (press space to convert)" : "भजन के बोल यहाँ लिखें..."}
+                      style={{ lineHeight: '1.8' }}
+                    />
+                    
+                    {/* Hindi Suggestions Popup */}
+                    {hindiTypingEnabled && showSuggestions && activeTypingField === 'lyrics' && transliterationSuggestions.length > 0 && (
+                      <div className="mt-1 bg-white border-2 border-orange-300 rounded-lg shadow-lg p-2 flex flex-wrap gap-2 items-center">
+                        <span className="text-xs text-gray-500 mr-1">
+                          <strong>"{currentWord}"</strong> →
+                        </span>
+                        {transliterationSuggestions.map((suggestion, idx) => (
+                          <button
+                            key={idx}
+                            type="button"
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              applySuggestion(suggestion, 'lyrics');
+                            }}
+                            onTouchStart={(e) => {
+                              e.preventDefault();
+                              applySuggestion(suggestion, 'lyrics');
+                            }}
+                            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                              idx === 0
+                                ? 'bg-orange-500 text-white hover:bg-orange-600 shadow-md'
+                                : 'bg-orange-100 text-amber-800 hover:bg-orange-200'
+                            }`}
+                            title={idx === 0 ? 'Default (press space)' : `Alternative ${idx + 1}`}
+                          >
+                            {idx === 0 && '⭐ '}{suggestion}
+                          </button>
+                        ))}
+                        <span className="text-xs text-gray-400 ml-auto">Tap or press space</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* Keywords */}
