@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 
 // ==============================================
 // SANKIRTAN SAAS - SESSION 2 (My Library Added)
@@ -162,8 +162,23 @@ const App = () => {
   const [importError, setImportError] = useState('');
   const [importSuccess, setImportSuccess] = useState('');
   
-  // Check if current user is admin
-  const isAdmin = user && user.uid === ADMIN_UID;
+  // Check if current user is admin (with defensive comparison + debug)
+  const isAdmin = useMemo(() => {
+    if (!user || !user.uid) return false;
+    const uid = user.uid.toString().trim();
+    const adminUid = ADMIN_UID.toString().trim();
+    const match = uid === adminUid;
+    if (user) {
+      console.log('👑 Admin check:', {
+        userUid: uid,
+        adminUid: adminUid,
+        userLength: uid.length,
+        adminLength: adminUid.length,
+        match: match
+      });
+    }
+    return match;
+  }, [user]);
   
   // New/Edit bhajan form
   const [bhajanForm, setBhajanForm] = useState({
@@ -1610,7 +1625,7 @@ const App = () => {
               {isAdmin && (
                 <button
                   onClick={openAdminPanel}
-                  className="hidden sm:flex items-center gap-1 bg-purple-100 hover:bg-purple-200 text-purple-700 text-xs font-semibold px-3 py-1.5 rounded-lg"
+                  className="flex items-center gap-1 bg-purple-100 hover:bg-purple-200 text-purple-700 text-xs font-semibold px-3 py-1.5 rounded-lg"
                   title="Admin Panel"
                 >
                   🔧 Admin
@@ -1730,6 +1745,25 @@ const App = () => {
                   </span>
                 </div>
               </div>
+
+              {/* ADMIN PANEL CARD (Only visible to admin) */}
+              {isAdmin && (
+                <div className="mb-6">
+                  <button
+                    onClick={openAdminPanel}
+                    className="w-full bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 text-white rounded-2xl shadow-xl p-6 flex items-center justify-between transition-all"
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="text-5xl">👑</div>
+                      <div className="text-left">
+                        <h3 className="text-xl font-bold mb-1">Admin Panel</h3>
+                        <p className="text-purple-100 text-sm">Manage Public Library • Import Bhajans • View Stats</p>
+                      </div>
+                    </div>
+                    <div className="text-3xl">→</div>
+                  </button>
+                </div>
+              )}
 
               {/* Development Notice */}
               <div className="bg-blue-50 border-2 border-blue-200 rounded-2xl p-6 text-center">
