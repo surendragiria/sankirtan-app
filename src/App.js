@@ -34,7 +34,7 @@ const DEFAULT_KEYWORDS = [
 ];
 
 // Admin user ID (only this user can manage public library)
-const ADMIN_UID = 'ukY1LbmeVCYv8O3ipg0wJgyEL1F2';
+const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
 
 // Fallback Hindi transliteration map (used when API fails)
 const HINDI_FALLBACK_MAP = {
