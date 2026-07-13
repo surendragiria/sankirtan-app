@@ -33,6 +33,9 @@ const DEFAULT_KEYWORDS = [
   'gujarati', 'filmy', 'folk', 'traditional', 'peaceful'
 ];
 
+// Admin user ID (only this user can manage public library)
+const ADMIN_UID = 'ukY1LbmeVCYv8O3ipg0wJgyEL1F2';
+
 // Fallback Hindi transliteration map (used when API fails)
 const HINDI_FALLBACK_MAP = {
   // Common bhajan words
@@ -140,6 +143,27 @@ const App = () => {
   const [liveProgramIndex, setLiveProgramIndex] = useState(0);
   const [liveFontSize, setLiveFontSize] = useState(20);
   const [liveWakeLock, setLiveWakeLock] = useState(null);
+
+  // NEW: Public Library states
+  const [publicBhajans, setPublicBhajans] = useState([]);
+  const [publicLoading, setPublicLoading] = useState(false);
+  const [publicSearchQuery, setPublicSearchQuery] = useState('');
+  const [publicFilterDeity, setPublicFilterDeity] = useState('');
+  const [publicFilterCategory, setPublicFilterCategory] = useState('');
+  const [selectedPublicBhajan, setSelectedPublicBhajan] = useState(null);
+  const [savingToLibrary, setSavingToLibrary] = useState(false);
+  const [savedBhajanIds, setSavedBhajanIds] = useState(new Set());
+  
+  // NEW: Admin Panel states
+  const [importJsonText, setImportJsonText] = useState('');
+  const [importPreview, setImportPreview] = useState(null);
+  const [importing, setImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState({ current: 0, total: 0, message: '' });
+  const [importError, setImportError] = useState('');
+  const [importSuccess, setImportSuccess] = useState('');
+  
+  // Check if current user is admin
+  const isAdmin = user && user.uid === ADMIN_UID;
   
   // New/Edit bhajan form
   const [bhajanForm, setBhajanForm] = useState({
@@ -301,6 +325,57 @@ const App = () => {
 
     return () => unsubscribe();
   }, [user, userProfile]);
+
+  // ==============================================
+  // LOAD PUBLIC LIBRARY BHAJANS
+  // ==============================================
+  useEffect(() => {
+    if (!user) {
+      setPublicBhajans([]);
+      return;
+    }
+
+    setPublicLoading(true);
+    const db = window.firebase.firestore();
+    const publicRef = db.collection('publicBhajans');
+    
+    const unsubscribe = publicRef
+      .orderBy('createdAt', 'desc')
+      .onSnapshot(
+        (snapshot) => {
+          const list = [];
+          snapshot.forEach((doc) => {
+            list.push({ id: doc.id, ...doc.data() });
+          });
+          setPublicBhajans(list);
+          setPublicLoading(false);
+          console.log(`✅ Loaded ${list.length} public bhajans`);
+        },
+        (error) => {
+          console.error('Error loading public bhajans:', error);
+          setPublicLoading(false);
+        }
+      );
+
+    return () => unsubscribe();
+  }, [user]);
+
+  // Track which public bhajans user has already saved
+  useEffect(() => {
+    if (!user || !bhajans) {
+      setSavedBhajanIds(new Set());
+      return;
+    }
+    
+    // Find bhajans that were saved from public library
+    const saved = new Set();
+    bhajans.forEach(b => {
+      if (b.savedFromPublicId) {
+        saved.add(b.savedFromPublicId);
+      }
+    });
+    setSavedBhajanIds(saved);
+  }, [user, bhajans]);
 
   // ==============================================
   // USER PROFILE MANAGEMENT
@@ -701,6 +776,326 @@ const App = () => {
       fieldElement.selectionStart = newCursor;
       fieldElement.selectionEnd = newCursor;
     }, 0);
+  };
+
+  // ==============================================
+  // PUBLIC LIBRARY OPERATIONS
+  // ==============================================
+  const openPublicLibrary = () => {
+    setCurrentView('public-library');
+    setPublicSearchQuery('');
+    setPublicFilterDeity('');
+    setPublicFilterCategory('');
+  };
+
+  const openPublicBhajanDetail = (bhajan) => {
+    setSelectedPublicBhajan(bhajan);
+    setCurrentView('public-bhajan-detail');
+  };
+
+  // Save public bhajan to user's personal library
+  const saveToMyLibrary = async (publicBhajan) => {
+    if (!user || !userProfile) return;
+    
+    // Check if already saved
+    if (savedBhajanIds.has(publicBhajan.id)) {
+      alert('You already have this bhajan in your library!');
+      return;
+    }
+    
+    try {
+      setSavingToLibrary(true);
+      const db = window.firebase.firestore();
+      
+      // Create a copy in user's library
+      const bhajanData = {
+        title: publicBhajan.title || '',
+        lyrics: publicBhajan.lyrics || '',
+        deity: publicBhajan.deity || 'Others',
+        category: publicBhajan.category || 'Bhajan',
+        dhun: publicBhajan.dhun || '',
+        scale: publicBhajan.scale || '',
+        keywords: publicBhajan.keywords || [],
+        source: publicBhajan.source || '',
+        ownerId: user.uid,
+        ownerName: userProfile.displayName,
+        visibility: 'private',
+        viewCount: 0,
+        savedFromPublicId: publicBhajan.id, // Track source
+        createdAt: window.firebase.firestore.FieldValue.serverTimestamp(),
+        updatedAt: window.firebase.firestore.FieldValue.serverTimestamp(),
+        lastActive: window.firebase.firestore.FieldValue.serverTimestamp()
+      };
+      
+      // Save to user's collection
+      await db.collection('users').doc(user.uid).collection('bhajans').add(bhajanData);
+      
+      // Update user's bhajan count
+      await db.collection('users').doc(user.uid).update({
+        'stats.bhajanCount': window.firebase.firestore.FieldValue.increment(1)
+      });
+      
+      setUserProfile(prev => ({
+        ...prev,
+        stats: { ...prev.stats, bhajanCount: (prev.stats?.bhajanCount || 0) + 1 }
+      }));
+      
+      // Track that we saved it
+      setSavedBhajanIds(prev => new Set([...prev, publicBhajan.id]));
+      
+      // Update public bhajan save count (best effort)
+      try {
+        await db.collection('publicBhajans').doc(publicBhajan.id).update({
+          saveCount: window.firebase.firestore.FieldValue.increment(1)
+        });
+      } catch (e) {
+        console.log('Could not update save count (not admin)');
+      }
+      
+      alert(`✅ "${publicBhajan.title}" added to your library!`);
+      console.log('✅ Bhajan saved to library');
+    } catch (error) {
+      console.error('Error saving bhajan:', error);
+      alert('Could not save: ' + error.message);
+    } finally {
+      setSavingToLibrary(false);
+    }
+  };
+
+  // Filter public bhajans
+  const filteredPublicBhajans = publicBhajans.filter(bhajan => {
+    if (publicSearchQuery) {
+      const q = publicSearchQuery.toLowerCase();
+      const matches = 
+        (bhajan.title && bhajan.title.toLowerCase().includes(q)) ||
+        (bhajan.lyrics && bhajan.lyrics.toLowerCase().includes(q)) ||
+        (bhajan.dhun && bhajan.dhun.toLowerCase().includes(q)) ||
+        (bhajan.keywords && bhajan.keywords.some(k => k.toLowerCase().includes(q)));
+      if (!matches) return false;
+    }
+    if (publicFilterDeity && bhajan.deity !== publicFilterDeity) return false;
+    if (publicFilterCategory && bhajan.category !== publicFilterCategory) return false;
+    return true;
+  });
+
+  // ==============================================
+  // ADMIN PANEL FUNCTIONS
+  // ==============================================
+  const openAdminPanel = () => {
+    if (!isAdmin) {
+      alert('Access denied. Admin only.');
+      return;
+    }
+    setCurrentView('admin-panel');
+    setImportJsonText('');
+    setImportPreview(null);
+    setImportError('');
+    setImportSuccess('');
+  };
+
+  // Parse JSON and show preview
+  const previewImport = () => {
+    setImportError('');
+    setImportSuccess('');
+    
+    if (!importJsonText.trim()) {
+      setImportError('Please paste JSON content first');
+      return;
+    }
+    
+    try {
+      const parsed = JSON.parse(importJsonText);
+      
+      // Handle different possible structures
+      let bhajanArray = [];
+      
+      if (Array.isArray(parsed)) {
+        bhajanArray = parsed;
+      } else if (parsed.bhajans && Array.isArray(parsed.bhajans)) {
+        bhajanArray = parsed.bhajans;
+      } else if (parsed.data && Array.isArray(parsed.data)) {
+        bhajanArray = parsed.data;
+      } else if (typeof parsed === 'object') {
+        // Maybe it's an object of bhajans
+        bhajanArray = Object.values(parsed).filter(v => 
+          v && typeof v === 'object' && (v.title || v.lyrics)
+        );
+      }
+      
+      if (bhajanArray.length === 0) {
+        setImportError('No bhajans found in the JSON. Please check the format.');
+        return;
+      }
+      
+      // Normalize each bhajan
+      const normalized = bhajanArray.map((b, idx) => {
+        return {
+          _originalIndex: idx,
+          title: (b.title || b.name || `Bhajan ${idx + 1}`).toString().trim(),
+          lyrics: (b.lyrics || b.body || b.text || b.content || '').toString().trim(),
+          deity: normalizeDeity(b.deity || b.god || 'Others'),
+          category: normalizeCategory(b.category || b.type || 'Bhajan'),
+          dhun: (b.dhun || b.tune || b.tarz || b.tarj || '').toString().trim(),
+          scale: (b.scale || b.raag || b.raga || '').toString().trim(),
+          keywords: Array.isArray(b.keywords) ? b.keywords : 
+                    Array.isArray(b.tags) ? b.tags : [],
+          source: (b.source || b.sourceUrl || b.url || b.link || '').toString().trim()
+        };
+      }).filter(b => b.title && b.lyrics); // Only keep valid bhajans
+      
+      setImportPreview({
+        total: bhajanArray.length,
+        valid: normalized.length,
+        skipped: bhajanArray.length - normalized.length,
+        bhajans: normalized
+      });
+    } catch (error) {
+      setImportError('Invalid JSON format: ' + error.message);
+    }
+  };
+
+  // Normalize deity name to match our options
+  const normalizeDeity = (deity) => {
+    if (!deity) return 'Others';
+    const d = deity.toString().toLowerCase().trim();
+    
+    if (d.includes('babos')) return 'Babosa';
+    if (d.includes('krishn') || d.includes('kanhaiy') || d.includes('kanha')) return 'Krishna';
+    if (d.includes('mata') || d.includes('devi') || d.includes('amba') || d.includes('durg')) return 'Mata Ji';
+    if (d.includes('hanuman') || d.includes('bajrang')) return 'Hanuman';
+    if (d.includes('ram')) return 'Rama';
+    if (d.includes('shiv') || d.includes('mahadev') || d.includes('bhole')) return 'Shiv';
+    if (d.includes('ramdev')) return 'Ramdev';
+    if (d.includes('ganesh') || d.includes('ganpat')) return 'Ganesh';
+    if (d.includes('bhairav')) return 'Bhairav';
+    if (d.includes('desh') || d.includes('desh')) return 'Deshbhakti';
+    
+    // Match exact options
+    const validOptions = ['Babosa', 'Krishna', 'Mata Ji', 'Hanuman', 'Rama', 'Shiv', 'Ramdev', 'Ganesh', 'Bhairav', 'Deshbhakti', 'Others'];
+    const found = validOptions.find(o => o.toLowerCase() === d);
+    if (found) return found;
+    
+    return 'Others';
+  };
+
+  // Normalize category
+  const normalizeCategory = (cat) => {
+    if (!cat) return 'Bhajan';
+    const c = cat.toString().toLowerCase().trim();
+    
+    if (c.includes('arti') || c.includes('aarti')) return 'Arti';
+    if (c.includes('parody')) return 'Parody';
+    if (c.includes('quwal') || c.includes('qawwal')) return 'Quwali';
+    if (c.includes('folk')) return 'Folk Song';
+    if (c.includes('katha')) return 'Katha';
+    if (c.includes('dohe') || c.includes('doha')) return 'Dohe';
+    if (c.includes('stotra')) return 'Stotra';
+    if (c.includes('mantra')) return 'Mantra';
+    if (c.includes('chalisa')) return 'Chalisa';
+    if (c.includes('bhajan')) return 'Bhajan';
+    
+    return 'Bhajan';
+  };
+
+  // Bulk import bhajans in batches
+  const executeImport = async () => {
+    if (!importPreview || !importPreview.bhajans) return;
+    if (!isAdmin) {
+      alert('Access denied. Admin only.');
+      return;
+    }
+    
+    if (!window.confirm(`Import ${importPreview.valid} bhajans to Public Library? This cannot be easily undone.`)) {
+      return;
+    }
+    
+    try {
+      setImporting(true);
+      setImportError('');
+      setImportSuccess('');
+      setImportProgress({ current: 0, total: importPreview.valid, message: 'Starting import...' });
+      
+      const db = window.firebase.firestore();
+      const batchSize = 25;
+      let successCount = 0;
+      let errorCount = 0;
+      
+      for (let i = 0; i < importPreview.bhajans.length; i += batchSize) {
+        const batch = db.batch();
+        const chunk = importPreview.bhajans.slice(i, i + batchSize);
+        
+        chunk.forEach((bhajan) => {
+          const docRef = db.collection('publicBhajans').doc();
+          batch.set(docRef, {
+            title: bhajan.title,
+            lyrics: bhajan.lyrics,
+            deity: bhajan.deity,
+            category: bhajan.category,
+            dhun: bhajan.dhun,
+            scale: bhajan.scale,
+            keywords: bhajan.keywords || [],
+            source: bhajan.source,
+            saveCount: 0,
+            viewCount: 0,
+            addedByUid: user.uid,
+            createdAt: window.firebase.firestore.FieldValue.serverTimestamp(),
+            updatedAt: window.firebase.firestore.FieldValue.serverTimestamp()
+          });
+        });
+        
+        try {
+          await batch.commit();
+          successCount += chunk.length;
+          setImportProgress({
+            current: successCount,
+            total: importPreview.valid,
+            message: `Imported ${successCount} of ${importPreview.valid}...`
+          });
+        } catch (error) {
+          console.error('Batch error:', error);
+          errorCount += chunk.length;
+        }
+      }
+      
+      if (errorCount === 0) {
+        setImportSuccess(`✅ Successfully imported ${successCount} bhajans to Public Library!`);
+      } else {
+        setImportSuccess(`⚠️ Imported ${successCount} bhajans. ${errorCount} failed.`);
+      }
+      
+      setImportProgress({ current: 0, total: 0, message: '' });
+      setImportJsonText('');
+      setImportPreview(null);
+      
+    } catch (error) {
+      console.error('Import error:', error);
+      setImportError('Import failed: ' + error.message);
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  // Delete a public bhajan (admin only)
+  const deletePublicBhajan = async (bhajan) => {
+    if (!isAdmin) {
+      alert('Access denied. Admin only.');
+      return;
+    }
+    if (!window.confirm(`Delete public bhajan "${bhajan.title}"? This affects all users.`)) {
+      return;
+    }
+    try {
+      const db = window.firebase.firestore();
+      await db.collection('publicBhajans').doc(bhajan.id).delete();
+      console.log('✅ Public bhajan deleted');
+      if (selectedPublicBhajan && selectedPublicBhajan.id === bhajan.id) {
+        setCurrentView('public-library');
+        setSelectedPublicBhajan(null);
+      }
+    } catch (error) {
+      console.error('Error deleting public bhajan:', error);
+      alert('Could not delete: ' + error.message);
+    }
   };
 
   const toggleKeyword = (keyword) => {
@@ -1212,6 +1607,15 @@ const App = () => {
             </button>
 
             <div className="flex items-center gap-3">
+              {isAdmin && (
+                <button
+                  onClick={openAdminPanel}
+                  className="hidden sm:flex items-center gap-1 bg-purple-100 hover:bg-purple-200 text-purple-700 text-xs font-semibold px-3 py-1.5 rounded-lg"
+                  title="Admin Panel"
+                >
+                  🔧 Admin
+                </button>
+              )}
               {userProfile.photoURL && (
                 <img 
                   src={userProfile.photoURL} 
@@ -1222,6 +1626,7 @@ const App = () => {
               <div className="hidden sm:block">
                 <p className="text-sm font-semibold text-amber-900">{userProfile.displayName}</p>
                 {userProfile.verified && <span className="text-xs text-blue-600">✓ Verified</span>}
+                {isAdmin && <span className="text-xs text-purple-600 ml-1">👑 Admin</span>}
               </div>
               <button
                 onClick={handleLogout}
@@ -1286,16 +1691,19 @@ const App = () => {
                   </span>
                 </button>
 
-                <div className="bg-white rounded-2xl shadow-md p-6 border-2 border-orange-100 opacity-60">
+                <button
+                  onClick={openPublicLibrary}
+                  className="bg-white rounded-2xl shadow-md p-6 border-2 border-orange-300 hover:border-orange-500 hover:shadow-xl transition-all text-left group"
+                >
                   <div className="text-4xl mb-3">🌐</div>
-                  <h3 className="text-lg font-bold text-amber-900 mb-2">Explore Community</h3>
+                  <h3 className="text-lg font-bold text-amber-900 mb-2">Public Library</h3>
                   <p className="text-sm text-gray-600 mb-3">
-                    Discover bhajans from other artists
+                    Browse curated bhajans & save your favorites
                   </p>
-                  <span className="inline-block bg-orange-100 text-orange-700 text-xs font-semibold px-3 py-1 rounded-full">
-                    Coming Soon 🚀
+                  <span className="inline-block bg-green-100 text-green-700 text-xs font-semibold px-3 py-1 rounded-full">
+                    ✨ Available Now! ({publicBhajans.length} bhajans)
                   </span>
-                </div>
+                </button>
 
                 <button
                   onClick={openPrograms}
@@ -2362,6 +2770,473 @@ const App = () => {
                   </div>
                 </div>
               )}
+            </>
+          )}
+
+          {/* ==============================================
+              PUBLIC LIBRARY VIEW
+              ============================================== */}
+          {currentView === 'public-library' && (
+            <>
+              <div className="flex items-center justify-between mb-4">
+                <button
+                  onClick={() => setCurrentView('dashboard')}
+                  className="text-orange-600 hover:text-orange-800 flex items-center gap-1 text-sm"
+                >
+                  ← Dashboard
+                </button>
+                {isAdmin && (
+                  <button
+                    onClick={openAdminPanel}
+                    className="bg-purple-100 hover:bg-purple-200 text-purple-700 font-semibold px-4 py-2 rounded-xl text-sm flex items-center gap-1"
+                  >
+                    🔧 Admin Panel
+                  </button>
+                )}
+              </div>
+
+              <div className="mb-4">
+                <h2 className="text-2xl font-bold text-amber-900">🌐 Public Library</h2>
+                <p className="text-sm text-amber-700">Curated bhajans - save any to your personal library ({publicBhajans.length} bhajans)</p>
+              </div>
+
+              {/* Search Bar */}
+              <div className="mb-4">
+                <input
+                  type="text"
+                  value={publicSearchQuery}
+                  onChange={(e) => setPublicSearchQuery(e.target.value)}
+                  placeholder="🔍 Search public bhajans..."
+                  className="w-full px-4 py-3 border-2 border-orange-200 rounded-xl focus:ring-4 focus:ring-orange-200 focus:border-orange-400 outline-none"
+                />
+              </div>
+
+              {/* Filters */}
+              <div className="flex flex-wrap gap-2 mb-6">
+                <select
+                  value={publicFilterDeity}
+                  onChange={(e) => setPublicFilterDeity(e.target.value)}
+                  className="px-3 py-2 border-2 border-orange-200 rounded-lg focus:ring-2 focus:ring-orange-200 focus:border-orange-400 outline-none text-sm bg-white"
+                >
+                  <option value="">All Deities</option>
+                  {DEITY_OPTIONS.map(d => (
+                    <option key={d.value} value={d.value}>{d.emoji} {d.value}</option>
+                  ))}
+                </select>
+
+                <select
+                  value={publicFilterCategory}
+                  onChange={(e) => setPublicFilterCategory(e.target.value)}
+                  className="px-3 py-2 border-2 border-orange-200 rounded-lg focus:ring-2 focus:ring-orange-200 focus:border-orange-400 outline-none text-sm bg-white"
+                >
+                  <option value="">All Categories</option>
+                  {CATEGORY_OPTIONS.map(c => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+
+                {(publicSearchQuery || publicFilterDeity || publicFilterCategory) && (
+                  <button
+                    onClick={() => {
+                      setPublicSearchQuery('');
+                      setPublicFilterDeity('');
+                      setPublicFilterCategory('');
+                    }}
+                    className="px-3 py-2 bg-red-50 border-2 border-red-200 text-red-700 rounded-lg text-sm hover:bg-red-100"
+                  >
+                    Clear filters
+                  </button>
+                )}
+              </div>
+
+              {/* Public Bhajans List */}
+              {publicLoading ? (
+                <div className="text-center py-12">
+                  <div className="animate-spin rounded-full h-10 w-10 border-4 border-orange-400 border-t-transparent mx-auto mb-3"></div>
+                  <p className="text-orange-700">Loading public library...</p>
+                </div>
+              ) : filteredPublicBhajans.length === 0 ? (
+                <div className="text-center py-12 bg-white rounded-2xl border-2 border-dashed border-orange-200">
+                  {publicBhajans.length === 0 ? (
+                    <>
+                      <div className="text-6xl mb-4">🌐</div>
+                      <h3 className="text-lg font-bold text-amber-900 mb-2">Public library is empty</h3>
+                      <p className="text-sm text-gray-600 mb-4">
+                        {isAdmin ? 'Add bhajans via Admin Panel to get started!' : 'Bhajans will be added soon by the admin.'}
+                      </p>
+                      {isAdmin && (
+                        <button
+                          onClick={openAdminPanel}
+                          className="bg-purple-500 hover:bg-purple-600 text-white font-semibold px-6 py-3 rounded-xl shadow-md inline-flex items-center gap-2"
+                        >
+                          🔧 Open Admin Panel
+                        </button>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <div className="text-4xl mb-3">🔍</div>
+                      <p className="text-amber-900 font-semibold">No bhajans match your filters</p>
+                    </>
+                  )}
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {filteredPublicBhajans.map(bhajan => {
+                    const isSaved = savedBhajanIds.has(bhajan.id);
+                    return (
+                      <div
+                        key={bhajan.id}
+                        className="bg-white rounded-2xl shadow-md p-5 border-2 border-orange-100 hover:border-orange-400 hover:shadow-xl transition-all"
+                      >
+                        <button
+                          onClick={() => openPublicBhajanDetail(bhajan)}
+                          className="w-full text-left"
+                        >
+                          <div className="flex items-start justify-between mb-2">
+                            <h3 className="text-lg font-bold text-amber-900 flex-1 line-clamp-2">
+                              {bhajan.title}
+                            </h3>
+                          </div>
+
+                          {bhajan.dhun && (
+                            <p className="text-xs text-orange-600 mb-2">
+                              <span className="font-semibold">तर्ज़:</span> {bhajan.dhun}
+                            </p>
+                          )}
+
+                          <div className="flex flex-wrap gap-1 mb-2">
+                            <span className="text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded-full">
+                              {getDeityEmoji(bhajan.deity)} {bhajan.deity}
+                            </span>
+                            <span className="text-xs bg-amber-100 text-amber-800 px-2 py-1 rounded-full">
+                              {bhajan.category}
+                            </span>
+                          </div>
+
+                          <p className="text-sm text-gray-700 line-clamp-3 mb-2">
+                            {bhajan.lyrics}
+                          </p>
+
+                          {bhajan.keywords && bhajan.keywords.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mb-3">
+                              {bhajan.keywords.slice(0, 4).map(kw => (
+                                <span key={kw} className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">
+                                  #{kw}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </button>
+
+                        <div className="flex gap-2 mt-3 pt-3 border-t border-orange-100">
+                          <button
+                            onClick={() => openPublicBhajanDetail(bhajan)}
+                            className="flex-1 bg-orange-100 hover:bg-orange-200 text-amber-800 font-semibold py-2 rounded-lg text-sm"
+                          >
+                            📖 Read
+                          </button>
+                          {isSaved ? (
+                            <span className="flex-1 bg-green-100 text-green-700 font-semibold py-2 rounded-lg text-sm text-center">
+                              ✓ In Your Library
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => saveToMyLibrary(bhajan)}
+                              disabled={savingToLibrary}
+                              className="flex-1 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-semibold py-2 rounded-lg text-sm disabled:opacity-50"
+                            >
+                              💾 Save
+                            </button>
+                          )}
+                        </div>
+
+                        {(bhajan.saveCount > 0) && (
+                          <p className="text-xs text-gray-500 mt-2 text-center">
+                            💾 Saved by {bhajan.saveCount} {bhajan.saveCount === 1 ? 'user' : 'users'}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </>
+          )}
+
+          {/* ==============================================
+              PUBLIC BHAJAN DETAIL VIEW
+              ============================================== */}
+          {currentView === 'public-bhajan-detail' && selectedPublicBhajan && (
+            <>
+              <div className="flex items-center justify-between mb-4">
+                <button
+                  onClick={() => setCurrentView('public-library')}
+                  className="text-orange-600 hover:text-orange-800 flex items-center gap-1 text-sm"
+                >
+                  ← Back to Public Library
+                </button>
+                {isAdmin && (
+                  <button
+                    onClick={() => deletePublicBhajan(selectedPublicBhajan)}
+                    className="text-red-600 hover:text-red-800 px-3 py-1.5 rounded-lg hover:bg-red-50 text-sm font-semibold"
+                  >
+                    🗑️ Delete (Admin)
+                  </button>
+                )}
+              </div>
+
+              <div className="bg-white rounded-2xl shadow-lg p-6 md:p-8 mb-4">
+                <h1 className="text-3xl md:text-4xl font-bold text-amber-900 mb-3">
+                  {selectedPublicBhajan.title}
+                </h1>
+
+                {selectedPublicBhajan.dhun && (
+                  <div className="bg-orange-50 border-l-4 border-orange-400 p-3 rounded-r-lg mb-4">
+                    <p className="text-sm text-orange-900">
+                      <span className="font-semibold">तर्ज़ / धुन:</span> {selectedPublicBhajan.dhun}
+                    </p>
+                  </div>
+                )}
+
+                <div className="flex flex-wrap gap-2 mb-6">
+                  <span className="bg-orange-100 text-orange-800 px-3 py-1 rounded-full text-sm font-semibold">
+                    {getDeityEmoji(selectedPublicBhajan.deity)} {selectedPublicBhajan.deity}
+                  </span>
+                  <span className="bg-amber-100 text-amber-800 px-3 py-1 rounded-full text-sm font-semibold">
+                    📖 {selectedPublicBhajan.category}
+                  </span>
+                  {selectedPublicBhajan.scale && (
+                    <span className="bg-purple-100 text-purple-800 px-3 py-1 rounded-full text-sm font-semibold">
+                      🎵 {selectedPublicBhajan.scale}
+                    </span>
+                  )}
+                  <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-semibold">
+                    🌐 Public
+                  </span>
+                </div>
+
+                {/* Save to Library Button */}
+                {savedBhajanIds.has(selectedPublicBhajan.id) ? (
+                  <div className="mb-4 p-4 bg-green-50 border-2 border-green-200 rounded-xl text-center">
+                    <p className="text-green-800 font-semibold">✓ Already in your library!</p>
+                    <p className="text-xs text-green-600 mt-1">You can edit your copy in My Library</p>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => saveToMyLibrary(selectedPublicBhajan)}
+                    disabled={savingToLibrary}
+                    className="w-full mb-4 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-bold py-3 rounded-xl shadow-lg disabled:opacity-50"
+                  >
+                    {savingToLibrary ? 'Saving...' : '💾 Save to My Library'}
+                  </button>
+                )}
+
+                <div className="border-t border-orange-100 pt-4">
+                  <pre className="whitespace-pre-wrap font-sans text-lg text-gray-800 leading-relaxed">
+                    {selectedPublicBhajan.lyrics}
+                  </pre>
+                </div>
+
+                {selectedPublicBhajan.keywords && selectedPublicBhajan.keywords.length > 0 && (
+                  <div className="mt-6 pt-4 border-t border-orange-100">
+                    <p className="text-xs text-gray-500 mb-2">Keywords:</p>
+                    <div className="flex flex-wrap gap-2">
+                      {selectedPublicBhajan.keywords.map(kw => (
+                        <span key={kw} className="bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-sm">
+                          #{kw}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {selectedPublicBhajan.source && (
+                  <div className="mt-4 pt-4 border-t border-orange-100">
+                    <a
+                      href={selectedPublicBhajan.source}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-800 text-sm font-semibold"
+                    >
+                      🔗 View Source
+                    </a>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+
+          {/* ==============================================
+              ADMIN PANEL VIEW
+              ============================================== */}
+          {currentView === 'admin-panel' && isAdmin && (
+            <>
+              <div className="flex items-center justify-between mb-4">
+                <button
+                  onClick={() => setCurrentView('dashboard')}
+                  className="text-orange-600 hover:text-orange-800 flex items-center gap-1 text-sm"
+                >
+                  ← Dashboard
+                </button>
+                <span className="bg-purple-100 text-purple-700 px-3 py-1 rounded-full text-xs font-bold">
+                  👑 Admin Only
+                </span>
+              </div>
+
+              <div className="mb-6">
+                <h2 className="text-2xl font-bold text-amber-900">🔧 Admin Panel</h2>
+                <p className="text-sm text-amber-700">Manage the Public Library</p>
+              </div>
+
+              {/* Stats Card */}
+              <div className="bg-gradient-to-br from-purple-500 to-indigo-500 rounded-2xl p-6 text-white mb-6">
+                <h3 className="text-lg font-bold mb-3">📊 Public Library Stats</h3>
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="bg-white/20 rounded-xl p-3 text-center">
+                    <div className="text-2xl font-bold">{publicBhajans.length}</div>
+                    <div className="text-xs">Total Bhajans</div>
+                  </div>
+                  <div className="bg-white/20 rounded-xl p-3 text-center">
+                    <div className="text-2xl font-bold">
+                      {publicBhajans.reduce((sum, b) => sum + (b.saveCount || 0), 0)}
+                    </div>
+                    <div className="text-xs">Total Saves</div>
+                  </div>
+                  <div className="bg-white/20 rounded-xl p-3 text-center">
+                    <div className="text-2xl font-bold">
+                      {new Set(publicBhajans.map(b => b.deity)).size}
+                    </div>
+                    <div className="text-xs">Deities</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* JSON Import Section */}
+              <div className="bg-white rounded-2xl shadow-lg p-6 mb-6 border-2 border-purple-200">
+                <h3 className="text-lg font-bold text-amber-900 mb-3">📥 Import Bhajans from JSON</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Paste JSON exported from your personal Babosa Sankirtan app. Bhajans will be added to the Public Library.
+                </p>
+
+                {!importPreview ? (
+                  <>
+                    <textarea
+                      value={importJsonText}
+                      onChange={(e) => setImportJsonText(e.target.value)}
+                      className="w-full h-40 px-4 py-3 border-2 border-purple-200 rounded-xl focus:ring-4 focus:ring-purple-200 focus:border-purple-400 outline-none font-mono text-sm"
+                      placeholder='Paste JSON here... e.g., [{"title": "...", "lyrics": "..."}, ...]'
+                    />
+                    
+                    {importError && (
+                      <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                        ⚠️ {importError}
+                      </div>
+                    )}
+                    
+                    {importSuccess && (
+                      <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg text-green-700 text-sm">
+                        {importSuccess}
+                      </div>
+                    )}
+
+                    <button
+                      onClick={previewImport}
+                      disabled={!importJsonText.trim()}
+                      className="mt-3 w-full bg-purple-500 hover:bg-purple-600 text-white font-semibold py-3 rounded-xl disabled:opacity-50"
+                    >
+                      Preview Import
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <div className="bg-purple-50 border-2 border-purple-200 rounded-xl p-4 mb-4">
+                      <h4 className="font-bold text-purple-900 mb-2">Ready to import:</h4>
+                      <div className="grid grid-cols-3 gap-3 text-center text-sm">
+                        <div>
+                          <div className="text-2xl font-bold text-purple-700">{importPreview.total}</div>
+                          <div className="text-xs text-purple-600">Total in JSON</div>
+                        </div>
+                        <div>
+                          <div className="text-2xl font-bold text-green-600">{importPreview.valid}</div>
+                          <div className="text-xs text-purple-600">Will Import</div>
+                        </div>
+                        <div>
+                          <div className="text-2xl font-bold text-red-600">{importPreview.skipped}</div>
+                          <div className="text-xs text-purple-600">Skipped (invalid)</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Preview List */}
+                    <div className="max-h-60 overflow-y-auto bg-gray-50 rounded-xl p-3 mb-4">
+                      <p className="text-xs text-gray-500 mb-2">Preview (first 10):</p>
+                      {importPreview.bhajans.slice(0, 10).map((b, idx) => (
+                        <div key={idx} className="mb-2 p-2 bg-white rounded-lg text-sm border border-gray-200">
+                          <p className="font-semibold text-amber-900 truncate">{b.title}</p>
+                          <p className="text-xs text-gray-600">
+                            {getDeityEmoji(b.deity)} {b.deity} • {b.category}
+                          </p>
+                        </div>
+                      ))}
+                      {importPreview.bhajans.length > 10 && (
+                        <p className="text-xs text-gray-500 text-center mt-2">
+                          ...and {importPreview.bhajans.length - 10} more
+                        </p>
+                      )}
+                    </div>
+
+                    {importing && importProgress.total > 0 && (
+                      <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                        <p className="text-sm text-blue-800 font-semibold">
+                          {importProgress.message}
+                        </p>
+                        <div className="mt-2 bg-blue-200 rounded-full h-3 overflow-hidden">
+                          <div
+                            className="bg-blue-500 h-full transition-all"
+                            style={{ width: `${(importProgress.current / importProgress.total) * 100}%` }}
+                          ></div>
+                        </div>
+                        <p className="text-xs text-blue-600 mt-1">
+                          {importProgress.current} of {importProgress.total}
+                        </p>
+                      </div>
+                    )}
+
+                    <div className="flex gap-2">
+                      <button
+                        onClick={executeImport}
+                        disabled={importing}
+                        className="flex-1 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white font-bold py-3 rounded-xl shadow-lg disabled:opacity-50"
+                      >
+                        {importing ? 'Importing...' : `✅ Import ${importPreview.valid} Bhajans`}
+                      </button>
+                      <button
+                        onClick={() => {
+                          setImportPreview(null);
+                          setImportJsonText('');
+                        }}
+                        disabled={importing}
+                        className="px-6 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 font-semibold disabled:opacity-50"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Quick Info */}
+              <div className="bg-blue-50 border-2 border-blue-200 rounded-xl p-4">
+                <h4 className="font-bold text-blue-900 mb-2">💡 JSON Format Support:</h4>
+                <p className="text-xs text-blue-700 mb-2">The importer accepts:</p>
+                <ul className="text-xs text-blue-700 space-y-1 ml-4">
+                  <li>• Array of bhajans: <code className="bg-white px-1 rounded">[{`{"title": "...", "lyrics": "..."}`}]</code></li>
+                  <li>• Object with bhajans property</li>
+                  <li>• Fields: title, lyrics, deity, category, dhun, scale, keywords, source</li>
+                  <li>• Automatically maps common field variations</li>
+                </ul>
+              </div>
             </>
           )}
         </main>
