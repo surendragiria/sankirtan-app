@@ -1331,7 +1331,7 @@ const App = () => {
                   You're seeing the foundation of the app. More features are being added weekly!
                 </p>
                 <p className="text-xs text-blue-600">
-                  Founded by <strong>Surendra Jain</strong> • Made with 🙏 for the bhajan community
+                  Founded for the Bhajan Community 🕉️ by Grace of <strong>Babosa Bhagwan</strong> 🕉️
                 </p>
               </div>
             </>
@@ -2682,8 +2682,8 @@ const App = () => {
         </div>
 
         <div className="text-center mt-4 text-white/80 text-xs">
-          <p>Founded by <strong>Surendra Jain</strong></p>
-          <p className="mt-1">Made with 🙏 for the bhajan community</p>
+          <p>Founded for the Bhajan Community</p>
+          <p className="mt-1">🕉️ by Grace of <strong>Babosa Bhagwan</strong> 🕉️</p>
         </div>
       </div>
     </div>
