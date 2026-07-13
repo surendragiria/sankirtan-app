@@ -57,7 +57,7 @@ const App = () => {
   const [userCount, setUserCount] = useState(0);
 
   // NEW: My Library states
-  const [currentView, setCurrentView] = useState('dashboard'); // 'dashboard', 'library', 'bhajan-detail', 'add-bhajan', 'edit-bhajan'
+  const [currentView, setCurrentView] = useState('dashboard'); // 'dashboard', 'library', 'bhajan-detail', 'add-bhajan', 'edit-bhajan', 'programs', 'program-detail', 'create-program', 'edit-program', 'live-program'
   const [bhajans, setBhajans] = useState([]);
   const [selectedBhajan, setSelectedBhajan] = useState(null);
   const [editingBhajan, setEditingBhajan] = useState(null);
@@ -67,6 +67,30 @@ const App = () => {
   const [bhajansLoading, setBhajansLoading] = useState(false);
   const [bhajanFormError, setBhajanFormError] = useState('');
   const [bhajanFormSaving, setBhajanFormSaving] = useState(false);
+  
+  // NEW: Programs states
+  const [programs, setPrograms] = useState([]);
+  const [selectedProgram, setSelectedProgram] = useState(null);
+  const [editingProgram, setEditingProgram] = useState(null);
+  const [programsLoading, setProgramsLoading] = useState(false);
+  const [programSearchQuery, setProgramSearchQuery] = useState('');
+  const [programFormError, setProgramFormError] = useState('');
+  const [programFormSaving, setProgramFormSaving] = useState(false);
+  const [showBhajanPicker, setShowBhajanPicker] = useState(false);
+  const [bhajanPickerSearch, setBhajanPickerSearch] = useState('');
+  
+  // Program form
+  const [programForm, setProgramForm] = useState({
+    name: '',
+    date: '',
+    venue: '',
+    bhajanIds: [] // ordered list
+  });
+  
+  // Live Program Mode states
+  const [liveProgramIndex, setLiveProgramIndex] = useState(0);
+  const [liveFontSize, setLiveFontSize] = useState(20);
+  const [liveWakeLock, setLiveWakeLock] = useState(null);
   
   // New/Edit bhajan form
   const [bhajanForm, setBhajanForm] = useState({
@@ -164,6 +188,40 @@ const App = () => {
         (error) => {
           console.error('Error loading bhajans:', error);
           setBhajansLoading(false);
+        }
+      );
+
+    return () => unsubscribe();
+  }, [user, userProfile]);
+
+  // ==============================================
+  // LOAD USER'S PROGRAMS (Real-time)
+  // ==============================================
+  useEffect(() => {
+    if (!user || !userProfile) {
+      setPrograms([]);
+      return;
+    }
+
+    setProgramsLoading(true);
+    const db = window.firebase.firestore();
+    const programsRef = db.collection('users').doc(user.uid).collection('programs');
+    
+    const unsubscribe = programsRef
+      .orderBy('createdAt', 'desc')
+      .onSnapshot(
+        (snapshot) => {
+          const programList = [];
+          snapshot.forEach((doc) => {
+            programList.push({ id: doc.id, ...doc.data() });
+          });
+          setPrograms(programList);
+          setProgramsLoading(false);
+          console.log(`✅ Loaded ${programList.length} programs`);
+        },
+        (error) => {
+          console.error('Error loading programs:', error);
+          setProgramsLoading(false);
         }
       );
 
@@ -419,6 +477,204 @@ const App = () => {
           : [...prev.keywords, keyword]
       };
     });
+  };
+
+  // ==============================================
+  // PROGRAMS CRUD OPERATIONS
+  // ==============================================
+  const openPrograms = () => {
+    setCurrentView('programs');
+    setProgramSearchQuery('');
+  };
+  
+  const openCreateProgram = () => {
+    setProgramForm({
+      name: '',
+      date: '',
+      venue: '',
+      bhajanIds: []
+    });
+    setProgramFormError('');
+    setEditingProgram(null);
+    setCurrentView('create-program');
+  };
+  
+  const openEditProgram = (program) => {
+    setProgramForm({
+      name: program.name || '',
+      date: program.date || '',
+      venue: program.venue || '',
+      bhajanIds: program.bhajanIds || []
+    });
+    setProgramFormError('');
+    setEditingProgram(program);
+    setCurrentView('edit-program');
+  };
+  
+  const openProgramDetail = (program) => {
+    setSelectedProgram(program);
+    setCurrentView('program-detail');
+  };
+  
+  const saveProgram = async () => {
+    if (!programForm.name.trim()) {
+      setProgramFormError('Please enter a program name');
+      return;
+    }
+    
+    try {
+      setProgramFormSaving(true);
+      setProgramFormError('');
+      const db = window.firebase.firestore();
+      
+      const programData = {
+        name: programForm.name.trim(),
+        date: programForm.date.trim(),
+        venue: programForm.venue.trim(),
+        bhajanIds: programForm.bhajanIds,
+        ownerId: user.uid,
+        ownerName: userProfile.displayName,
+        bhajanCount: programForm.bhajanIds.length,
+        updatedAt: window.firebase.firestore.FieldValue.serverTimestamp(),
+        lastActive: window.firebase.firestore.FieldValue.serverTimestamp()
+      };
+      
+      const programsRef = db.collection('users').doc(user.uid).collection('programs');
+      
+      if (editingProgram) {
+        await programsRef.doc(editingProgram.id).update(programData);
+        console.log('✅ Program updated');
+        setSelectedProgram({ ...editingProgram, ...programData });
+        setCurrentView('program-detail');
+      } else {
+        programData.createdAt = window.firebase.firestore.FieldValue.serverTimestamp();
+        const docRef = await programsRef.add(programData);
+        console.log('✅ Program created:', docRef.id);
+        setCurrentView('programs');
+      }
+    } catch (error) {
+      console.error('Error saving program:', error);
+      setProgramFormError('Could not save: ' + error.message);
+    } finally {
+      setProgramFormSaving(false);
+    }
+  };
+  
+  const deleteProgram = async (program) => {
+    if (!window.confirm(`Delete program "${program.name}"? This cannot be undone.`)) {
+      return;
+    }
+    
+    try {
+      const db = window.firebase.firestore();
+      await db.collection('users').doc(user.uid).collection('programs').doc(program.id).delete();
+      console.log('✅ Program deleted');
+      setCurrentView('programs');
+      setSelectedProgram(null);
+    } catch (error) {
+      console.error('Error deleting program:', error);
+      alert('Could not delete: ' + error.message);
+    }
+  };
+  
+  // Add bhajan to program form
+  const addBhajanToProgram = (bhajanId) => {
+    if (!programForm.bhajanIds.includes(bhajanId)) {
+      setProgramForm(prev => ({
+        ...prev,
+        bhajanIds: [...prev.bhajanIds, bhajanId]
+      }));
+    }
+    setShowBhajanPicker(false);
+    setBhajanPickerSearch('');
+  };
+  
+  const removeBhajanFromProgram = (bhajanId) => {
+    setProgramForm(prev => ({
+      ...prev,
+      bhajanIds: prev.bhajanIds.filter(id => id !== bhajanId)
+    }));
+  };
+  
+  const moveBhajanUp = (index) => {
+    if (index <= 0) return;
+    setProgramForm(prev => {
+      const newIds = [...prev.bhajanIds];
+      [newIds[index - 1], newIds[index]] = [newIds[index], newIds[index - 1]];
+      return { ...prev, bhajanIds: newIds };
+    });
+  };
+  
+  const moveBhajanDown = (index) => {
+    setProgramForm(prev => {
+      if (index >= prev.bhajanIds.length - 1) return prev;
+      const newIds = [...prev.bhajanIds];
+      [newIds[index], newIds[index + 1]] = [newIds[index + 1], newIds[index]];
+      return { ...prev, bhajanIds: newIds };
+    });
+  };
+  
+  // Helper: get bhajan by ID
+  const getBhajanById = (id) => bhajans.find(b => b.id === id);
+  
+  // Filter programs
+  const filteredPrograms = programs.filter(program => {
+    if (!programSearchQuery) return true;
+    const q = programSearchQuery.toLowerCase();
+    return (program.name && program.name.toLowerCase().includes(q)) ||
+           (program.venue && program.venue.toLowerCase().includes(q));
+  });
+  
+  // ==============================================
+  // LIVE PROGRAM MODE
+  // ==============================================
+  const startLiveProgram = async (program) => {
+    if (!program.bhajanIds || program.bhajanIds.length === 0) {
+      alert('This program has no bhajans! Add some first.');
+      return;
+    }
+    setSelectedProgram(program);
+    setLiveProgramIndex(0);
+    setCurrentView('live-program');
+    
+    // Try to enable screen wake lock
+    try {
+      if ('wakeLock' in navigator) {
+        const wakeLock = await navigator.wakeLock.request('screen');
+        setLiveWakeLock(wakeLock);
+        console.log('✅ Screen wake lock enabled');
+      }
+    } catch (error) {
+      console.log('Wake lock not available:', error);
+    }
+  };
+  
+  const exitLiveProgram = async () => {
+    // Release wake lock
+    if (liveWakeLock) {
+      try {
+        await liveWakeLock.release();
+        setLiveWakeLock(null);
+        console.log('✅ Wake lock released');
+      } catch (error) {
+        console.log('Error releasing wake lock:', error);
+      }
+    }
+    setCurrentView('program-detail');
+  };
+  
+  const liveNext = () => {
+    if (selectedProgram && liveProgramIndex < selectedProgram.bhajanIds.length - 1) {
+      setLiveProgramIndex(liveProgramIndex + 1);
+      window.scrollTo(0, 0);
+    }
+  };
+  
+  const livePrev = () => {
+    if (liveProgramIndex > 0) {
+      setLiveProgramIndex(liveProgramIndex - 1);
+      window.scrollTo(0, 0);
+    }
   };
 
   // Filter bhajans based on search and filters
@@ -805,16 +1061,19 @@ const App = () => {
                   </span>
                 </div>
 
-                <div className="bg-white rounded-2xl shadow-md p-6 border-2 border-orange-100 opacity-60">
+                <button
+                  onClick={openPrograms}
+                  className="bg-white rounded-2xl shadow-md p-6 border-2 border-orange-300 hover:border-orange-500 hover:shadow-xl transition-all text-left group"
+                >
                   <div className="text-4xl mb-3">🎵</div>
                   <h3 className="text-lg font-bold text-amber-900 mb-2">Programs & Setlists</h3>
                   <p className="text-sm text-gray-600 mb-3">
                     Create playlists for live performances
                   </p>
-                  <span className="inline-block bg-orange-100 text-orange-700 text-xs font-semibold px-3 py-1 rounded-full">
-                    Coming in Session 3 🚀
+                  <span className="inline-block bg-green-100 text-green-700 text-xs font-semibold px-3 py-1 rounded-full">
+                    ✨ Available Now! ({programs.length} programs)
                   </span>
-                </div>
+                </button>
 
                 <div className="bg-white rounded-2xl shadow-md p-6 border-2 border-orange-100 opacity-60">
                   <div className="text-4xl mb-3">🎶</div>
@@ -823,7 +1082,7 @@ const App = () => {
                     Combine mukhdas for energetic performances
                   </p>
                   <span className="inline-block bg-orange-100 text-orange-700 text-xs font-semibold px-3 py-1 rounded-full">
-                    Coming in Session 3 🚀
+                    Coming Soon 🚀
                   </span>
                 </div>
               </div>
@@ -1288,7 +1547,592 @@ const App = () => {
               </div>
             </>
           )}
+
+          {/* ==============================================
+              PROGRAMS LIST VIEW
+              ============================================== */}
+          {currentView === 'programs' && (
+            <>
+              <div className="flex items-center justify-between mb-4">
+                <button
+                  onClick={() => setCurrentView('dashboard')}
+                  className="text-orange-600 hover:text-orange-800 flex items-center gap-1 text-sm"
+                >
+                  ← Dashboard
+                </button>
+                <button
+                  onClick={openCreateProgram}
+                  className="bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-semibold px-4 py-2 rounded-xl shadow-md flex items-center gap-2 text-sm"
+                >
+                  <span className="text-lg">+</span> Create Program
+                </button>
+              </div>
+
+              <div className="mb-4">
+                <h2 className="text-2xl font-bold text-amber-900">🎵 Programs & Setlists</h2>
+                <p className="text-sm text-amber-700">Your live performance programs ({programs.length} programs)</p>
+              </div>
+
+              {/* Search Bar */}
+              <div className="mb-6">
+                <input
+                  type="text"
+                  value={programSearchQuery}
+                  onChange={(e) => setProgramSearchQuery(e.target.value)}
+                  placeholder="🔍 Search programs by name or venue..."
+                  className="w-full px-4 py-3 border-2 border-orange-200 rounded-xl focus:ring-4 focus:ring-orange-200 focus:border-orange-400 outline-none"
+                />
+              </div>
+
+              {/* Programs List */}
+              {programsLoading ? (
+                <div className="text-center py-12">
+                  <div className="animate-spin rounded-full h-10 w-10 border-4 border-orange-400 border-t-transparent mx-auto mb-3"></div>
+                  <p className="text-orange-700">Loading programs...</p>
+                </div>
+              ) : filteredPrograms.length === 0 ? (
+                <div className="text-center py-12 bg-white rounded-2xl border-2 border-dashed border-orange-200">
+                  {programs.length === 0 ? (
+                    <>
+                      <div className="text-6xl mb-4">🎵</div>
+                      <h3 className="text-lg font-bold text-amber-900 mb-2">No programs yet!</h3>
+                      <p className="text-sm text-gray-600 mb-4">Create your first program for a live performance</p>
+                      <button
+                        onClick={openCreateProgram}
+                        className="bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-semibold px-6 py-3 rounded-xl shadow-md inline-flex items-center gap-2"
+                      >
+                        <span className="text-lg">+</span> Create Your First Program
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <div className="text-4xl mb-3">🔍</div>
+                      <p className="text-amber-900 font-semibold">No programs match your search</p>
+                    </>
+                  )}
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {filteredPrograms.map(program => (
+                    <button
+                      key={program.id}
+                      onClick={() => openProgramDetail(program)}
+                      className="bg-white rounded-2xl shadow-md p-5 border-2 border-orange-100 hover:border-orange-400 hover:shadow-xl transition-all text-left"
+                    >
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="text-3xl">🎵</div>
+                        <span className="text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded-full font-semibold">
+                          {program.bhajanCount || 0} bhajans
+                        </span>
+                      </div>
+                      <h3 className="text-lg font-bold text-amber-900 mb-1">
+                        {program.name}
+                      </h3>
+                      {program.date && (
+                        <p className="text-sm text-orange-600 mb-1">📅 {program.date}</p>
+                      )}
+                      {program.venue && (
+                        <p className="text-sm text-gray-600 mb-2">📍 {program.venue}</p>
+                      )}
+                      <p className="text-xs text-orange-500 mt-3">View Program →</p>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+
+          {/* ==============================================
+              PROGRAM DETAIL VIEW
+              ============================================== */}
+          {currentView === 'program-detail' && selectedProgram && (
+            <>
+              <div className="flex items-center justify-between mb-4">
+                <button
+                  onClick={() => setCurrentView('programs')}
+                  className="text-orange-600 hover:text-orange-800 flex items-center gap-1 text-sm"
+                >
+                  ← Back to Programs
+                </button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => openEditProgram(selectedProgram)}
+                    className="text-blue-600 hover:text-blue-800 px-3 py-1.5 rounded-lg hover:bg-blue-50 text-sm font-semibold"
+                  >
+                    ✏️ Edit
+                  </button>
+                  <button
+                    onClick={() => deleteProgram(selectedProgram)}
+                    className="text-red-600 hover:text-red-800 px-3 py-1.5 rounded-lg hover:bg-red-50 text-sm font-semibold"
+                  >
+                    🗑️ Delete
+                  </button>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-2xl shadow-lg p-6 md:p-8 mb-4">
+                <div className="text-4xl mb-2">🎵</div>
+                <h1 className="text-3xl md:text-4xl font-bold text-amber-900 mb-3">
+                  {selectedProgram.name}
+                </h1>
+                {selectedProgram.date && (
+                  <p className="text-lg text-orange-600 mb-1">📅 {selectedProgram.date}</p>
+                )}
+                {selectedProgram.venue && (
+                  <p className="text-lg text-gray-600 mb-3">📍 {selectedProgram.venue}</p>
+                )}
+                <div className="flex items-center gap-2 mt-4">
+                  <span className="bg-orange-100 text-orange-800 px-3 py-1 rounded-full text-sm font-semibold">
+                    {selectedProgram.bhajanIds?.length || 0} bhajans
+                  </span>
+                </div>
+
+                {/* START LIVE MODE Button */}
+                {selectedProgram.bhajanIds && selectedProgram.bhajanIds.length > 0 && (
+                  <button
+                    onClick={() => startLiveProgram(selectedProgram)}
+                    className="w-full mt-6 bg-gradient-to-r from-red-500 to-orange-500 hover:from-red-600 hover:to-orange-600 text-white font-bold py-4 rounded-xl shadow-lg text-lg flex items-center justify-center gap-2"
+                  >
+                    🎤 START LIVE PERFORMANCE
+                  </button>
+                )}
+              </div>
+
+              {/* Bhajans in Program */}
+              <div className="mb-4">
+                <h3 className="text-lg font-bold text-amber-900 mb-3">Bhajans in this Program:</h3>
+                {(!selectedProgram.bhajanIds || selectedProgram.bhajanIds.length === 0) ? (
+                  <div className="bg-white rounded-2xl p-6 text-center border-2 border-dashed border-orange-200">
+                    <p className="text-amber-900 mb-2">No bhajans in this program yet</p>
+                    <button
+                      onClick={() => openEditProgram(selectedProgram)}
+                      className="text-orange-600 hover:text-orange-800 font-semibold text-sm"
+                    >
+                      + Add bhajans
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {selectedProgram.bhajanIds.map((bhajanId, index) => {
+                      const bhajan = getBhajanById(bhajanId);
+                      if (!bhajan) return (
+                        <div key={bhajanId} className="bg-red-50 rounded-xl p-3 border border-red-200">
+                          <p className="text-sm text-red-700">⚠️ Bhajan not found (may have been deleted)</p>
+                        </div>
+                      );
+                      return (
+                        <button
+                          key={bhajanId}
+                          onClick={() => openBhajanDetail(bhajan)}
+                          className="w-full bg-white rounded-xl p-4 border-2 border-orange-100 hover:border-orange-400 transition-all text-left flex items-center gap-3"
+                        >
+                          <div className="text-2xl font-bold text-orange-500 min-w-[40px] text-center">
+                            {index + 1}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-semibold text-amber-900 truncate">{bhajan.title}</p>
+                            {bhajan.dhun && (
+                              <p className="text-xs text-orange-600 truncate">तर्ज़: {bhajan.dhun}</p>
+                            )}
+                            <div className="flex gap-1 mt-1">
+                              <span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full">
+                                {getDeityEmoji(bhajan.deity)} {bhajan.deity}
+                              </span>
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+
+          {/* ==============================================
+              CREATE/EDIT PROGRAM FORM
+              ============================================== */}
+          {(currentView === 'create-program' || currentView === 'edit-program') && (
+            <>
+              <div className="flex items-center justify-between mb-4">
+                <button
+                  onClick={() => {
+                    if (currentView === 'edit-program' && selectedProgram) {
+                      setCurrentView('program-detail');
+                    } else {
+                      setCurrentView('programs');
+                    }
+                  }}
+                  className="text-orange-600 hover:text-orange-800 flex items-center gap-1 text-sm"
+                >
+                  ← Cancel
+                </button>
+              </div>
+
+              <div className="bg-white rounded-2xl shadow-lg p-6 md:p-8">
+                <h2 className="text-2xl font-bold text-amber-900 mb-6">
+                  {currentView === 'edit-program' ? '✏️ Edit Program' : '➕ Create New Program'}
+                </h2>
+
+                {/* Name */}
+                <div className="mb-4">
+                  <label className="block text-sm font-semibold text-amber-900 mb-1">
+                    Program Name <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={programForm.name}
+                    onChange={(e) => setProgramForm({...programForm, name: e.target.value})}
+                    className="w-full px-4 py-3 border-2 border-orange-200 rounded-xl focus:ring-4 focus:ring-orange-200 focus:border-orange-400 outline-none text-lg"
+                    placeholder="e.g., Diwali Jagran 2026"
+                  />
+                </div>
+
+                {/* Date and Venue */}
+                <div className="grid grid-cols-2 gap-3 mb-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-amber-900 mb-1">
+                      Date (optional)
+                    </label>
+                    <input
+                      type="text"
+                      value={programForm.date}
+                      onChange={(e) => setProgramForm({...programForm, date: e.target.value})}
+                      className="w-full px-4 py-3 border-2 border-orange-200 rounded-xl focus:ring-4 focus:ring-orange-200 focus:border-orange-400 outline-none"
+                      placeholder="e.g., 25 Oct 2026"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-amber-900 mb-1">
+                      Venue (optional)
+                    </label>
+                    <input
+                      type="text"
+                      value={programForm.venue}
+                      onChange={(e) => setProgramForm({...programForm, venue: e.target.value})}
+                      className="w-full px-4 py-3 border-2 border-orange-200 rounded-xl focus:ring-4 focus:ring-orange-200 focus:border-orange-400 outline-none"
+                      placeholder="e.g., Delhi Temple"
+                    />
+                  </div>
+                </div>
+
+                {/* Bhajans Section */}
+                <div className="mb-4 pt-4 border-t border-orange-100">
+                  <div className="flex items-center justify-between mb-3">
+                    <label className="block text-sm font-semibold text-amber-900">
+                      Bhajans in Program ({programForm.bhajanIds.length})
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowBhajanPicker(true);
+                        setBhajanPickerSearch('');
+                      }}
+                      className="bg-orange-100 hover:bg-orange-200 text-orange-800 font-semibold px-3 py-1.5 rounded-lg text-sm"
+                    >
+                      + Add Bhajan
+                    </button>
+                  </div>
+
+                  {programForm.bhajanIds.length === 0 ? (
+                    <div className="text-center py-6 bg-orange-50 rounded-xl border-2 border-dashed border-orange-200">
+                      <p className="text-sm text-amber-700">No bhajans added yet</p>
+                      <p className="text-xs text-gray-500 mt-1">Tap "+ Add Bhajan" to add from your library</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {programForm.bhajanIds.map((bhajanId, index) => {
+                        const bhajan = getBhajanById(bhajanId);
+                        if (!bhajan) return (
+                          <div key={bhajanId} className="bg-red-50 rounded-lg p-2 border border-red-200 text-xs text-red-700">
+                            ⚠️ Bhajan not found (ID: {bhajanId})
+                            <button
+                              onClick={() => removeBhajanFromProgram(bhajanId)}
+                              className="ml-2 text-red-600 underline"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        );
+                        return (
+                          <div key={bhajanId} className="bg-white border-2 border-orange-200 rounded-xl p-3 flex items-center gap-2">
+                            <div className="text-xl font-bold text-orange-500 min-w-[30px] text-center">
+                              {index + 1}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="font-semibold text-amber-900 truncate text-sm">{bhajan.title}</p>
+                              <p className="text-xs text-gray-600 truncate">
+                                {getDeityEmoji(bhajan.deity)} {bhajan.deity} • {bhajan.category}
+                              </p>
+                            </div>
+                            <div className="flex gap-1">
+                              <button
+                                type="button"
+                                onClick={() => moveBhajanUp(index)}
+                                disabled={index === 0}
+                                className="w-8 h-8 rounded-lg bg-orange-100 hover:bg-orange-200 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center"
+                                title="Move up"
+                              >
+                                ↑
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => moveBhajanDown(index)}
+                                disabled={index === programForm.bhajanIds.length - 1}
+                                className="w-8 h-8 rounded-lg bg-orange-100 hover:bg-orange-200 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center"
+                                title="Move down"
+                              >
+                                ↓
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => removeBhajanFromProgram(bhajanId)}
+                                className="w-8 h-8 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 flex items-center justify-center"
+                                title="Remove"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Error */}
+                {programFormError && (
+                  <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                    ⚠️ {programFormError}
+                  </div>
+                )}
+
+                {/* Save */}
+                <div className="flex gap-3">
+                  <button
+                    onClick={saveProgram}
+                    disabled={programFormSaving || !programForm.name.trim()}
+                    className="flex-1 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-bold py-3 rounded-xl shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {programFormSaving ? 'Saving...' : (currentView === 'edit-program' ? '💾 Save Changes' : '➕ Create Program')}
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (currentView === 'edit-program' && selectedProgram) {
+                        setCurrentView('program-detail');
+                      } else {
+                        setCurrentView('programs');
+                      }
+                    }}
+                    className="px-6 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 font-semibold"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+
+              {/* Bhajan Picker Modal */}
+              {showBhajanPicker && (
+                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+                  <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[80vh] flex flex-col">
+                    <div className="p-4 border-b border-orange-100 flex items-center justify-between">
+                      <h3 className="text-lg font-bold text-amber-900">Add Bhajan to Program</h3>
+                      <button
+                        onClick={() => setShowBhajanPicker(false)}
+                        className="text-gray-500 hover:text-gray-700 text-2xl leading-none"
+                      >
+                        ×
+                      </button>
+                    </div>
+                    <div className="p-4 border-b border-orange-100">
+                      <input
+                        type="text"
+                        value={bhajanPickerSearch}
+                        onChange={(e) => setBhajanPickerSearch(e.target.value)}
+                        placeholder="🔍 Search your library..."
+                        className="w-full px-3 py-2 border-2 border-orange-200 rounded-lg focus:ring-2 focus:ring-orange-200 focus:border-orange-400 outline-none text-sm"
+                        autoFocus
+                      />
+                    </div>
+                    <div className="flex-1 overflow-y-auto p-4">
+                      {bhajans.length === 0 ? (
+                        <div className="text-center py-8">
+                          <p className="text-amber-900 font-semibold">Your library is empty</p>
+                          <p className="text-sm text-gray-600 mt-1">Add bhajans to your library first</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {bhajans
+                            .filter(b => !bhajanPickerSearch || 
+                              b.title.toLowerCase().includes(bhajanPickerSearch.toLowerCase()) ||
+                              (b.lyrics && b.lyrics.toLowerCase().includes(bhajanPickerSearch.toLowerCase())))
+                            .map(bhajan => {
+                              const isAdded = programForm.bhajanIds.includes(bhajan.id);
+                              return (
+                                <button
+                                  key={bhajan.id}
+                                  onClick={() => !isAdded && addBhajanToProgram(bhajan.id)}
+                                  disabled={isAdded}
+                                  className={`w-full text-left p-3 rounded-xl border-2 transition-all ${
+                                    isAdded 
+                                      ? 'bg-green-50 border-green-200 opacity-60 cursor-not-allowed'
+                                      : 'bg-white border-orange-100 hover:border-orange-400'
+                                  }`}
+                                >
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex-1 min-w-0">
+                                      <p className="font-semibold text-amber-900 truncate">{bhajan.title}</p>
+                                      <p className="text-xs text-gray-600 truncate">
+                                        {getDeityEmoji(bhajan.deity)} {bhajan.deity} • {bhajan.category}
+                                      </p>
+                                    </div>
+                                    {isAdded && <span className="text-green-600 font-bold ml-2">✓ Added</span>}
+                                  </div>
+                                </button>
+                              );
+                            })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
         </main>
+      </div>
+    );
+  }
+
+  // ==============================================
+  // LIVE PROGRAM MODE (Fullscreen)
+  // ==============================================
+  if (user && userProfile && currentView === 'live-program' && selectedProgram) {
+    const currentBhajanId = selectedProgram.bhajanIds[liveProgramIndex];
+    const currentBhajan = getBhajanById(currentBhajanId);
+    const totalBhajans = selectedProgram.bhajanIds.length;
+    
+    if (!currentBhajan) {
+      return (
+        <div className="min-h-screen bg-gradient-to-br from-orange-50 to-amber-50 p-4 flex items-center justify-center">
+          <div className="text-center">
+            <p className="text-lg text-amber-900 mb-4">⚠️ This bhajan is not available</p>
+            <p className="text-sm text-gray-600 mb-4">It may have been deleted from your library</p>
+            <button
+              onClick={exitLiveProgram}
+              className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-xl"
+            >
+              Exit Live Mode
+            </button>
+          </div>
+        </div>
+      );
+    }
+    
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-orange-50 to-amber-50">
+        {/* Live Header */}
+        <div className="bg-white/95 backdrop-blur-md sticky top-0 z-40 shadow-md border-b-2 border-orange-200">
+          <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
+            <button
+              onClick={exitLiveProgram}
+              className="text-red-600 hover:text-red-800 font-semibold flex items-center gap-1 text-sm"
+            >
+              ✕ Exit Live
+            </button>
+            <div className="text-center flex-1 mx-4">
+              <p className="text-xs text-orange-600 font-semibold">🎤 LIVE PROGRAM</p>
+              <p className="text-sm font-bold text-amber-900 truncate">{selectedProgram.name}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-xs text-gray-500">Bhajan</p>
+              <p className="text-lg font-bold text-orange-600">{liveProgramIndex + 1} / {totalBhajans}</p>
+            </div>
+          </div>
+          
+          {/* Font Size Controls */}
+          <div className="max-w-4xl mx-auto px-4 pb-2 flex items-center justify-center gap-2">
+            <button
+              onClick={() => setLiveFontSize(Math.max(14, liveFontSize - 2))}
+              className="w-8 h-8 rounded-lg bg-orange-100 hover:bg-orange-200 text-amber-800 font-bold"
+              title="Decrease font"
+            >
+              A−
+            </button>
+            <span className="text-xs text-gray-500 min-w-[40px] text-center">{liveFontSize}px</span>
+            <button
+              onClick={() => setLiveFontSize(Math.min(40, liveFontSize + 2))}
+              className="w-8 h-8 rounded-lg bg-orange-100 hover:bg-orange-200 text-amber-800 font-bold"
+              title="Increase font"
+            >
+              A+
+            </button>
+            {liveWakeLock && (
+              <span className="ml-2 text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">
+                🔦 Screen On
+              </span>
+            )}
+          </div>
+        </div>
+        
+        {/* Bhajan Content */}
+        <div className="max-w-4xl mx-auto px-4 py-6 pb-24">
+          <h1 className="text-3xl md:text-4xl font-bold text-amber-900 mb-3">
+            {currentBhajan.title}
+          </h1>
+          
+          {currentBhajan.dhun && (
+            <div className="bg-orange-50 border-l-4 border-orange-400 p-3 rounded-r-lg mb-4">
+              <p className="text-sm text-orange-900">
+                <span className="font-semibold">तर्ज़ / धुन:</span> {currentBhajan.dhun}
+              </p>
+            </div>
+          )}
+          
+          <div className="flex flex-wrap gap-2 mb-6">
+            <span className="bg-orange-100 text-orange-800 px-3 py-1 rounded-full text-sm font-semibold">
+              {getDeityEmoji(currentBhajan.deity)} {currentBhajan.deity}
+            </span>
+            {currentBhajan.scale && (
+              <span className="bg-purple-100 text-purple-800 px-3 py-1 rounded-full text-sm font-semibold">
+                🎵 {currentBhajan.scale}
+              </span>
+            )}
+          </div>
+          
+          <div className="bg-white rounded-2xl shadow-lg p-6 md:p-8">
+            <pre 
+              className="whitespace-pre-wrap font-sans text-gray-800 leading-relaxed"
+              style={{ fontSize: `${liveFontSize}px`, lineHeight: '1.7' }}
+            >
+              {currentBhajan.lyrics}
+            </pre>
+          </div>
+        </div>
+        
+        {/* Bottom Navigation Bar */}
+        <div className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t-2 border-orange-200 shadow-2xl z-40">
+          <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
+            <button
+              onClick={livePrev}
+              disabled={liveProgramIndex === 0}
+              className="flex-1 bg-orange-100 hover:bg-orange-200 disabled:opacity-30 disabled:cursor-not-allowed text-amber-900 font-bold py-3 rounded-xl flex items-center justify-center gap-2"
+            >
+              ← Previous
+            </button>
+            <div className="text-center min-w-[80px]">
+              <p className="text-xs text-gray-500">Bhajan</p>
+              <p className="text-lg font-bold text-orange-600">{liveProgramIndex + 1} / {totalBhajans}</p>
+            </div>
+            <button
+              onClick={liveNext}
+              disabled={liveProgramIndex >= totalBhajans - 1}
+              className="flex-1 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 disabled:opacity-30 disabled:cursor-not-allowed text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2"
+            >
+              Next →
+            </button>
+          </div>
+        </div>
       </div>
     );
   }
