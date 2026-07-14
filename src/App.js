@@ -96,6 +96,7 @@ const App = () => {
   // Auth states
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [isOffline, setIsOffline] = useState(!navigator.onLine);
   const [showPhoneLogin, setShowPhoneLogin] = useState(false);
   const [phoneNumber, setPhoneNumber] = useState('');
   const [otpCode, setOtpCode] = useState('');
@@ -292,6 +293,25 @@ const App = () => {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
+  // Handle online/offline status
+  useEffect(() => {
+    const handleOnline = () => {
+      console.log('✅ Back online');
+      setIsOffline(false);
+    };
+    const handleOffline = () => {
+      console.log('⚠️ Went offline');
+      setIsOffline(true);
+    };
+    
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
   // ==============================================
   // FIREBASE INITIALIZATION
   // ==============================================
@@ -322,6 +342,44 @@ const App = () => {
 
         if (!window.firebase.apps || window.firebase.apps.length === 0) {
           window.firebase.initializeApp(firebaseConfig);
+        }
+
+        // Enable Firestore offline persistence + long polling fallback
+        // (helps with QUIC/network issues)
+        try {
+          if (!window._firestoreConfigured) {
+            const db = window.firebase.firestore();
+            db.settings({
+              experimentalForceLongPolling: true,  // Bypass QUIC issues
+              merge: true
+            });
+            
+            // Enable offline persistence (cached data works offline)
+            try {
+              await db.enablePersistence({ synchronizeTabs: true });
+              console.log('✅ Firestore offline persistence enabled');
+            } catch (persistErr) {
+              if (persistErr.code === 'failed-precondition') {
+                console.log('Multiple tabs open, persistence enabled in first tab only');
+              } else if (persistErr.code === 'unimplemented') {
+                console.log('Browser does not support persistence');
+              }
+            }
+            
+            window._firestoreConfigured = true;
+          }
+        } catch (configErr) {
+          console.warn('Firestore config error:', configErr);
+        }
+
+        // Handle redirect result (for signInWithRedirect fallback)
+        try {
+          const result = await window.firebase.auth().getRedirectResult();
+          if (result && result.user) {
+            console.log('✅ Redirect sign-in successful:', result.user.email);
+          }
+        } catch (redirectError) {
+          console.log('No redirect result:', redirectError.message);
         }
 
         window.firebase.auth().onAuthStateChanged(async (firebaseUser) => {
@@ -470,10 +528,20 @@ const App = () => {
   // ==============================================
   // USER PROFILE MANAGEMENT
   // ==============================================
-  const loadUserProfile = async (firebaseUser) => {
+  const loadUserProfile = async (firebaseUser, retryCount = 0) => {
+    const MAX_RETRIES = 3;
     try {
       const db = window.firebase.firestore();
-      const userDoc = await db.collection('users').doc(firebaseUser.uid).get();
+      
+      // Try to load from cache first (works offline)
+      let userDoc;
+      try {
+        userDoc = await db.collection('users').doc(firebaseUser.uid).get({ source: 'default' });
+      } catch (fetchErr) {
+        // If default fetch fails, try cache
+        console.log('Trying cache fallback...');
+        userDoc = await db.collection('users').doc(firebaseUser.uid).get({ source: 'cache' });
+      }
       
       if (userDoc.exists) {
         const profile = userDoc.data();
@@ -492,7 +560,26 @@ const App = () => {
         setShowProfileSetup(true);
       }
     } catch (error) {
-      console.error('Error loading profile:', error);
+      console.error(`Error loading profile (attempt ${retryCount + 1}):`, error.message);
+      
+      // Retry up to 3 times with exponential backoff
+      if (retryCount < MAX_RETRIES) {
+        const delayMs = Math.pow(2, retryCount) * 1000; // 1s, 2s, 4s
+        console.log(`Retrying in ${delayMs}ms...`);
+        setTimeout(() => {
+          loadUserProfile(firebaseUser, retryCount + 1);
+        }, delayMs);
+      } else {
+        // After all retries fail, allow user to continue with basic profile
+        console.warn('Profile fetch failed, using minimal profile');
+        setUserProfile({
+          uid: firebaseUser.uid,
+          email: firebaseUser.email,
+          displayName: firebaseUser.displayName || 'User',
+          photoURL: firebaseUser.photoURL,
+          stats: { bhajanCount: 0, publicBhajanCount: 0, followerCount: 0, followingCount: 0 }
+        });
+      }
     }
   };
 
@@ -1548,16 +1635,34 @@ const App = () => {
       const provider = new window.firebase.auth.GoogleAuthProvider();
       provider.setCustomParameters({ prompt: 'select_account' });
       
-      await window.firebase.auth().signInWithPopup(provider);
-      console.log('✅ Google sign-in successful');
+      try {
+        // Try popup method first (better UX)
+        await window.firebase.auth().signInWithPopup(provider);
+        console.log('✅ Google sign-in successful (popup)');
+      } catch (popupError) {
+        console.warn('Popup failed, trying redirect:', popupError);
+        
+        // If popup blocked or has issues, use redirect
+        if (popupError.code === 'auth/popup-blocked' || 
+            popupError.code === 'auth/popup-closed-by-user' ||
+            popupError.code === 'auth/cancelled-popup-request' ||
+            popupError.message?.includes('Cross-Origin')) {
+          setAuthError('Popup blocked, redirecting to sign in...');
+          await window.firebase.auth().signInWithRedirect(provider);
+        } else {
+          throw popupError;
+        }
+      }
     } catch (error) {
       console.error('Google sign-in error:', error);
       if (error.code === 'auth/popup-blocked') {
-        setAuthError('Popup blocked. Please allow popups for this site.');
+        setAuthError('Popup blocked. Please allow popups or try again.');
       } else if (error.code === 'auth/popup-closed-by-user') {
         setAuthError('');
+      } else if (error.code === 'auth/unauthorized-domain') {
+        setAuthError('This domain is not authorized. Please contact support.');
       } else {
-        setAuthError(error.message);
+        setAuthError('Sign-in failed: ' + (error.message || 'Please try again'));
       }
     } finally {
       setAuthLoading(false);
@@ -1799,6 +1904,16 @@ const App = () => {
   if (user && userProfile) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-orange-50 via-amber-50 to-yellow-50">
+        {/* Offline Indicator Banner */}
+        {isOffline && (
+          <div className="bg-red-500 text-white px-4 py-2 text-center text-sm font-semibold sticky top-0 z-50 shadow-md">
+            <span className="inline-flex items-center gap-2">
+              <span className="w-2 h-2 bg-white rounded-full animate-pulse"></span>
+              ⚠️ You're offline. Some features may not work. Changes will sync when back online.
+            </span>
+          </div>
+        )}
+        
         {/* Header */}
         <header className="bg-white/80 backdrop-blur-md sticky top-0 z-40 shadow-sm">
           <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
@@ -3850,6 +3965,15 @@ const App = () => {
   // ==============================================
   return (
     <div className="min-h-screen bg-gradient-to-br from-orange-400 via-orange-500 to-amber-500 flex items-center justify-center p-4">
+      {/* Offline Indicator */}
+      {isOffline && (
+        <div className="fixed top-0 left-0 right-0 bg-red-500 text-white px-4 py-2 text-center text-sm font-semibold z-50 shadow-md">
+          <span className="inline-flex items-center gap-2">
+            <span className="w-2 h-2 bg-white rounded-full animate-pulse"></span>
+            ⚠️ You're offline. Please check your internet connection.
+          </span>
+        </div>
+      )}
       <div className="max-w-md w-full">
         <div className="bg-white rounded-3xl shadow-2xl overflow-hidden">
           <div className="bg-gradient-to-br from-orange-500 to-amber-500 p-8 text-white text-center">
