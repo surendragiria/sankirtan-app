@@ -18,6 +18,13 @@ const DEITY_OPTIONS = [
   { value: 'Ramdev', emoji: '🐎' },
   { value: 'Ganesh', emoji: '🐘' },
   { value: 'Bhairav', emoji: '🐕' },
+  { value: 'Saibaba', emoji: '🌟' },
+  { value: 'Vishnu', emoji: '💫' },
+  { value: 'Buddha', emoji: '☸️' },
+  { value: 'Mahavir', emoji: '🙏' },
+  { value: 'Guru Nanak', emoji: '☬' },
+  { value: 'Jain', emoji: '🕉️' },
+  { value: 'Nirgun', emoji: '✨' },
   { value: 'Deshbhakti', emoji: '🇮🇳' },
   { value: 'Others', emoji: '✨' }
 ];
@@ -109,7 +116,8 @@ const App = () => {
   const [userCount, setUserCount] = useState(0);
 
   // NEW: My Library states
-  const [currentView, setCurrentView] = useState('dashboard'); // 'dashboard', 'library', 'bhajan-detail', 'add-bhajan', 'edit-bhajan', 'programs', 'program-detail', 'create-program', 'edit-program', 'live-program'
+  const [currentView, setCurrentView] = useState('dashboard'); // 'dashboard', 'library', 'bhajan-detail', 'add-bhajan', 'edit-bhajan', 'programs', 'program-detail', 'create-program', 'edit-program', 'live-program', 'public-library', 'public-bhajan-detail', 'admin-panel'
+  const [scrollPositions, setScrollPositions] = useState({});
   const [bhajans, setBhajans] = useState([]);
   const [selectedBhajan, setSelectedBhajan] = useState(null);
   const [editingBhajan, setEditingBhajan] = useState(null);
@@ -148,6 +156,8 @@ const App = () => {
   const [publicBhajans, setPublicBhajans] = useState([]);
   const [publicLoading, setPublicLoading] = useState(false);
   const [publicSearchQuery, setPublicSearchQuery] = useState('');
+  const [publicFilterKeyword, setPublicFilterKeyword] = useState('');
+  const [libraryFilterKeyword, setLibraryFilterKeyword] = useState('');
   const [publicFilterDeity, setPublicFilterDeity] = useState('');
   const [publicFilterCategory, setPublicFilterCategory] = useState('');
   const [selectedPublicBhajan, setSelectedPublicBhajan] = useState(null);
@@ -232,6 +242,55 @@ const App = () => {
       console.log('LocalStorage not available');
     }
   }, [hindiTypingEnabled]);
+
+  // ==============================================
+  // NAVIGATION WITH HISTORY (browser back support)
+  // ==============================================
+  const previousViewRef = useRef('dashboard');
+  
+  // Track view changes - push to browser history when view changes
+  useEffect(() => {
+    if (currentView !== previousViewRef.current) {
+      // Save scroll position of previous view
+      setScrollPositions(prev => ({
+        ...prev,
+        [previousViewRef.current]: window.scrollY
+      }));
+      
+      // Push new view to browser history
+      window.history.pushState({ view: currentView }, '', window.location.pathname);
+      
+      // Scroll to top for new view (unless coming back from browser back)
+      if (!window.__sankirtanBackNav) {
+        window.scrollTo(0, 0);
+      } else {
+        // Restore scroll position
+        setTimeout(() => {
+          const savedScroll = scrollPositions[currentView] || 0;
+          window.scrollTo(0, savedScroll);
+        }, 50);
+        window.__sankirtanBackNav = false;
+      }
+      
+      previousViewRef.current = currentView;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentView]);
+  
+  // Handle browser back button
+  useEffect(() => {
+    const handlePopState = (event) => {
+      window.__sankirtanBackNav = true;
+      if (event.state && event.state.view) {
+        setCurrentView(event.state.view);
+      } else {
+        setCurrentView('dashboard');
+      }
+    };
+    
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   // ==============================================
   // FIREBASE INITIALIZATION
@@ -906,6 +965,7 @@ const App = () => {
     }
     if (publicFilterDeity && bhajan.deity !== publicFilterDeity) return false;
     if (publicFilterCategory && bhajan.category !== publicFilterCategory) return false;
+    if (publicFilterKeyword && (!bhajan.keywords || !bhajan.keywords.includes(publicFilterKeyword))) return false;
     return true;
   });
 
@@ -1003,15 +1063,22 @@ const App = () => {
     if (d.includes('krishn') || d.includes('kanhaiy') || d.includes('kanha')) return 'Krishna';
     if (d.includes('mata') || d.includes('devi') || d.includes('amba') || d.includes('durg')) return 'Mata Ji';
     if (d.includes('hanuman') || d.includes('bajrang')) return 'Hanuman';
+    if (d.includes('ramdev')) return 'Ramdev';
     if (d.includes('ram')) return 'Rama';
     if (d.includes('shiv') || d.includes('mahadev') || d.includes('bhole')) return 'Shiv';
-    if (d.includes('ramdev')) return 'Ramdev';
     if (d.includes('ganesh') || d.includes('ganpat')) return 'Ganesh';
     if (d.includes('bhairav')) return 'Bhairav';
-    if (d.includes('desh') || d.includes('desh')) return 'Deshbhakti';
+    if (d.includes('sai')) return 'Saibaba';
+    if (d.includes('vishnu') || d.includes('narayan')) return 'Vishnu';
+    if (d.includes('buddh')) return 'Buddha';
+    if (d.includes('mahavir') || d.includes('mahaveer')) return 'Mahavir';
+    if (d.includes('nanak') || d.includes('guru nanak')) return 'Guru Nanak';
+    if (d.includes('jain')) return 'Jain';
+    if (d.includes('nirgun')) return 'Nirgun';
+    if (d.includes('desh')) return 'Deshbhakti';
     
     // Match exact options
-    const validOptions = ['Babosa', 'Krishna', 'Mata Ji', 'Hanuman', 'Rama', 'Shiv', 'Ramdev', 'Ganesh', 'Bhairav', 'Deshbhakti', 'Others'];
+    const validOptions = ['Babosa', 'Krishna', 'Mata Ji', 'Hanuman', 'Rama', 'Shiv', 'Ramdev', 'Ganesh', 'Bhairav', 'Saibaba', 'Vishnu', 'Buddha', 'Mahavir', 'Guru Nanak', 'Jain', 'Nirgun', 'Deshbhakti', 'Others'];
     const found = validOptions.find(o => o.toLowerCase() === d);
     if (found) return found;
     
@@ -1466,6 +1533,7 @@ const App = () => {
     }
     if (filterDeity && bhajan.deity !== filterDeity) return false;
     if (filterCategory && bhajan.category !== filterCategory) return false;
+    if (libraryFilterKeyword && (!bhajan.keywords || !bhajan.keywords.includes(libraryFilterKeyword))) return false;
     return true;
   });
 
@@ -1955,7 +2023,7 @@ const App = () => {
                 >
                   <option value="">All Deities</option>
                   {DEITY_OPTIONS.map(d => (
-                    <option key={d.value} value={d.value}>{d.emoji} {d.value}</option>
+                    <option key={d.value} value={d.value}>{d.value}</option>
                   ))}
                 </select>
 
@@ -1970,18 +2038,39 @@ const App = () => {
                   ))}
                 </select>
 
-                {(searchQuery || filterDeity || filterCategory) && (
+                {(searchQuery || filterDeity || filterCategory || libraryFilterKeyword) && (
                   <button
                     onClick={() => {
                       setSearchQuery('');
                       setFilterDeity('');
                       setFilterCategory('');
+                      setLibraryFilterKeyword('');
                     }}
                     className="px-3 py-2 bg-red-50 border-2 border-red-200 text-red-700 rounded-lg text-sm hover:bg-red-100"
                   >
                     Clear filters
                   </button>
                 )}
+              </div>
+
+              {/* Keyword Chips - Quick Filter */}
+              <div className="mb-6">
+                <p className="text-xs text-amber-700 font-semibold mb-2">Quick Keywords (tap to filter):</p>
+                <div className="flex flex-wrap gap-2">
+                  {DEFAULT_KEYWORDS.map(kw => (
+                    <button
+                      key={kw}
+                      onClick={() => setLibraryFilterKeyword(libraryFilterKeyword === kw ? '' : kw)}
+                      className={`px-3 py-1 rounded-full text-xs font-semibold transition-all ${
+                        libraryFilterKeyword === kw
+                          ? 'bg-orange-500 text-white shadow-md'
+                          : 'bg-orange-50 text-amber-800 border border-orange-200 hover:bg-orange-100'
+                      }`}
+                    >
+                      {libraryFilterKeyword === kw ? '✓ ' : ''}#{kw}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               {/* Bhajans List */}
@@ -2034,7 +2123,7 @@ const App = () => {
 
                       <div className="flex flex-wrap gap-1 mb-2">
                         <span className="text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded-full">
-                          {getDeityEmoji(bhajan.deity)} {bhajan.deity}
+                          {bhajan.deity}
                         </span>
                         <span className="text-xs bg-amber-100 text-amber-800 px-2 py-1 rounded-full">
                           {bhajan.category}
@@ -2116,15 +2205,23 @@ const App = () => {
 
                 <div className="flex flex-wrap gap-2 mb-6">
                   <span className="bg-orange-100 text-orange-800 px-3 py-1 rounded-full text-sm font-semibold">
-                    {getDeityEmoji(selectedBhajan.deity)} {selectedBhajan.deity}
+                    {selectedBhajan.deity}
                   </span>
                   <span className="bg-amber-100 text-amber-800 px-3 py-1 rounded-full text-sm font-semibold">
                     📖 {selectedBhajan.category}
                   </span>
-                  {selectedBhajan.scale && (
+                  {selectedBhajan.scale ? (
                     <span className="bg-purple-100 text-purple-800 px-3 py-1 rounded-full text-sm font-semibold">
-                      🎵 {selectedBhajan.scale}
+                      🎵 Scale: {selectedBhajan.scale}
                     </span>
+                  ) : (
+                    <button
+                      onClick={() => openEditBhajan(selectedBhajan)}
+                      className="bg-gray-100 hover:bg-purple-100 text-gray-600 hover:text-purple-800 px-3 py-1 rounded-full text-sm font-semibold border border-dashed border-gray-400"
+                      title="Click to add scale/raag"
+                    >
+                      + Add Scale
+                    </button>
                   )}
                 </div>
 
@@ -2248,7 +2345,7 @@ const App = () => {
                       className="w-full px-4 py-3 border-2 border-orange-200 rounded-xl focus:ring-4 focus:ring-orange-200 focus:border-orange-400 outline-none bg-white"
                     >
                       {DEITY_OPTIONS.map(d => (
-                        <option key={d.value} value={d.value}>{d.emoji} {d.value}</option>
+                        <option key={d.value} value={d.value}>{d.value}</option>
                       ))}
                     </select>
                   </div>
@@ -2673,7 +2770,7 @@ const App = () => {
                             )}
                             <div className="flex gap-1 mt-1">
                               <span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full">
-                                {getDeityEmoji(bhajan.deity)} {bhajan.deity}
+                                {bhajan.deity}
                               </span>
                             </div>
                           </div>
@@ -2799,7 +2896,7 @@ const App = () => {
                             <div className="flex-1 min-w-0">
                               <p className="font-semibold text-amber-900 truncate text-sm">{bhajan.title}</p>
                               <p className="text-xs text-gray-600 truncate">
-                                {getDeityEmoji(bhajan.deity)} {bhajan.deity} • {bhajan.category}
+                                {bhajan.deity} • {bhajan.category}
                               </p>
                             </div>
                             <div className="flex gap-1">
@@ -2920,7 +3017,7 @@ const App = () => {
                                     <div className="flex-1 min-w-0">
                                       <p className="font-semibold text-amber-900 truncate">{bhajan.title}</p>
                                       <p className="text-xs text-gray-600 truncate">
-                                        {getDeityEmoji(bhajan.deity)} {bhajan.deity} • {bhajan.category}
+                                        {bhajan.deity} • {bhajan.category}
                                       </p>
                                     </div>
                                     {isAdded && <span className="text-green-600 font-bold ml-2">✓ Added</span>}
@@ -2992,7 +3089,7 @@ const App = () => {
                 >
                   <option value="">All Deities</option>
                   {DEITY_OPTIONS.map(d => (
-                    <option key={d.value} value={d.value}>{d.emoji} {d.value}</option>
+                    <option key={d.value} value={d.value}>{d.value}</option>
                   ))}
                 </select>
 
@@ -3007,18 +3104,39 @@ const App = () => {
                   ))}
                 </select>
 
-                {(publicSearchQuery || publicFilterDeity || publicFilterCategory) && (
+                {(publicSearchQuery || publicFilterDeity || publicFilterCategory || publicFilterKeyword) && (
                   <button
                     onClick={() => {
                       setPublicSearchQuery('');
                       setPublicFilterDeity('');
                       setPublicFilterCategory('');
+                      setPublicFilterKeyword('');
                     }}
                     className="px-3 py-2 bg-red-50 border-2 border-red-200 text-red-700 rounded-lg text-sm hover:bg-red-100"
                   >
                     Clear filters
                   </button>
                 )}
+              </div>
+
+              {/* Keyword Chips - Quick Filter */}
+              <div className="mb-6">
+                <p className="text-xs text-amber-700 font-semibold mb-2">Quick Keywords (tap to filter):</p>
+                <div className="flex flex-wrap gap-2">
+                  {DEFAULT_KEYWORDS.map(kw => (
+                    <button
+                      key={kw}
+                      onClick={() => setPublicFilterKeyword(publicFilterKeyword === kw ? '' : kw)}
+                      className={`px-3 py-1 rounded-full text-xs font-semibold transition-all ${
+                        publicFilterKeyword === kw
+                          ? 'bg-orange-500 text-white shadow-md'
+                          : 'bg-orange-50 text-amber-800 border border-orange-200 hover:bg-orange-100'
+                      }`}
+                    >
+                      {publicFilterKeyword === kw ? '✓ ' : ''}#{kw}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               {/* Public Bhajans List */}
@@ -3079,7 +3197,7 @@ const App = () => {
 
                           <div className="flex flex-wrap gap-1 mb-2">
                             <span className="text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded-full">
-                              {getDeityEmoji(bhajan.deity)} {bhajan.deity}
+                              {bhajan.deity}
                             </span>
                             <span className="text-xs bg-amber-100 text-amber-800 px-2 py-1 rounded-full">
                               {bhajan.category}
@@ -3181,16 +3299,11 @@ const App = () => {
 
                 <div className="flex flex-wrap gap-2 mb-6">
                   <span className="bg-orange-100 text-orange-800 px-3 py-1 rounded-full text-sm font-semibold">
-                    {getDeityEmoji(selectedPublicBhajan.deity)} {selectedPublicBhajan.deity}
+                    {selectedPublicBhajan.deity}
                   </span>
                   <span className="bg-amber-100 text-amber-800 px-3 py-1 rounded-full text-sm font-semibold">
                     📖 {selectedPublicBhajan.category}
                   </span>
-                  {selectedPublicBhajan.scale && (
-                    <span className="bg-purple-100 text-purple-800 px-3 py-1 rounded-full text-sm font-semibold">
-                      🎵 {selectedPublicBhajan.scale}
-                    </span>
-                  )}
                   <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-semibold">
                     🌐 Public
                   </span>
@@ -3369,7 +3482,7 @@ const App = () => {
                         <div key={idx} className="mb-2 p-2 bg-white rounded-lg text-sm border border-gray-200">
                           <p className="font-semibold text-amber-900 truncate">{b.title}</p>
                           <p className="text-xs text-gray-600">
-                            {getDeityEmoji(b.deity)} {b.deity} • {b.category}
+                            {b.deity} • {b.category}
                           </p>
                         </div>
                       ))}
@@ -3481,7 +3594,7 @@ const App = () => {
                       className="w-full px-4 py-3 border-2 border-orange-200 rounded-xl outline-none bg-white"
                     >
                       {DEITY_OPTIONS.map(d => (
-                        <option key={d.value} value={d.value}>{d.emoji} {d.value}</option>
+                        <option key={d.value} value={d.value}>{d.value}</option>
                       ))}
                     </select>
                   </div>
@@ -3692,7 +3805,7 @@ const App = () => {
           
           <div className="flex flex-wrap gap-2 mb-6">
             <span className="bg-orange-100 text-orange-800 px-3 py-1 rounded-full text-sm font-semibold">
-              {getDeityEmoji(currentBhajan.deity)} {currentBhajan.deity}
+              {currentBhajan.deity}
             </span>
             {currentBhajan.scale && (
               <span className="bg-purple-100 text-purple-800 px-3 py-1 rounded-full text-sm font-semibold">
@@ -3774,12 +3887,15 @@ const App = () => {
                   {authLoading ? 'Signing in...' : 'Continue with Google'}
                 </button>
 
-                <button
-                  onClick={() => setShowPhoneLogin(true)}
-                  className="w-full bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-semibold py-3 px-4 rounded-xl transition-all flex items-center justify-center gap-2"
-                >
-                  📱 Continue with Phone
-                </button>
+                {/* Phone login temporarily hidden - will be enabled when Blaze plan is active */}
+                {false && (
+                  <button
+                    onClick={() => setShowPhoneLogin(true)}
+                    className="w-full bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-semibold py-3 px-4 rounded-xl transition-all flex items-center justify-center gap-2"
+                  >
+                    📱 Continue with Phone
+                  </button>
+                )}
 
                 {authError && (
                   <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-xs">
