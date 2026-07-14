@@ -349,8 +349,11 @@ const App = () => {
         try {
           if (!window._firestoreConfigured) {
             const db = window.firebase.firestore();
+            
+            // Only set long polling (which auto-disables QUIC)
+            // Note: Cannot use experimentalForceLongPolling with autoDetect
             db.settings({
-              experimentalForceLongPolling: true,  // Bypass QUIC issues
+              experimentalAutoDetectLongPolling: true,  // Auto-detects when needed
               merge: true
             });
             
