@@ -344,6 +344,17 @@ const App = () => {
           window.firebase.initializeApp(firebaseConfig);
         }
 
+        // Set persistence to LOCAL — users stay logged in even after closing browser
+        // Users only need to login once until they explicitly logout
+        try {
+          await window.firebase.auth().setPersistence(
+            window.firebase.auth.Auth.Persistence.LOCAL
+          );
+          console.log('✅ Auth persistence set to LOCAL (permanent login until logout)');
+        } catch (persistErr) {
+          console.log('Persistence setting failed:', persistErr.message);
+        }
+
         // Enable Firestore offline persistence + long polling fallback
         // (helps with QUIC/network issues)
         try {
