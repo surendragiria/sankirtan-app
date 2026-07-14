@@ -400,7 +400,8 @@ const App = () => {
           if (firebaseUser) {
             console.log('👤 User logged in:', firebaseUser.email || firebaseUser.phoneNumber);
             setUser(firebaseUser);
-            await loadUserProfile(firebaseUser);
+            // Load profile in background (non-blocking) - user sees dashboard immediately
+            loadUserProfile(firebaseUser); // No await!
           } else {
             console.log('👤 No user logged in');
             setUser(null);
@@ -409,6 +410,11 @@ const App = () => {
           }
           setLoading(false);
         });
+        
+        // Safety timeout: never stay in loading state more than 8 seconds
+        setTimeout(() => {
+          setLoading(false);
+        }, 8000);
 
         await fetchUserCount();
       } catch (error) {
@@ -544,18 +550,34 @@ const App = () => {
   // USER PROFILE MANAGEMENT
   // ==============================================
   const loadUserProfile = async (firebaseUser, retryCount = 0) => {
-    const MAX_RETRIES = 3;
+    const MAX_RETRIES = 2; // Reduced from 3
+    
+    // Show minimal profile IMMEDIATELY (better perceived speed)
+    if (retryCount === 0) {
+      setUserProfile({
+        uid: firebaseUser.uid,
+        email: firebaseUser.email,
+        displayName: firebaseUser.displayName || 'User',
+        photoURL: firebaseUser.photoURL,
+        stats: { bhajanCount: 0, publicBhajanCount: 0, followerCount: 0, followingCount: 0 },
+        _loading: true // Flag to indicate this is minimal
+      });
+    }
+    
     try {
       const db = window.firebase.firestore();
       
-      // Try to load from cache first (works offline)
+      // Try to load from Firestore (with shorter timeout via retry)
       let userDoc;
       try {
         userDoc = await db.collection('users').doc(firebaseUser.uid).get({ source: 'default' });
       } catch (fetchErr) {
-        // If default fetch fails, try cache
         console.log('Trying cache fallback...');
-        userDoc = await db.collection('users').doc(firebaseUser.uid).get({ source: 'cache' });
+        try {
+          userDoc = await db.collection('users').doc(firebaseUser.uid).get({ source: 'cache' });
+        } catch (cacheErr) {
+          throw fetchErr; // Re-throw original error
+        }
       }
       
       if (userDoc.exists) {
@@ -575,25 +597,23 @@ const App = () => {
         setShowProfileSetup(true);
       }
     } catch (error) {
-      console.error(`Error loading profile (attempt ${retryCount + 1}):`, error.message);
+      console.error(`Profile load failed (attempt ${retryCount + 1}):`, error.message);
       
-      // Retry up to 3 times with exponential backoff
+      // Reduced retries to 2 instead of 3 (faster failure detection)
       if (retryCount < MAX_RETRIES) {
-        const delayMs = Math.pow(2, retryCount) * 1000; // 1s, 2s, 4s
+        const delayMs = 1500; // Fixed 1.5s (not exponential)
         console.log(`Retrying in ${delayMs}ms...`);
         setTimeout(() => {
           loadUserProfile(firebaseUser, retryCount + 1);
         }, delayMs);
       } else {
-        // After all retries fail, allow user to continue with basic profile
-        console.warn('Profile fetch failed, using minimal profile');
-        setUserProfile({
-          uid: firebaseUser.uid,
-          email: firebaseUser.email,
-          displayName: firebaseUser.displayName || 'User',
-          photoURL: firebaseUser.photoURL,
-          stats: { bhajanCount: 0, publicBhajanCount: 0, followerCount: 0, followingCount: 0 }
-        });
+        // Use minimal profile (already set) - user can still browse app
+        console.warn('Using minimal profile - user can browse cached content');
+        setUserProfile(prev => ({
+          ...prev,
+          _loading: false, // Done trying
+          _minimal: true
+        }));
       }
     }
   };
@@ -1798,6 +1818,14 @@ const App = () => {
           <div className="mt-6">
             <div className="animate-spin rounded-full h-10 w-10 border-4 border-white border-t-transparent mx-auto"></div>
           </div>
+          <p className="text-orange-100 text-sm mt-4 animate-pulse">
+            Loading your devotional experience...
+          </p>
+          {isOffline && (
+            <p className="text-white text-xs mt-2 bg-red-600 rounded-lg px-3 py-1 inline-block">
+              ⚠️ Slow connection detected
+            </p>
+          )}
         </div>
       </div>
     );
