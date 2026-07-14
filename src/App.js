@@ -1665,12 +1665,6 @@ const App = () => {
     }
   };
 
-  // Get deity emoji helper
-  const getDeityEmoji = (deityName) => {
-    const deity = DEITY_OPTIONS.find(d => d.value === deityName);
-    return deity ? deity.emoji : '✨';
-  };
-
   // ==============================================
   // LOADING SCREEN
   // ==============================================
