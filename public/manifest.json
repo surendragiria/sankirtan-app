@@ -1,29 +1,53 @@
 {
   "short_name": "Sankirtan",
   "name": "Sankirtan - Bhajan Se Bhagwan Tak",
-  "description": "The devotional music platform for singers, artists & devotees",
+  "description": "Devotional bhajan platform for singers, artists & devotees. 175+ curated bhajans, Live Performance Mode, Hindi typing & more.",
   "icons": [
     {
       "src": "favicon.ico",
-      "sizes": "64x64 32x32 24x24 16x16",
+      "sizes": "16x16 32x32",
       "type": "image/x-icon"
     },
     {
       "src": "logo192.png",
       "type": "image/png",
-      "sizes": "192x192"
+      "sizes": "192x192",
+      "purpose": "any maskable"
     },
     {
       "src": "logo512.png",
       "type": "image/png",
-      "sizes": "512x512"
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "apple-touch-icon.png",
+      "type": "image/png",
+      "sizes": "180x180"
     }
   ],
-  "start_url": ".",
+  "start_url": "/",
   "display": "standalone",
   "orientation": "portrait",
   "theme_color": "#f97316",
-  "background_color": "#fff7ed",
-  "lang": "hi-IN",
-  "categories": ["music", "lifestyle", "spirituality"]
+  "background_color": "#fef3c7",
+  "categories": ["music", "lifestyle", "spiritual"],
+  "lang": "en-IN",
+  "scope": "/",
+  "shortcuts": [
+    {
+      "name": "Public Library",
+      "short_name": "Public",
+      "description": "Browse 175+ curated bhajans",
+      "url": "/?view=public-library",
+      "icons": [{ "src": "logo192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "My Library",
+      "short_name": "My Library",
+      "description": "Your personal collection",
+      "url": "/?view=library",
+      "icons": [{ "src": "logo192.png", "sizes": "192x192" }]
+    }
+  ]
 }
