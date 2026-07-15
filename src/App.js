@@ -97,6 +97,12 @@ const App = () => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
+  const [showBrowserWarning, setShowBrowserWarning] = useState(() => {
+    // Detect iOS Chrome and suggest Safari
+    const isIOSChrome = /CriOS/.test(navigator.userAgent);
+    const dismissed = localStorage.getItem('sankirtan-browser-warning-dismissed');
+    return isIOSChrome && !dismissed;
+  });
   const [showPhoneLogin, setShowPhoneLogin] = useState(false);
   const [phoneNumber, setPhoneNumber] = useState('');
   const [otpCode, setOtpCode] = useState('');
@@ -369,15 +375,24 @@ const App = () => {
             });
             
             // Enable offline persistence (cached data works offline)
-            try {
-              await db.enablePersistence({ synchronizeTabs: true });
-              console.log('✅ Firestore offline persistence enabled');
-            } catch (persistErr) {
-              if (persistErr.code === 'failed-precondition') {
-                console.log('Multiple tabs open, persistence enabled in first tab only');
-              } else if (persistErr.code === 'unimplemented') {
-                console.log('Browser does not support persistence');
+            // Skip in Chrome due to IndexedDB storage issues
+            const isChrome = /Chrome/.test(navigator.userAgent) && !/Edg/.test(navigator.userAgent);
+            const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+            const skipPersistence = isChrome && isIOS;
+            
+            if (!skipPersistence) {
+              try {
+                await db.enablePersistence({ synchronizeTabs: true });
+                console.log('✅ Firestore offline persistence enabled');
+              } catch (persistErr) {
+                if (persistErr.code === 'failed-precondition') {
+                  console.log('Multiple tabs open, persistence enabled in first tab only');
+                } else if (persistErr.code === 'unimplemented') {
+                  console.log('Browser does not support persistence');
+                }
               }
+            } else {
+              console.log('ℹ️ Skipping persistence in iOS Chrome (uses direct network)');
             }
             
             window._firestoreConfigured = true;
@@ -1953,6 +1968,24 @@ const App = () => {
             <span className="inline-flex items-center gap-2">
               <span className="w-2 h-2 bg-white rounded-full animate-pulse"></span>
               ⚠️ You're offline. Some features may not work. Changes will sync when back online.
+            </span>
+          </div>
+        )}
+        
+        {/* iOS Chrome Warning Banner */}
+        {showBrowserWarning && (
+          <div className="bg-blue-500 text-white px-4 py-3 text-center text-sm sticky top-0 z-50 shadow-md">
+            <span className="inline-flex items-center gap-2 flex-wrap justify-center">
+              💡 For best experience on iPhone, please use <strong>Safari</strong>
+              <button
+                onClick={() => {
+                  localStorage.setItem('sankirtan-browser-warning-dismissed', 'true');
+                  setShowBrowserWarning(false);
+                }}
+                className="ml-2 bg-white/20 hover:bg-white/30 px-2 py-0.5 rounded text-xs"
+              >
+                Dismiss
+              </button>
             </span>
           </div>
         )}
