@@ -148,6 +148,11 @@ const App = () => {
   // Onboarding tour state
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [onboardingStep, setOnboardingStep] = useState(0);
+  
+  // PWA install prompt state
+  const [deferredInstallPrompt, setDeferredInstallPrompt] = useState(null);
+  const [showInstallPrompt, setShowInstallPrompt] = useState(false);
+  const [showIOSInstructions, setShowIOSInstructions] = useState(false);
   const [showPhoneLogin, setShowPhoneLogin] = useState(false);
   const [phoneNumber, setPhoneNumber] = useState('');
   const [otpCode, setOtpCode] = useState('');
@@ -362,6 +367,70 @@ const App = () => {
       window.removeEventListener('offline', handleOffline);
     };
   }, []);
+
+  // ==============================================
+  // PWA INSTALL PROMPT
+  // ==============================================
+  useEffect(() => {
+    // Check if user already dismissed or app is already installed
+    const alreadyDismissed = localStorage.getItem('sankirtan-install-dismissed');
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
+    const isIOSStandalone = window.navigator.standalone === true;
+    
+    if (alreadyDismissed || isStandalone || isIOSStandalone) {
+      console.log('ℹ️ Install prompt: not shown (already installed or dismissed)');
+      return;
+    }
+    
+    // Listen for Android/Desktop install event
+    const handleBeforeInstallPrompt = (e) => {
+      e.preventDefault();
+      setDeferredInstallPrompt(e);
+      // Show our custom prompt after user has used app for 30 seconds
+      setTimeout(() => {
+        setShowInstallPrompt(true);
+      }, 30000);
+    };
+    
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    
+    // For iOS Safari, show manual instructions after 30 seconds
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    const isSafari = /Safari/.test(navigator.userAgent) && !/CriOS|FxiOS/.test(navigator.userAgent);
+    
+    if (isIOS && isSafari && !isIOSStandalone) {
+      const timer = setTimeout(() => {
+        setShowIOSInstructions(true);
+      }, 30000);
+      return () => {
+        clearTimeout(timer);
+        window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      };
+    }
+    
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    };
+  }, []);
+  
+  const handleInstallApp = async () => {
+    if (deferredInstallPrompt) {
+      deferredInstallPrompt.prompt();
+      const { outcome } = await deferredInstallPrompt.userChoice;
+      console.log(`Install prompt outcome: ${outcome}`);
+      if (outcome === 'accepted') {
+        localStorage.setItem('sankirtan-install-dismissed', 'installed');
+      }
+      setDeferredInstallPrompt(null);
+      setShowInstallPrompt(false);
+    }
+  };
+  
+  const dismissInstallPrompt = () => {
+    localStorage.setItem('sankirtan-install-dismissed', 'true');
+    setShowInstallPrompt(false);
+    setShowIOSInstructions(false);
+  };
 
   // ==============================================
   // ONBOARDING TOUR FUNCTIONS
@@ -2037,13 +2106,13 @@ const App = () => {
     return (
       <div className="min-h-screen bg-gradient-to-br from-orange-400 via-orange-500 to-amber-500 flex items-center justify-center">
         <div className="text-center">
-          <div className="text-8xl mb-4 animate-pulse">🕉️</div>
+          <div className="text-8xl mb-4">🕉️</div>
           <h1 className="text-4xl font-bold text-white mb-2">Sankirtan</h1>
           <p className="text-orange-100 text-lg">भजन से भगवान तक</p>
           <div className="mt-6">
             <div className="animate-spin rounded-full h-10 w-10 border-4 border-white border-t-transparent mx-auto"></div>
           </div>
-          <p className="text-orange-100 text-sm mt-4 animate-pulse">
+          <p className="text-orange-100 text-sm mt-4">
             Loading your devotional experience...
           </p>
           {isOffline && (
@@ -2178,7 +2247,7 @@ const App = () => {
             ONBOARDING TOUR MODAL
             ============================================== */}
         {showOnboarding && currentStep && (
-          <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 animate-fadeIn">
+          <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 ">
             <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden">
               {/* Header with gradient */}
               <div className="bg-gradient-to-br from-orange-500 to-amber-500 p-6 text-white text-center relative">
@@ -2252,6 +2321,74 @@ const App = () => {
                     Skip the rest
                   </button>
                 )}
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {/* ==============================================
+            PWA INSTALL PROMPT (Android/Desktop)
+            ============================================== */}
+        {showInstallPrompt && deferredInstallPrompt && (
+          <div className="fixed bottom-4 left-4 right-4 md:left-auto md:max-w-md z-50">
+            <div className="bg-white rounded-2xl shadow-2xl border-2 border-orange-300 p-5">
+              <div className="flex items-start gap-3">
+                <div className="text-4xl">🕉️</div>
+                <div className="flex-1">
+                  <h4 className="font-bold text-amber-900 mb-1">Add Sankirtan to Home Screen</h4>
+                  <p className="text-sm text-gray-600 mb-3">
+                    Install for a native app experience - quick access, offline support, and full-screen mode!
+                  </p>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleInstallApp}
+                      className="bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-semibold px-4 py-2 rounded-lg text-sm shadow-md flex-1"
+                    >
+                      📱 Install App
+                    </button>
+                    <button
+                      onClick={dismissInstallPrompt}
+                      className="text-gray-500 hover:text-gray-700 px-3 py-2 text-sm"
+                    >
+                      Not now
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {/* ==============================================
+            iOS SAFARI INSTALL INSTRUCTIONS
+            ============================================== */}
+        {showIOSInstructions && (
+          <div className="fixed bottom-4 left-4 right-4 md:left-auto md:max-w-md z-50">
+            <div className="bg-white rounded-2xl shadow-2xl border-2 border-orange-300 p-5">
+              <div className="flex items-start gap-3">
+                <div className="text-4xl">🕉️</div>
+                <div className="flex-1">
+                  <h4 className="font-bold text-amber-900 mb-1">Add Sankirtan to Home Screen</h4>
+                  <p className="text-sm text-gray-600 mb-3">
+                    Get quick access - just like a native app!
+                  </p>
+                  <div className="bg-orange-50 rounded-lg p-3 mb-3 text-xs text-amber-900">
+                    <ol className="list-decimal list-inside space-y-1">
+                      <li>Tap the <span className="inline-block bg-white border border-gray-300 rounded px-1.5 py-0.5 text-blue-600">Share ⬆️</span> button below</li>
+                      <li>Scroll down and tap <strong>"Add to Home Screen"</strong></li>
+                      <li>Tap <strong>"Add"</strong> in the top right</li>
+                      <li>Find Sankirtan on your home screen! 🎉</li>
+                    </ol>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={dismissInstallPrompt}
+                      className="bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-semibold px-4 py-2 rounded-lg text-sm flex-1"
+                    >
+                      Got it! 👍
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -4361,7 +4498,7 @@ const App = () => {
       <div className="max-w-md w-full">
         <div className="bg-white rounded-3xl shadow-2xl overflow-hidden">
           <div className="bg-gradient-to-br from-orange-500 to-amber-500 p-8 text-white text-center">
-            <div className="text-7xl mb-2 animate-pulse">🕉️</div>
+            <div className="text-7xl mb-2">🕉️</div>
             <h1 className="text-4xl font-bold mb-1">Sankirtan</h1>
             <p className="text-orange-100 text-base">भजन से भगवान तक</p>
             <div className="mt-4 pt-4 border-t border-white/30">
