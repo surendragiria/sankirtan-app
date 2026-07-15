@@ -43,6 +43,47 @@ const DEFAULT_KEYWORDS = [
 // Admin user ID (only this user can manage public library)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
 
+// Onboarding tour steps
+const ONBOARDING_STEPS = [
+  {
+    target: 'welcome',
+    title: '🙏 Welcome to Sankirtan!',
+    description: 'Let me quickly show you around. This will take just 30 seconds.',
+    emoji: '🕉️'
+  },
+  {
+    target: 'public-library',
+    title: '🌐 Public Library',
+    description: 'Browse 175+ curated bhajans - Babosa, Krishna, Mata Ji, Hanuman & more. Tap any bhajan to save it to your personal library.',
+    emoji: '📚'
+  },
+  {
+    target: 'my-library',
+    title: '📚 My Library',
+    description: 'Your personal collection. Add your own bhajans, edit lyrics, add tunes (धुन), and organize by deity or category.',
+    emoji: '❤️'
+  },
+  {
+    target: 'programs',
+    title: '🎵 Programs & Live Mode',
+    description: 'Create setlists for jagrans & satsangs. Live Mode shows big text, keeps screen awake, and lets you navigate hands-free during performances.',
+    emoji: '🎤'
+  },
+  {
+    target: 'hindi-typing',
+    title: '✍️ Hindi Typing Made Easy',
+    description: 'Type in English → Get Hindi automatically! Like "bhagwan" → "भगवान". Works when adding or editing bhajans.',
+    emoji: '📝'
+  },
+  {
+    target: 'finish',
+    title: '🎊 You\'re All Set!',
+    description: 'बाबोसा जी की कृपा से आपकी यात्रा शुरू होती है। Start by exploring the Public Library!',
+    emoji: '🙏'
+  }
+];
+
+
 // Fallback Hindi transliteration map (used when API fails)
 const HINDI_FALLBACK_MAP = {
   // Common bhajan words
@@ -103,6 +144,10 @@ const App = () => {
     const dismissed = localStorage.getItem('sankirtan-browser-warning-dismissed');
     return isIOSChrome && !dismissed;
   });
+  
+  // Onboarding tour state
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [onboardingStep, setOnboardingStep] = useState(0);
   const [showPhoneLogin, setShowPhoneLogin] = useState(false);
   const [phoneNumber, setPhoneNumber] = useState('');
   const [otpCode, setOtpCode] = useState('');
@@ -317,6 +362,35 @@ const App = () => {
       window.removeEventListener('offline', handleOffline);
     };
   }, []);
+
+  // ==============================================
+  // ONBOARDING TOUR FUNCTIONS
+  // ==============================================
+  const nextOnboardingStep = () => {
+    if (onboardingStep < ONBOARDING_STEPS.length - 1) {
+      setOnboardingStep(onboardingStep + 1);
+    } else {
+      finishOnboarding();
+    }
+  };
+  
+  const previousOnboardingStep = () => {
+    if (onboardingStep > 0) {
+      setOnboardingStep(onboardingStep - 1);
+    }
+  };
+  
+  const finishOnboarding = () => {
+    localStorage.setItem('sankirtan-onboarding-completed', 'true');
+    setShowOnboarding(false);
+    setOnboardingStep(0);
+  };
+  
+  const skipOnboarding = () => {
+    localStorage.setItem('sankirtan-onboarding-completed', 'true');
+    setShowOnboarding(false);
+    setOnboardingStep(0);
+  };
 
   // ==============================================
   // FIREBASE INITIALIZATION
@@ -717,6 +791,15 @@ const App = () => {
         const profile = userDoc.data();
         setUserProfile(profile);
         console.log('✅ Profile loaded:', profile.displayName);
+        
+        // Show onboarding tour for first-time users (once only)
+        const hasSeenTour = localStorage.getItem('sankirtan-onboarding-completed');
+        if (!hasSeenTour) {
+          setTimeout(() => {
+            setShowOnboarding(true);
+            setOnboardingStep(0);
+          }, 800); // Small delay so dashboard renders first
+        }
       } else {
         console.log('🆕 New user - setup profile');
         setProfileForm({
@@ -807,6 +890,15 @@ const App = () => {
       setShowProfileSetup(false);
       setAuthError('');
       console.log('✅ Profile saved');
+      
+      // Show onboarding for brand new users
+      const hasSeenTour = localStorage.getItem('sankirtan-onboarding-completed');
+      if (!hasSeenTour) {
+        setTimeout(() => {
+          setShowOnboarding(true);
+          setOnboardingStep(0);
+        }, 800);
+      }
     } catch (error) {
       console.error('Error saving profile:', error);
       setAuthError('Could not save profile: ' + error.message);
@@ -2078,8 +2170,93 @@ const App = () => {
   // MAIN AUTHENTICATED APP
   // ==============================================
   if (user && userProfile) {
+    const currentStep = ONBOARDING_STEPS[onboardingStep];
+    
     return (
       <div className="min-h-screen bg-gradient-to-br from-orange-50 via-amber-50 to-yellow-50">
+        {/* ==============================================
+            ONBOARDING TOUR MODAL
+            ============================================== */}
+        {showOnboarding && currentStep && (
+          <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 animate-fadeIn">
+            <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden">
+              {/* Header with gradient */}
+              <div className="bg-gradient-to-br from-orange-500 to-amber-500 p-6 text-white text-center relative">
+                {/* Skip button */}
+                <button
+                  onClick={skipOnboarding}
+                  className="absolute top-3 right-3 text-white/80 hover:text-white text-sm font-semibold bg-white/20 hover:bg-white/30 px-3 py-1 rounded-full"
+                >
+                  Skip Tour
+                </button>
+                
+                {/* Big emoji */}
+                <div className="text-6xl mb-3 mt-2 animate-bounce">
+                  {currentStep.emoji}
+                </div>
+                
+                {/* Step indicator */}
+                <div className="flex justify-center gap-2 mb-4">
+                  {ONBOARDING_STEPS.map((_, idx) => (
+                    <div
+                      key={idx}
+                      className={`h-1.5 rounded-full transition-all ${
+                        idx === onboardingStep 
+                          ? 'w-8 bg-white' 
+                          : idx < onboardingStep
+                            ? 'w-4 bg-white/60'
+                            : 'w-4 bg-white/30'
+                      }`}
+                    />
+                  ))}
+                </div>
+                
+                <p className="text-xs text-orange-100">
+                  Step {onboardingStep + 1} of {ONBOARDING_STEPS.length}
+                </p>
+              </div>
+              
+              {/* Content */}
+              <div className="p-6 text-center">
+                <h3 className="text-2xl font-bold text-amber-900 mb-3">
+                  {currentStep.title}
+                </h3>
+                <p className="text-gray-700 leading-relaxed text-base mb-6">
+                  {currentStep.description}
+                </p>
+                
+                {/* Action buttons */}
+                <div className="flex gap-3">
+                  {onboardingStep > 0 && (
+                    <button
+                      onClick={previousOnboardingStep}
+                      className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold py-3 rounded-xl transition-colors"
+                    >
+                      ← Back
+                    </button>
+                  )}
+                  <button
+                    onClick={nextOnboardingStep}
+                    className="flex-1 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-semibold py-3 rounded-xl shadow-lg transition-all"
+                  >
+                    {onboardingStep === ONBOARDING_STEPS.length - 1 ? "Let's Start! 🚀" : 'Next →'}
+                  </button>
+                </div>
+                
+                {/* Skip link on later steps */}
+                {onboardingStep > 0 && onboardingStep < ONBOARDING_STEPS.length - 1 && (
+                  <button
+                    onClick={skipOnboarding}
+                    className="text-gray-500 text-sm mt-4 hover:text-gray-700"
+                  >
+                    Skip the rest
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+        
         {/* Offline Indicator Banner */}
         {isOffline && (
           <div className="bg-red-500 text-white px-4 py-2 text-center text-sm font-semibold sticky top-0 z-50 shadow-md">
@@ -2144,6 +2321,19 @@ const App = () => {
                 {userProfile.verified && <span className="text-xs text-blue-600">✓ Verified</span>}
                 {isAdmin && <span className="text-xs text-purple-600 ml-1">👑 Admin</span>}
               </div>
+              <button
+                onClick={() => {
+                  setOnboardingStep(0);
+                  setShowOnboarding(true);
+                }}
+                className="text-blue-600 hover:text-blue-800 p-2 rounded-lg hover:bg-blue-50"
+                title="Show Tour"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" 
+                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </button>
               <button
                 onClick={handleLogout}
                 className="text-orange-600 hover:text-orange-800 p-2 rounded-lg hover:bg-orange-50"
