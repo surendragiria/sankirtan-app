@@ -455,23 +455,55 @@ const App = () => {
     const db = window.firebase.firestore();
     const bhajansRef = db.collection('users').doc(user.uid).collection('bhajans');
     
-    const unsubscribe = bhajansRef
-      .orderBy('createdAt', 'desc')
-      .onSnapshot(
-        (snapshot) => {
-          const bhajanList = [];
-          snapshot.forEach((doc) => {
-            bhajanList.push({ id: doc.id, ...doc.data() });
-          });
-          setBhajans(bhajanList);
-          setBhajansLoading(false);
-          console.log(`✅ Loaded ${bhajanList.length} bhajans`);
-        },
-        (error) => {
-          console.error('Error loading bhajans:', error);
-          setBhajansLoading(false);
-        }
-      );
+    // Load with .get() first (reliable across networks)
+    const loadBhajans = async () => {
+      try {
+        const snapshot = await bhajansRef.get();
+        const bhajanList = [];
+        snapshot.forEach((doc) => {
+          bhajanList.push({ id: doc.id, ...doc.data() });
+        });
+        // Sort in JS
+        bhajanList.sort((a, b) => {
+          const timeA = a.createdAt?.seconds || 0;
+          const timeB = b.createdAt?.seconds || 0;
+          return timeB - timeA;
+        });
+        setBhajans(bhajanList);
+        setBhajansLoading(false);
+        console.log(`✅ Loaded ${bhajanList.length} bhajans`);
+      } catch (error) {
+        console.error('Error loading bhajans:', error);
+        setBhajansLoading(false);
+      }
+    };
+    
+    loadBhajans();
+    
+    // Real-time updates (optional, may fail on some networks)
+    let unsubscribe = () => {};
+    try {
+      unsubscribe = bhajansRef
+        .onSnapshot(
+          (snapshot) => {
+            const bhajanList = [];
+            snapshot.forEach((doc) => {
+              bhajanList.push({ id: doc.id, ...doc.data() });
+            });
+            bhajanList.sort((a, b) => {
+              const timeA = a.createdAt?.seconds || 0;
+              const timeB = b.createdAt?.seconds || 0;
+              return timeB - timeA;
+            });
+            setBhajans(bhajanList);
+          },
+          (error) => {
+            console.log('Bhajans real-time error (using cached):', error.message);
+          }
+        );
+    } catch (e) {
+      console.log('Could not set up bhajans listener');
+    }
 
     return () => unsubscribe();
   }, [user, userProfile]);
@@ -489,23 +521,52 @@ const App = () => {
     const db = window.firebase.firestore();
     const programsRef = db.collection('users').doc(user.uid).collection('programs');
     
-    const unsubscribe = programsRef
-      .orderBy('createdAt', 'desc')
-      .onSnapshot(
-        (snapshot) => {
-          const programList = [];
-          snapshot.forEach((doc) => {
-            programList.push({ id: doc.id, ...doc.data() });
-          });
-          setPrograms(programList);
-          setProgramsLoading(false);
-          console.log(`✅ Loaded ${programList.length} programs`);
-        },
-        (error) => {
-          console.error('Error loading programs:', error);
-          setProgramsLoading(false);
-        }
-      );
+    const loadPrograms = async () => {
+      try {
+        const snapshot = await programsRef.get();
+        const programList = [];
+        snapshot.forEach((doc) => {
+          programList.push({ id: doc.id, ...doc.data() });
+        });
+        programList.sort((a, b) => {
+          const timeA = a.createdAt?.seconds || 0;
+          const timeB = b.createdAt?.seconds || 0;
+          return timeB - timeA;
+        });
+        setPrograms(programList);
+        setProgramsLoading(false);
+        console.log(`✅ Loaded ${programList.length} programs`);
+      } catch (error) {
+        console.error('Error loading programs:', error);
+        setProgramsLoading(false);
+      }
+    };
+    
+    loadPrograms();
+    
+    let unsubscribe = () => {};
+    try {
+      unsubscribe = programsRef
+        .onSnapshot(
+          (snapshot) => {
+            const programList = [];
+            snapshot.forEach((doc) => {
+              programList.push({ id: doc.id, ...doc.data() });
+            });
+            programList.sort((a, b) => {
+              const timeA = a.createdAt?.seconds || 0;
+              const timeB = b.createdAt?.seconds || 0;
+              return timeB - timeA;
+            });
+            setPrograms(programList);
+          },
+          (error) => {
+            console.log('Programs real-time error:', error.message);
+          }
+        );
+    } catch (e) {
+      console.log('Could not set up programs listener');
+    }
 
     return () => unsubscribe();
   }, [user, userProfile]);
@@ -523,23 +584,80 @@ const App = () => {
     const db = window.firebase.firestore();
     const publicRef = db.collection('publicBhajans');
     
-    const unsubscribe = publicRef
-      .orderBy('createdAt', 'desc')
-      .onSnapshot(
-        (snapshot) => {
-          const list = [];
-          snapshot.forEach((doc) => {
-            list.push({ id: doc.id, ...doc.data() });
-          });
-          setPublicBhajans(list);
-          setPublicLoading(false);
-          console.log(`✅ Loaded ${list.length} public bhajans`);
-        },
-        (error) => {
-          console.error('Error loading public bhajans:', error);
-          setPublicLoading(false);
-        }
-      );
+    // Use simple .get() instead of real-time listener (more reliable across networks)
+    // This works even when WebChannel connections fail
+    const loadPublicBhajans = async () => {
+      try {
+        // Try without orderBy first (in case some docs missing createdAt)
+        const snapshot = await publicRef.get();
+        const list = [];
+        snapshot.forEach((doc) => {
+          list.push({ id: doc.id, ...doc.data() });
+        });
+        
+        // Sort in JavaScript instead of Firestore query
+        list.sort((a, b) => {
+          const timeA = a.createdAt?.seconds || 0;
+          const timeB = b.createdAt?.seconds || 0;
+          return timeB - timeA; // Newest first
+        });
+        
+        setPublicBhajans(list);
+        setPublicLoading(false);
+        console.log(`✅ Loaded ${list.length} public bhajans`);
+      } catch (error) {
+        console.error('Error loading public bhajans:', error);
+        setPublicLoading(false);
+        
+        // Retry once after 2 seconds
+        setTimeout(async () => {
+          try {
+            const snapshot = await publicRef.get();
+            const list = [];
+            snapshot.forEach((doc) => {
+              list.push({ id: doc.id, ...doc.data() });
+            });
+            list.sort((a, b) => {
+              const timeA = a.createdAt?.seconds || 0;
+              const timeB = b.createdAt?.seconds || 0;
+              return timeB - timeA;
+            });
+            setPublicBhajans(list);
+            console.log(`✅ Retry: Loaded ${list.length} public bhajans`);
+          } catch (retryErr) {
+            console.error('Retry also failed:', retryErr);
+          }
+        }, 2000);
+      }
+    };
+    
+    loadPublicBhajans();
+    
+    // Also set up real-time listener for changes (but don't rely on it)
+    let unsubscribe = () => {};
+    try {
+      unsubscribe = publicRef
+        .onSnapshot(
+          (snapshot) => {
+            const list = [];
+            snapshot.forEach((doc) => {
+              list.push({ id: doc.id, ...doc.data() });
+            });
+            list.sort((a, b) => {
+              const timeA = a.createdAt?.seconds || 0;
+              const timeB = b.createdAt?.seconds || 0;
+              return timeB - timeA;
+            });
+            setPublicBhajans(list);
+            console.log(`✅ Real-time update: ${list.length} public bhajans`);
+          },
+          (error) => {
+            console.log('Real-time listener error (using cached data):', error.message);
+          }
+        );
+    } catch (listenerErr) {
+      console.log('Could not set up real-time listener:', listenerErr.message);
+    }
 
     return () => unsubscribe();
   }, [user]);
