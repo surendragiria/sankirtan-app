@@ -1078,65 +1078,73 @@ const App = () => {
   }, [user, userProfile]);
 
   // ==============================================
-  // LOAD PUBLIC LIBRARY BHAJANS (LAZY - only when needed)
+  // LOAD PUBLIC LIBRARY BHAJANS
   // ==============================================
-  const [publicBhajansLoaded, setPublicBhajansLoaded] = useState(false);
-  const [publicBhajansLoadStarted, setPublicBhajansLoadStarted] = useState(false);
-  
-  const loadPublicBhajansIfNeeded = useCallback(async () => {
-    if (!user || publicBhajansLoadStarted) return;
-    
-    setPublicBhajansLoadStarted(true);
+  useEffect(() => {
+    if (!user) {
+      setPublicBhajans([]);
+      return;
+    }
+
     setPublicLoading(true);
     const db = window.firebase.firestore();
     const publicRef = db.collection('publicBhajans');
     
-    // STEP 1: Try to load from cache first (instant)
-    try {
-      const cachedSnapshot = await publicRef.get({ source: 'cache' });
-      if (!cachedSnapshot.empty) {
-        const cachedList = [];
-        cachedSnapshot.forEach((doc) => {
-          cachedList.push({ id: doc.id, ...doc.data() });
+    // Simple, reliable fetch - default source (network first, cache fallback)
+    const loadPublicBhajans = async () => {
+      try {
+        const snapshot = await publicRef.get();
+        const list = [];
+        snapshot.forEach((doc) => {
+          list.push({ id: doc.id, ...doc.data() });
         });
-        cachedList.sort((a, b) => {
+        
+        list.sort((a, b) => {
           const timeA = a.createdAt?.seconds || 0;
           const timeB = b.createdAt?.seconds || 0;
           return timeB - timeA;
         });
-        setPublicBhajans(cachedList);
+        
+        setPublicBhajans(list);
         setPublicLoading(false);
-        setPublicBhajansLoaded(true);
-        console.log(`⚡ Loaded ${cachedList.length} public bhajans from cache (instant)`);
+        console.log(`✅ Loaded ${list.length} public bhajans`);
+      } catch (error) {
+        console.error('Error loading public bhajans:', error);
+        setPublicLoading(false);
+        
+        // Retry with exponential backoff
+        [2000, 5000, 10000].forEach((delay, idx) => {
+          setTimeout(async () => {
+            try {
+              const snapshot = await publicRef.get();
+              const list = [];
+              snapshot.forEach((doc) => {
+                list.push({ id: doc.id, ...doc.data() });
+              });
+              list.sort((a, b) => {
+                const timeA = a.createdAt?.seconds || 0;
+                const timeB = b.createdAt?.seconds || 0;
+                return timeB - timeA;
+              });
+              if (list.length > 0) {
+                setPublicBhajans(list);
+                console.log(`✅ Retry ${idx + 1}: Loaded ${list.length} public bhajans`);
+              }
+            } catch (retryErr) {
+              console.error(`Retry ${idx + 1} failed:`, retryErr);
+            }
+          }, delay);
+        });
       }
-    } catch (cacheErr) {
-      console.log('No cache available, fetching from network...');
-    }
+    };
     
-    // STEP 2: Fetch fresh data from server (in background)
+    loadPublicBhajans();
+    
+    // Also set up real-time listener (bonus for updates)
+    let unsubscribe = () => {};
     try {
-      const snapshot = await publicRef.get({ source: 'server' });
-      const list = [];
-      snapshot.forEach((doc) => {
-        list.push({ id: doc.id, ...doc.data() });
-      });
-      list.sort((a, b) => {
-        const timeA = a.createdAt?.seconds || 0;
-        const timeB = b.createdAt?.seconds || 0;
-        return timeB - timeA;
-      });
-      setPublicBhajans(list);
-      setPublicLoading(false);
-      setPublicBhajansLoaded(true);
-      console.log(`✅ Loaded ${list.length} public bhajans from server (fresh)`);
-    } catch (error) {
-      console.error('Error loading public bhajans:', error);
-      setPublicLoading(false);
-      
-      // Retry once after 2 seconds
-      setTimeout(async () => {
-        try {
-          const snapshot = await publicRef.get();
+      unsubscribe = publicRef.onSnapshot(
+        (snapshot) => {
           const list = [];
           snapshot.forEach((doc) => {
             list.push({ id: doc.id, ...doc.data() });
@@ -1147,36 +1155,17 @@ const App = () => {
             return timeB - timeA;
           });
           setPublicBhajans(list);
-          setPublicBhajansLoaded(true);
-          console.log(`✅ Retry: Loaded ${list.length} public bhajans`);
-        } catch (retryErr) {
-          console.error('Retry also failed:', retryErr);
+          setPublicLoading(false);
+        },
+        (error) => {
+          console.log('Real-time listener error (using cached data):', error.message);
         }
-      }, 2000);
+      );
+    } catch (listenerErr) {
+      console.log('Could not set up real-time listener:', listenerErr.message);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, publicBhajansLoadStarted]);
-  
-  // Prefetch public bhajans count for dashboard (lightweight query - just count)
-  useEffect(() => {
-    if (!user) {
-      setPublicBhajans([]);
-      setPublicBhajansLoaded(false);
-      setPublicBhajansLoadStarted(false);
-      return;
-    }
-    
-    // Warm up cache in background after 3 seconds (when user is idle)
-    // This makes Public Library instant when they eventually click it
-    const warmupTimer = setTimeout(() => {
-      if (!publicBhajansLoadStarted) {
-        console.log('🔥 Warming up public bhajans cache in background...');
-        loadPublicBhajansIfNeeded();
-      }
-    }, 3000);
-    
-    return () => clearTimeout(warmupTimer);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+
+    return () => unsubscribe();
   }, [user]);
 
   // Track which public bhajans user has already saved
@@ -1750,8 +1739,6 @@ const App = () => {
     setPublicSearchQuery('');
     setPublicFilterDeity('');
     setPublicFilterCategory('');
-    // Trigger load if not already loaded
-    loadPublicBhajansIfNeeded();
   };
 
   const openPublicBhajanDetail = (bhajan) => {
@@ -1861,8 +1848,6 @@ const App = () => {
     setImportSuccess('');
     // Auto-load feedback list
     loadFeedbackList();
-    // Trigger public bhajans load for stats
-    loadPublicBhajansIfNeeded();
     // Load config lists (deities/categories/keywords)
     loadConfigLists();
   };
@@ -3100,9 +3085,7 @@ const App = () => {
                     Browse curated bhajans & save your favorites
                   </p>
                   <span className="inline-block bg-green-100 text-green-700 text-xs font-semibold px-3 py-1 rounded-full">
-                    {publicBhajansLoaded 
-                      ? `✨ ${publicBhajans.length} bhajans available` 
-                      : '✨ 175+ bhajans available'}
+                    ✨ {publicBhajans.length > 0 ? `${publicBhajans.length} bhajans available` : 'Loading bhajans...'}
                   </span>
                 </button>
 
