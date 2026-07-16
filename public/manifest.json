@@ -1,7 +1,7 @@
 {
-  "short_name": "Sankirtan",
+  "short_name": "संकीर्तन",
   "name": "Sankirtan - Bhajan Se Bhagwan Tak",
-  "description": "Devotional bhajan platform for singers, artists & devotees. 175+ curated bhajans, Live Performance Mode, Hindi typing & more.",
+  "description": "Devotional bhajan platform for singers, artists & devotees. 175+ curated bhajans, Live Performance Mode, multi-language support & more.",
   "icons": [
     {
       "src": "favicon.ico",
@@ -32,7 +32,7 @@
   "theme_color": "#f97316",
   "background_color": "#fef3c7",
   "categories": ["music", "lifestyle", "spiritual"],
-  "lang": "en-IN",
+  "lang": "hi-IN",
   "scope": "/",
   "shortcuts": [
     {
