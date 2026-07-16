@@ -40,6 +40,24 @@ const DEFAULT_KEYWORDS = [
   'gujarati', 'filmy', 'folk', 'traditional', 'peaceful'
 ];
 
+// Language options for bhajans (with Google Input Tools language codes)
+const LANGUAGE_OPTIONS = [
+  { value: 'Hindi', code: 'hi', label: 'हिंदी (Hindi)' },
+  { value: 'English', code: 'en', label: 'English' },
+  { value: 'Marwari', code: 'hi', label: 'मारवाड़ी (Marwari)' },
+  { value: 'Gujarati', code: 'gu', label: 'ગુજરાતી (Gujarati)' },
+  { value: 'Marathi', code: 'mr', label: 'मराठी (Marathi)' },
+  { value: 'Punjabi', code: 'pa', label: 'ਪੰਜਾਬੀ (Punjabi)' },
+  { value: 'Bengali', code: 'bn', label: 'বাংলা (Bengali)' },
+  { value: 'Tamil', code: 'ta', label: 'தமிழ் (Tamil)' },
+  { value: 'Telugu', code: 'te', label: 'తెలుగు (Telugu)' },
+  { value: 'Kannada', code: 'kn', label: 'ಕನ್ನಡ (Kannada)' },
+  { value: 'Malayalam', code: 'ml', label: 'മലയാളം (Malayalam)' },
+  { value: 'Sanskrit', code: 'sa', label: 'संस्कृतम् (Sanskrit)' },
+  { value: 'Odia', code: 'or', label: 'ଓଡ଼ିଆ (Odia)' },
+  { value: 'Other', code: 'en', label: 'Other' }
+];
+
 // Admin user ID (only this user can manage public library)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
 
@@ -153,6 +171,15 @@ const App = () => {
   const [deferredInstallPrompt, setDeferredInstallPrompt] = useState(null);
   const [showInstallPrompt, setShowInstallPrompt] = useState(false);
   const [showIOSInstructions, setShowIOSInstructions] = useState(false);
+  
+  // Feedback state
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [feedbackText, setFeedbackText] = useState('');
+  const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
+  const [feedbackSuccess, setFeedbackSuccess] = useState(false);
+  const [feedbackError, setFeedbackError] = useState('');
+  const [feedbackList, setFeedbackList] = useState([]);
+  const [feedbackListLoading, setFeedbackListLoading] = useState(false);
   const [showPhoneLogin, setShowPhoneLogin] = useState(false);
   const [phoneNumber, setPhoneNumber] = useState('');
   const [otpCode, setOtpCode] = useState('');
@@ -214,6 +241,7 @@ const App = () => {
   const [publicLoading, setPublicLoading] = useState(false);
   const [publicSearchQuery, setPublicSearchQuery] = useState('');
   const [publicFilterKeyword, setPublicFilterKeyword] = useState('');
+  const [publicFilterLanguage, setPublicFilterLanguage] = useState('');
   const [libraryFilterKeyword, setLibraryFilterKeyword] = useState('');
   const [publicFilterDeity, setPublicFilterDeity] = useState('');
   const [publicFilterCategory, setPublicFilterCategory] = useState('');
@@ -237,6 +265,7 @@ const App = () => {
     lyrics: '',
     deity: 'Babosa',
     category: 'Bhajan',
+    language: 'Hindi',
     dhun: '',
     scale: '',
     keywords: [],
@@ -269,6 +298,7 @@ const App = () => {
     lyrics: '',
     deity: 'Babosa',
     category: 'Bhajan',
+    language: 'Hindi',
     dhun: '',
     scale: '',
     keywords: [],
@@ -430,6 +460,91 @@ const App = () => {
     localStorage.setItem('sankirtan-install-dismissed', 'true');
     setShowInstallPrompt(false);
     setShowIOSInstructions(false);
+  };
+
+  // ==============================================
+  // FEEDBACK FUNCTIONS
+  // ==============================================
+  const submitFeedback = async () => {
+    if (!feedbackText.trim()) {
+      setFeedbackError('Please write your feedback');
+      return;
+    }
+    
+    if (feedbackText.trim().length < 5) {
+      setFeedbackError('Feedback too short. Please write at least 5 characters.');
+      return;
+    }
+    
+    try {
+      setFeedbackSubmitting(true);
+      setFeedbackError('');
+      const db = window.firebase.firestore();
+      
+      await db.collection('feedback').add({
+        text: feedbackText.trim(),
+        userId: user.uid,
+        userEmail: user.email || '',
+        userName: userProfile?.displayName || 'Anonymous',
+        userAgent: navigator.userAgent,
+        createdAt: window.firebase.firestore.FieldValue.serverTimestamp(),
+        status: 'new'
+      });
+      
+      console.log('✅ Feedback submitted');
+      setFeedbackSuccess(true);
+      setFeedbackText('');
+      
+      // Auto-close after 2 seconds
+      setTimeout(() => {
+        setShowFeedbackModal(false);
+        setFeedbackSuccess(false);
+      }, 2000);
+    } catch (error) {
+      console.error('Feedback submission error:', error);
+      setFeedbackError('Could not submit: ' + error.message);
+    } finally {
+      setFeedbackSubmitting(false);
+    }
+  };
+  
+  const loadFeedbackList = async () => {
+    if (!isAdmin) return;
+    try {
+      setFeedbackListLoading(true);
+      const db = window.firebase.firestore();
+      const snapshot = await db.collection('feedback').get();
+      const list = [];
+      snapshot.forEach((doc) => {
+        list.push({ id: doc.id, ...doc.data() });
+      });
+      // Sort newest first
+      list.sort((a, b) => {
+        const timeA = a.createdAt?.seconds || 0;
+        const timeB = b.createdAt?.seconds || 0;
+        return timeB - timeA;
+      });
+      setFeedbackList(list);
+      console.log(`✅ Loaded ${list.length} feedback items`);
+    } catch (error) {
+      console.error('Error loading feedback:', error);
+    } finally {
+      setFeedbackListLoading(false);
+    }
+  };
+  
+  const deleteFeedback = async (feedbackId) => {
+    if (!isAdmin) return;
+    if (!window.confirm('Delete this feedback?')) return;
+    try {
+      const db = window.firebase.firestore();
+      await db.collection('feedback').doc(feedbackId).delete();
+      setFeedbackList(prev => prev.filter(f => f.id !== feedbackId));
+      console.log('✅ Feedback deleted');
+    } catch (error) {
+      console.error('Error deleting feedback:', error);
+      alert('Could not delete: ' + error.message);
+    }
   };
 
   // ==============================================
@@ -985,6 +1100,7 @@ const App = () => {
       lyrics: '',
       deity: 'Babosa',
       category: 'Bhajan',
+      language: 'Hindi',
       dhun: '',
       scale: '',
       keywords: [],
@@ -1001,6 +1117,7 @@ const App = () => {
       lyrics: bhajan.lyrics || '',
       deity: bhajan.deity || 'Babosa',
       category: bhajan.category || 'Bhajan',
+      language: bhajan.language || 'Hindi',
       dhun: bhajan.dhun || '',
       scale: bhajan.scale || '',
       keywords: bhajan.keywords || [],
@@ -1031,6 +1148,7 @@ const App = () => {
         lyrics: bhajanForm.lyrics.trim(),
         deity: bhajanForm.deity,
         category: bhajanForm.category,
+        language: bhajanForm.language || 'Hindi',
         dhun: bhajanForm.dhun.trim(),
         scale: bhajanForm.scale.trim(),
         keywords: bhajanForm.keywords,
@@ -1150,18 +1268,33 @@ const App = () => {
     suggestionsAbortRef.current = controller;
     
     try {
-      const url = `https://inputtools.google.com/request?text=${encodeURIComponent(word)}&itc=hi-t-i0-und&num=5&cp=0&cs=1&ie=utf-8&oe=utf-8`;
+      // Get language code from current form (default to Hindi)
+      const currentLang = bhajanForm.language || publicBhajanForm.language || 'Hindi';
+      const langObj = LANGUAGE_OPTIONS.find(l => l.value === currentLang);
+      const langCode = langObj?.code || 'hi';
+      
+      // Skip transliteration for English
+      if (langCode === 'en') {
+        setTransliterationSuggestions([]);
+        return;
+      }
+      
+      const url = `https://inputtools.google.com/request?text=${encodeURIComponent(word)}&itc=${langCode}-t-i0-und&num=5&cp=0&cs=1&ie=utf-8&oe=utf-8`;
       const response = await fetch(url, { signal: controller.signal });
       const data = await response.json();
       
       if (data && data[0] === 'SUCCESS' && data[1] && data[1][0] && data[1][0][1]) {
         const suggestions = data[1][0][1].slice(0, 5);
         setTransliterationSuggestions(suggestions);
-        setSuggestionsCache(prev => ({ ...prev, [lowerWord]: suggestions }));
+        setSuggestionsCache(prev => ({ ...prev, [`${langCode}:${lowerWord}`]: suggestions }));
       } else {
-        // Fallback to local map
-        const fallback = HINDI_FALLBACK_MAP[lowerWord];
-        setTransliterationSuggestions(fallback ? [fallback] : []);
+        // Fallback to local map (only for Hindi)
+        if (langCode === 'hi') {
+          const fallback = HINDI_FALLBACK_MAP[lowerWord];
+          setTransliterationSuggestions(fallback ? [fallback] : []);
+        } else {
+          setTransliterationSuggestions([]);
+        }
       }
     } catch (err) {
       if (err.name !== 'AbortError') {
@@ -1221,8 +1354,16 @@ const App = () => {
   };
   
   // Track current word for suggestions
+  // ALSO handles auto-conversion on Android (which doesn't fire keydown for space)
   const handleHindiInput = (e, fieldName) => {
     const value = e.target.value;
+    const oldValue = bhajanForm[fieldName] || '';
+    
+    // Detect if a space was JUST typed (Android compatibility)
+    const spaceJustTyped = value.length > oldValue.length && 
+                           (value.endsWith(' ') || value.endsWith('\n') || value.endsWith('.')) &&
+                           !oldValue.endsWith(value.slice(-1));
+    
     setBhajanForm(prev => ({ ...prev, [fieldName]: value }));
     
     if (!hindiTypingEnabled) {
@@ -1231,6 +1372,59 @@ const App = () => {
     }
     
     const cursorPos = e.target.selectionStart;
+    
+    // If space was just typed, try to auto-convert the previous word
+    if (spaceJustTyped) {
+      const separator = value.slice(-1); // space, newline, or period
+      const beforeSeparator = value.slice(0, -1);
+      
+      // Find the last word before separator
+      let wordStart = beforeSeparator.length;
+      while (wordStart > 0 && beforeSeparator[wordStart - 1] !== ' ' && beforeSeparator[wordStart - 1] !== '\n') {
+        wordStart--;
+      }
+      const lastWord = beforeSeparator.substring(wordStart);
+      
+      // Only convert if it's English letters
+      if (lastWord && /^[a-zA-Z]+$/.test(lastWord)) {
+        const lowerWord = lastWord.toLowerCase();
+        const currentLang = bhajanForm.language || 'Hindi';
+        const langObj = LANGUAGE_OPTIONS.find(l => l.value === currentLang);
+        const langCode = langObj?.code || 'hi';
+        
+        // Skip conversion for English
+        if (langCode !== 'en') {
+          const cachedSuggestions = suggestionsCache[`${langCode}:${lowerWord}`] || 
+            suggestionsCache[lowerWord] ||
+            (langCode === 'hi' && HINDI_FALLBACK_MAP[lowerWord] ? [HINDI_FALLBACK_MAP[lowerWord]] : null);
+          
+          if (cachedSuggestions && cachedSuggestions.length > 0) {
+            // Auto-replace with top suggestion
+            const replacement = cachedSuggestions[0];
+            const newValue = beforeSeparator.substring(0, wordStart) + replacement + separator;
+            
+            setBhajanForm(prev => ({ ...prev, [fieldName]: newValue }));
+            setShowSuggestions(false);
+            setCurrentWord('');
+            
+            // Restore cursor to end
+            setTimeout(() => {
+              const target = e.target;
+              const newCursor = wordStart + replacement.length + 1;
+              target.selectionStart = newCursor;
+              target.selectionEnd = newCursor;
+            }, 0);
+            return;
+          }
+        }
+      }
+      
+      setShowSuggestions(false);
+      setCurrentWord('');
+      return;
+    }
+    
+    // Normal typing - fetch suggestions for current word
     let wordStart = cursorPos;
     while (wordStart > 0 && value[wordStart - 1] !== ' ' && value[wordStart - 1] !== '\n') {
       wordStart--;
@@ -1258,6 +1452,7 @@ const App = () => {
   };
   
   // Apply a suggestion (tap on chip)
+  // Uses onMouseDown/onTouchStart with preventDefault to avoid losing focus
   const applySuggestion = (suggestion, fieldName) => {
     const fieldElement = document.getElementById(`hindi-input-${fieldName}`);
     if (!fieldElement) return;
@@ -1270,18 +1465,19 @@ const App = () => {
       wordStart--;
     }
     
+    // Add space after suggestion for natural flow
     const newValue = value.substring(0, wordStart) + suggestion + ' ' + value.substring(cursorPos);
     setBhajanForm(prev => ({ ...prev, [fieldName]: newValue }));
     
     setShowSuggestions(false);
     setCurrentWord('');
     
-    setTimeout(() => {
+    // Restore focus and cursor position AFTER React re-render
+    requestAnimationFrame(() => {
       fieldElement.focus();
       const newCursor = wordStart + suggestion.length + 1;
-      fieldElement.selectionStart = newCursor;
-      fieldElement.selectionEnd = newCursor;
-    }, 0);
+      fieldElement.setSelectionRange(newCursor, newCursor);
+    });
   };
 
   // ==============================================
@@ -1382,6 +1578,7 @@ const App = () => {
     if (publicFilterDeity && bhajan.deity !== publicFilterDeity) return false;
     if (publicFilterCategory && bhajan.category !== publicFilterCategory) return false;
     if (publicFilterKeyword && (!bhajan.keywords || !bhajan.keywords.includes(publicFilterKeyword))) return false;
+    if (publicFilterLanguage && bhajan.language !== publicFilterLanguage) return false;
     return true;
   });
 
@@ -1398,6 +1595,8 @@ const App = () => {
     setImportPreview(null);
     setImportError('');
     setImportSuccess('');
+    // Auto-load feedback list
+    loadFeedbackList();
   };
 
   // Parse JSON and show preview
@@ -1631,6 +1830,7 @@ const App = () => {
       lyrics: '',
       deity: 'Babosa',
       category: 'Bhajan',
+      language: 'Hindi',
       dhun: '',
       scale: '',
       keywords: [],
@@ -1648,6 +1848,7 @@ const App = () => {
       lyrics: bhajan.lyrics || '',
       deity: bhajan.deity || 'Babosa',
       category: bhajan.category || 'Bhajan',
+      language: bhajan.language || 'Hindi',
       dhun: bhajan.dhun || '',
       scale: bhajan.scale || '',
       keywords: bhajan.keywords || [],
@@ -1679,6 +1880,7 @@ const App = () => {
         lyrics: publicBhajanForm.lyrics.trim(),
         deity: publicBhajanForm.deity,
         category: publicBhajanForm.category,
+        language: publicBhajanForm.language || 'Hindi',
         dhun: publicBhajanForm.dhun.trim(),
         scale: publicBhajanForm.scale.trim(),
         keywords: publicBhajanForm.keywords,
@@ -2327,6 +2529,117 @@ const App = () => {
         )}
         
         {/* ==============================================
+            FLOATING FEEDBACK BUTTON (bottom right)
+            ============================================== */}
+        {!showFeedbackModal && !showOnboarding && !showInstallPrompt && !showIOSInstructions && (
+          <button
+            onClick={() => {
+              setShowFeedbackModal(true);
+              setFeedbackText('');
+              setFeedbackError('');
+              setFeedbackSuccess(false);
+            }}
+            className="fixed bottom-6 right-6 z-40 bg-gradient-to-br from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white rounded-full p-4 shadow-2xl transition-all hover:scale-110 group"
+            title="Send Feedback"
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" 
+                d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+            </svg>
+            {/* Tooltip on hover */}
+            <span className="absolute bottom-full right-0 mb-2 px-3 py-1 bg-gray-900 text-white text-xs rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+              💬 Send feedback
+            </span>
+          </button>
+        )}
+        
+        {/* ==============================================
+            FEEDBACK MODAL
+            ============================================== */}
+        {showFeedbackModal && (
+          <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden">
+              {/* Header */}
+              <div className="bg-gradient-to-br from-orange-500 to-amber-500 p-6 text-white text-center relative">
+                <button
+                  onClick={() => setShowFeedbackModal(false)}
+                  className="absolute top-3 right-3 text-white/80 hover:text-white text-2xl leading-none w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center"
+                >
+                  ×
+                </button>
+                <div className="text-5xl mb-2">💬</div>
+                <h3 className="text-2xl font-bold">Share Your Feedback</h3>
+                <p className="text-sm text-orange-100 mt-1">
+                  Your thoughts help us improve Sankirtan
+                </p>
+              </div>
+              
+              {/* Content */}
+              <div className="p-6">
+                {feedbackSuccess ? (
+                  // Success message
+                  <div className="text-center py-6">
+                    <div className="text-6xl mb-3">🙏</div>
+                    <h4 className="text-xl font-bold text-amber-900 mb-2">Thank You!</h4>
+                    <p className="text-gray-600">
+                      Your feedback has been received.
+                      <br />
+                      बाबोसा जी की कृपा से हम और बेहतर बनाएंगे! 🕉️
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <label className="block text-sm font-semibold text-amber-900 mb-2">
+                      Tell us what you think...
+                    </label>
+                    <textarea
+                      value={feedbackText}
+                      onChange={(e) => {
+                        setFeedbackText(e.target.value);
+                        setFeedbackError('');
+                      }}
+                      rows={6}
+                      maxLength={1000}
+                      className="w-full px-4 py-3 border-2 border-orange-200 rounded-xl focus:ring-4 focus:ring-orange-200 focus:border-orange-400 outline-none resize-none text-base"
+                      placeholder="What do you love? What could be better? Any bugs? Ideas for new features? We're listening... 🙏"
+                    />
+                    <div className="text-right text-xs text-gray-500 mt-1">
+                      {feedbackText.length}/1000
+                    </div>
+                    
+                    {feedbackError && (
+                      <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                        ⚠️ {feedbackError}
+                      </div>
+                    )}
+                    
+                    <div className="mt-4 p-3 bg-orange-50 rounded-lg text-xs text-amber-800">
+                      💡 Your name & email will be included so we can follow up if needed.
+                    </div>
+                    
+                    <div className="flex gap-3 mt-5">
+                      <button
+                        onClick={() => setShowFeedbackModal(false)}
+                        className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold py-3 rounded-xl transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={submitFeedback}
+                        disabled={feedbackSubmitting || !feedbackText.trim()}
+                        className="flex-1 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-semibold py-3 rounded-xl shadow-lg disabled:opacity-50 transition-all"
+                      >
+                        {feedbackSubmitting ? 'Sending...' : '📤 Send Feedback'}
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {/* ==============================================
             PWA INSTALL PROMPT (Android/Desktop)
             ============================================== */}
         {showInstallPrompt && deferredInstallPrompt && (
@@ -2561,17 +2874,6 @@ const App = () => {
                     ✨ Available Now! ({programs.length} programs)
                   </span>
                 </button>
-
-                <div className="bg-white rounded-2xl shadow-md p-6 border-2 border-orange-100 opacity-60">
-                  <div className="text-4xl mb-3">🎶</div>
-                  <h3 className="text-lg font-bold text-amber-900 mb-2">Parody Medleys</h3>
-                  <p className="text-sm text-gray-600 mb-3">
-                    Combine mukhdas for energetic performances
-                  </p>
-                  <span className="inline-block bg-orange-100 text-orange-700 text-xs font-semibold px-3 py-1 rounded-full">
-                    Coming Soon 🚀
-                  </span>
-                </div>
               </div>
 
               {/* ADMIN PANEL CARD (Only visible to admin) */}
@@ -2840,6 +3142,11 @@ const App = () => {
                   <span className="bg-amber-100 text-amber-800 px-3 py-1 rounded-full text-sm font-semibold">
                     📖 {selectedBhajan.category}
                   </span>
+                  {selectedBhajan.language && (
+                    <span className="bg-indigo-100 text-indigo-800 px-3 py-1 rounded-full text-sm font-semibold">
+                      🗣️ {selectedBhajan.language}
+                    </span>
+                  )}
                   {selectedBhajan.scale ? (
                     <span className="bg-purple-100 text-purple-800 px-3 py-1 rounded-full text-sm font-semibold">
                       🎵 Scale: {selectedBhajan.scale}
@@ -2927,13 +3234,13 @@ const App = () => {
                       value={bhajanForm.title}
                       onChange={(e) => handleHindiInput(e, 'title')}
                       onKeyDown={(e) => handleHindiKeyDown(e, 'title')}
-                      onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+                      onBlur={() => setTimeout(() => setShowSuggestions(false), 300)}
                       onFocus={() => setActiveTypingField('title')}
                       className="w-full px-4 py-3 border-2 border-orange-200 rounded-xl focus:ring-4 focus:ring-orange-200 focus:border-orange-400 outline-none text-lg"
                       placeholder={hindiTypingEnabled ? "Type: om jai jagdish hare" : "e.g., ॐ जय जगदीश हरे"}
                     />
                     {hindiTypingEnabled && showSuggestions && activeTypingField === 'title' && transliterationSuggestions.length > 0 && (
-                      <div className="mt-1 bg-white border-2 border-orange-300 rounded-lg shadow-lg p-2 flex flex-wrap gap-2 items-center">
+                      <div className="absolute bottom-full left-0 right-0 mb-2 bg-white border-2 border-orange-300 rounded-lg shadow-2xl p-2 flex flex-wrap gap-2 items-center z-30">
                         <span className="text-xs text-gray-500 mr-1">
                           <strong>"{currentWord}"</strong> →
                         </span>
@@ -2996,6 +3303,25 @@ const App = () => {
                   </div>
                 </div>
 
+                {/* Language dropdown */}
+                <div className="mb-4">
+                  <label className="block text-sm font-semibold text-amber-900 mb-1">
+                    Language / भाषा
+                  </label>
+                  <select
+                    value={bhajanForm.language}
+                    onChange={(e) => setBhajanForm({...bhajanForm, language: e.target.value})}
+                    className="w-full px-4 py-3 border-2 border-orange-200 rounded-xl focus:ring-4 focus:ring-orange-200 focus:border-orange-400 outline-none bg-white"
+                  >
+                    {LANGUAGE_OPTIONS.map(l => (
+                      <option key={l.value} value={l.value}>{l.label}</option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    💡 Typing will convert to selected script automatically
+                  </p>
+                </div>
+
                 {/* Dhun / Tarz */}
                 <div className="mb-4">
                   <label className="block text-sm font-semibold text-amber-900 mb-1">
@@ -3008,13 +3334,13 @@ const App = () => {
                       value={bhajanForm.dhun}
                       onChange={(e) => handleHindiInput(e, 'dhun')}
                       onKeyDown={(e) => handleHindiKeyDown(e, 'dhun')}
-                      onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+                      onBlur={() => setTimeout(() => setShowSuggestions(false), 300)}
                       onFocus={() => setActiveTypingField('dhun')}
                       className="w-full px-4 py-3 border-2 border-orange-200 rounded-xl focus:ring-4 focus:ring-orange-200 focus:border-orange-400 outline-none"
                       placeholder={hindiTypingEnabled ? "Type in English, press space" : "e.g., तर्ज़: तुझे देखा तो..."}
                     />
                     {hindiTypingEnabled && showSuggestions && activeTypingField === 'dhun' && transliterationSuggestions.length > 0 && (
-                      <div className="mt-1 bg-white border-2 border-orange-300 rounded-lg shadow-lg p-2 flex flex-wrap gap-2 items-center">
+                      <div className="absolute bottom-full left-0 right-0 mb-2 bg-white border-2 border-orange-300 rounded-lg shadow-2xl p-2 flex flex-wrap gap-2 items-center z-30">
                         <span className="text-xs text-gray-500 mr-1">
                           <strong>"{currentWord}"</strong> →
                         </span>
@@ -3095,7 +3421,7 @@ const App = () => {
                       value={bhajanForm.lyrics}
                       onChange={(e) => handleHindiInput(e, 'lyrics')}
                       onKeyDown={(e) => handleHindiKeyDown(e, 'lyrics')}
-                      onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+                      onBlur={() => setTimeout(() => setShowSuggestions(false), 300)}
                       onFocus={() => setActiveTypingField('lyrics')}
                       rows={10}
                       className="w-full px-4 py-3 border-2 border-orange-200 rounded-xl focus:ring-4 focus:ring-orange-200 focus:border-orange-400 outline-none font-mono text-base"
@@ -3103,9 +3429,9 @@ const App = () => {
                       style={{ lineHeight: '1.8' }}
                     />
                     
-                    {/* Hindi Suggestions Popup */}
+                    {/* Hindi Suggestions Popup - Sticky floating at top of viewport to avoid keyboard */}
                     {hindiTypingEnabled && showSuggestions && activeTypingField === 'lyrics' && transliterationSuggestions.length > 0 && (
-                      <div className="mt-1 bg-white border-2 border-orange-300 rounded-lg shadow-lg p-2 flex flex-wrap gap-2 items-center">
+                      <div className="fixed top-16 left-2 right-2 md:left-1/4 md:right-1/4 z-50 bg-white border-2 border-orange-400 rounded-xl shadow-2xl p-2 flex flex-wrap gap-2 items-center">
                         <span className="text-xs text-gray-500 mr-1">
                           <strong>"{currentWord}"</strong> →
                         </span>
@@ -3131,7 +3457,6 @@ const App = () => {
                             {idx === 0 && '⭐ '}{suggestion}
                           </button>
                         ))}
-                        <span className="text-xs text-gray-400 ml-auto">Tap or press space</span>
                       </div>
                     )}
                   </div>
@@ -3734,13 +4059,25 @@ const App = () => {
                   ))}
                 </select>
 
-                {(publicSearchQuery || publicFilterDeity || publicFilterCategory || publicFilterKeyword) && (
+                <select
+                  value={publicFilterLanguage}
+                  onChange={(e) => setPublicFilterLanguage(e.target.value)}
+                  className="px-3 py-2 border-2 border-orange-200 rounded-lg focus:ring-2 focus:ring-orange-200 focus:border-orange-400 outline-none text-sm bg-white"
+                >
+                  <option value="">All Languages</option>
+                  {LANGUAGE_OPTIONS.map(l => (
+                    <option key={l.value} value={l.value}>{l.label}</option>
+                  ))}
+                </select>
+
+                {(publicSearchQuery || publicFilterDeity || publicFilterCategory || publicFilterKeyword || publicFilterLanguage) && (
                   <button
                     onClick={() => {
                       setPublicSearchQuery('');
                       setPublicFilterDeity('');
                       setPublicFilterCategory('');
                       setPublicFilterKeyword('');
+                      setPublicFilterLanguage('');
                     }}
                     className="px-3 py-2 bg-red-50 border-2 border-red-200 text-red-700 rounded-lg text-sm hover:bg-red-100"
                   >
@@ -3866,14 +4203,14 @@ const App = () => {
                               disabled={savingToLibrary}
                               className="flex-1 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-semibold py-2 rounded-lg text-sm disabled:opacity-50"
                             >
-                              💾 Save
+                              ➕ Add to Personal
                             </button>
                           )}
                         </div>
 
                         {(bhajan.saveCount > 0) && (
                           <p className="text-xs text-gray-500 mt-2 text-center">
-                            💾 Saved by {bhajan.saveCount} {bhajan.saveCount === 1 ? 'user' : 'users'}
+                            ✨ Added by {bhajan.saveCount} {bhajan.saveCount === 1 ? 'person' : 'people'}
                           </p>
                         )}
                       </div>
@@ -3934,6 +4271,11 @@ const App = () => {
                   <span className="bg-amber-100 text-amber-800 px-3 py-1 rounded-full text-sm font-semibold">
                     📖 {selectedPublicBhajan.category}
                   </span>
+                  {selectedPublicBhajan.language && (
+                    <span className="bg-indigo-100 text-indigo-800 px-3 py-1 rounded-full text-sm font-semibold">
+                      🗣️ {selectedPublicBhajan.language}
+                    </span>
+                  )}
                   <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-semibold">
                     🌐 Public
                   </span>
@@ -3951,7 +4293,7 @@ const App = () => {
                     disabled={savingToLibrary}
                     className="w-full mb-4 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-bold py-3 rounded-xl shadow-lg disabled:opacity-50"
                   >
-                    {savingToLibrary ? 'Saving...' : '💾 Save to My Library'}
+                    {savingToLibrary ? 'Adding...' : '➕ Add to Personal Library'}
                   </button>
                 )}
 
@@ -4047,6 +4389,84 @@ const App = () => {
                 >
                   + Add New Public Bhajan
                 </button>
+              </div>
+              
+              {/* USER FEEDBACK CARD */}
+              <div className="bg-white rounded-2xl shadow-lg p-6 mb-6 border-2 border-blue-200">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-lg font-bold text-amber-900">💬 User Feedback</h3>
+                  <button
+                    onClick={loadFeedbackList}
+                    disabled={feedbackListLoading}
+                    className="bg-blue-100 hover:bg-blue-200 text-blue-700 font-semibold px-3 py-1.5 rounded-lg text-sm disabled:opacity-50"
+                  >
+                    {feedbackListLoading ? '⏳ Loading...' : '🔄 Refresh'}
+                  </button>
+                </div>
+                <p className="text-sm text-gray-600 mb-4">
+                  View feedback from your users to improve the app.
+                </p>
+                
+                {feedbackList.length === 0 && !feedbackListLoading && (
+                  <div className="text-center py-6 text-gray-500 text-sm">
+                    <div className="text-3xl mb-2">📭</div>
+                    <p>No feedback yet. Click "Refresh" to check.</p>
+                  </div>
+                )}
+                
+                {feedbackList.length > 0 && (
+                  <>
+                    <div className="text-sm text-blue-700 font-semibold mb-3">
+                      📊 Total: {feedbackList.length} feedback item{feedbackList.length !== 1 ? 's' : ''}
+                    </div>
+                    <div className="space-y-3 max-h-96 overflow-y-auto">
+                      {feedbackList.map((fb) => (
+                        <div key={fb.id} className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                          <div className="flex items-start justify-between mb-2">
+                            <div className="flex-1">
+                              <p className="font-semibold text-amber-900 text-sm">
+                                {fb.userName || 'Anonymous'}
+                              </p>
+                              {fb.userEmail && (
+                                <p className="text-xs text-gray-600">{fb.userEmail}</p>
+                              )}
+                              <p className="text-xs text-gray-500 mt-0.5">
+                                {fb.createdAt?.seconds 
+                                  ? new Date(fb.createdAt.seconds * 1000).toLocaleString('en-IN', {
+                                      day: 'numeric',
+                                      month: 'short',
+                                      year: 'numeric',
+                                      hour: '2-digit',
+                                      minute: '2-digit'
+                                    })
+                                  : 'Just now'
+                                }
+                              </p>
+                            </div>
+                            <button
+                              onClick={() => deleteFeedback(fb.id)}
+                              className="text-red-500 hover:text-red-700 text-sm p-1"
+                              title="Delete"
+                            >
+                              🗑️
+                            </button>
+                          </div>
+                          <p className="text-gray-800 whitespace-pre-wrap text-sm mt-2 bg-white rounded-lg p-3 border border-blue-100">
+                            {fb.text}
+                          </p>
+                          {fb.userEmail && (
+                            <a 
+                              href={`mailto:${fb.userEmail}?subject=Re: Your Sankirtan Feedback&body=Hi ${fb.userName},%0D%0A%0D%0AThank you for your feedback!%0D%0A%0D%0A`}
+                              className="inline-block mt-2 text-xs text-blue-600 hover:text-blue-800 font-semibold"
+                            >
+                              ✉️ Reply via email
+                            </a>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
               </div>
 
               {/* JSON Import Section */}
@@ -4240,6 +4660,20 @@ const App = () => {
                       ))}
                     </select>
                   </div>
+                </div>
+
+                {/* Language */}
+                <div>
+                  <label className="block text-sm font-semibold text-amber-900 mb-1">Language / भाषा</label>
+                  <select
+                    value={publicBhajanForm.language}
+                    onChange={(e) => setPublicBhajanForm({...publicBhajanForm, language: e.target.value})}
+                    className="w-full px-4 py-3 border-2 border-orange-200 rounded-xl outline-none bg-white"
+                  >
+                    {LANGUAGE_OPTIONS.map(l => (
+                      <option key={l.value} value={l.value}>{l.label}</option>
+                    ))}
+                  </select>
                 </div>
 
                 {/* Dhun */}
