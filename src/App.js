@@ -1,10 +1,16 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 
 // ==============================================
-// SANKIRTAN SAAS - SESSION 2 (My Library Added)
+// SANKIRTAN SAAS - SESSION 3
 // Bhajan Se Bhagwan Tak
 // Multi-user platform with Google + Phone Auth
-// NEW: Personal Bhajan Library (CRUD + Search + Filter)
+// CHANGES:
+// 1. Home screen after login = Public Library (was Dashboard),
+//    with a Public ↔ My Library switcher on both library views.
+// 2. "Create Program" + "My Programs" available inside My Library.
+// 3. Onboarding tour auto-plays ONLY on the very first login
+//    (flag stored in Firestore profile + localStorage). Replay it
+//    anytime via the ⓘ button in the header.
 // ==============================================
 
 // Constants for dropdowns
@@ -209,7 +215,7 @@ const App = () => {
   const [userCount, setUserCount] = useState(0);
 
   // NEW: My Library states
-  const [currentView, setCurrentView] = useState('dashboard'); // 'dashboard', 'library', 'bhajan-detail', 'add-bhajan', 'edit-bhajan', 'programs', 'program-detail', 'create-program', 'edit-program', 'live-program', 'public-library', 'public-bhajan-detail', 'admin-panel'
+  const [currentView, setCurrentView] = useState('public-library'); // HOME = Public Library. Views: 'public-library', 'library', 'dashboard', 'bhajan-detail', 'add-bhajan', 'edit-bhajan', 'programs', 'program-detail', 'create-program', 'edit-program', 'live-program', 'public-bhajan-detail', 'admin-panel'
   const [scrollPositions, setScrollPositions] = useState({});
   const [bhajans, setBhajans] = useState([]);
   const [selectedBhajan, setSelectedBhajan] = useState(null);
@@ -342,7 +348,7 @@ const App = () => {
   // ==============================================
   // NAVIGATION WITH HISTORY (browser back support)
   // ==============================================
-  const previousViewRef = useRef('dashboard');
+  const previousViewRef = useRef('public-library');
   
   // Track view changes - push to browser history when view changes
   useEffect(() => {
@@ -402,7 +408,7 @@ const App = () => {
       if (event.state && event.state.view) {
         setCurrentView(event.state.view);
       } else {
-        setCurrentView('dashboard');
+        setCurrentView('public-library');
       }
     };
     
@@ -812,14 +818,31 @@ const App = () => {
     }
   };
   
-  const finishOnboarding = () => {
+  // Mark the tour as seen: locally (this device) AND on the user's
+  // Firestore profile (so it never auto-pops again on any device/login).
+  const markOnboardingCompleted = () => {
     localStorage.setItem('sankirtan-onboarding-completed', 'true');
+    setUserProfile(prev => (prev ? { ...prev, hasSeenOnboarding: true } : prev));
+    try {
+      if (user) {
+        const db = window.firebase.firestore();
+        db.collection('users').doc(user.uid)
+          .set({ hasSeenOnboarding: true }, { merge: true })
+          .catch(err => console.log('Could not save tour flag to profile:', err.message));
+      }
+    } catch (e) {
+      console.log('Could not save tour flag:', e.message);
+    }
+  };
+
+  const finishOnboarding = () => {
+    markOnboardingCompleted();
     setShowOnboarding(false);
     setOnboardingStep(0);
   };
   
   const skipOnboarding = () => {
-    localStorage.setItem('sankirtan-onboarding-completed', 'true');
+    markOnboardingCompleted();
     setShowOnboarding(false);
     setOnboardingStep(0);
   };
@@ -1227,13 +1250,16 @@ const App = () => {
         // Load custom deity/category/keyword lists in background
         loadConfigLists();
         
-        // Show onboarding tour for first-time users (once only)
+        // Show onboarding tour ONLY if never seen before - checks both
+        // this device (localStorage) and the account profile (Firestore),
+        // so it never auto-pops up again on any login. Users can always
+        // replay it manually via the ⓘ button in the header.
         const hasSeenTour = localStorage.getItem('sankirtan-onboarding-completed');
-        if (!hasSeenTour) {
+        if (!hasSeenTour && !profile.hasSeenOnboarding) {
           setTimeout(() => {
             setShowOnboarding(true);
             setOnboardingStep(0);
-          }, 800); // Small delay so dashboard renders first
+          }, 800); // Small delay so the home screen renders first
         }
       } else {
         console.log('🆕 New user - setup profile');
@@ -2543,7 +2569,7 @@ const App = () => {
       setUser(null);
       setUserProfile(null);
       setBhajans([]);
-      setCurrentView('dashboard');
+      setCurrentView('public-library');
       setShowPhoneLogin(false);
       setOtpSent(false);
       setPhoneNumber('');
@@ -3148,20 +3174,53 @@ const App = () => {
               ============================================== */}
           {currentView === 'library' && (
             <>
-              {/* Library Header */}
-              <div className="flex items-center justify-between mb-4">
-                <button
-                  onClick={() => setCurrentView('dashboard')}
-                  className="text-orange-600 hover:text-orange-800 flex items-center gap-1 text-sm"
-                >
-                  ← Dashboard
-                </button>
-                <button
-                  onClick={openAddBhajan}
-                  className="bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-semibold px-4 py-2 rounded-xl shadow-md flex items-center gap-2 text-sm"
-                >
-                  <span className="text-lg">+</span> Add Bhajan
-                </button>
+              {/* Library Header with Public/Personal Switcher */}
+              <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+                <div className="flex items-center gap-3 flex-wrap">
+                  {/* Public ↔ Personal library switcher */}
+                  <div className="inline-flex bg-orange-100 rounded-xl p-1 shadow-inner">
+                    <button
+                      onClick={openPublicLibrary}
+                      className="px-3 py-1.5 rounded-lg text-sm font-semibold text-amber-700 hover:text-amber-900 transition-all"
+                    >
+                      🌐 Public
+                    </button>
+                    <button
+                      className="px-3 py-1.5 rounded-lg text-sm font-semibold bg-white text-amber-900 shadow-md"
+                    >
+                      📚 My Library
+                    </button>
+                  </div>
+                  <button
+                    onClick={() => setCurrentView('dashboard')}
+                    className="text-orange-600 hover:text-orange-800 text-sm"
+                    title="Go to Dashboard"
+                  >
+                    🏠 Dashboard
+                  </button>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    onClick={openPrograms}
+                    className="bg-white border-2 border-orange-300 hover:border-orange-500 text-amber-800 font-semibold px-3 py-2 rounded-xl text-sm flex items-center gap-1"
+                    title="View your programs"
+                  >
+                    🎵 Programs ({programs.length})
+                  </button>
+                  <button
+                    onClick={openCreateProgram}
+                    className="bg-white border-2 border-orange-300 hover:border-orange-500 text-amber-800 font-semibold px-3 py-2 rounded-xl text-sm flex items-center gap-1"
+                    title="Create a new program / setlist from your bhajans"
+                  >
+                    <span className="text-lg leading-none">+</span> Create Program
+                  </button>
+                  <button
+                    onClick={openAddBhajan}
+                    className="bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-semibold px-4 py-2 rounded-xl shadow-md flex items-center gap-2 text-sm"
+                  >
+                    <span className="text-lg">+</span> Add Bhajan
+                  </button>
+                </div>
               </div>
 
               <div className="mb-4">
@@ -4228,13 +4287,31 @@ const App = () => {
               ============================================== */}
           {currentView === 'public-library' && (
             <>
-              <div className="flex items-center justify-between mb-4">
-                <button
-                  onClick={() => setCurrentView('dashboard')}
-                  className="text-orange-600 hover:text-orange-800 flex items-center gap-1 text-sm"
-                >
-                  ← Dashboard
-                </button>
+              {/* Library Header with Public/Personal Switcher */}
+              <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+                <div className="flex items-center gap-3 flex-wrap">
+                  {/* Public ↔ Personal library switcher */}
+                  <div className="inline-flex bg-orange-100 rounded-xl p-1 shadow-inner">
+                    <button
+                      className="px-3 py-1.5 rounded-lg text-sm font-semibold bg-white text-amber-900 shadow-md"
+                    >
+                      🌐 Public
+                    </button>
+                    <button
+                      onClick={() => setCurrentView('library')}
+                      className="px-3 py-1.5 rounded-lg text-sm font-semibold text-amber-700 hover:text-amber-900 transition-all"
+                    >
+                      📚 My Library
+                    </button>
+                  </div>
+                  <button
+                    onClick={() => setCurrentView('dashboard')}
+                    className="text-orange-600 hover:text-orange-800 text-sm"
+                    title="Go to Dashboard"
+                  >
+                    🏠 Dashboard
+                  </button>
+                </div>
                 {isAdmin && (
                   <div className="flex gap-2">
                     <button
