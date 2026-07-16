@@ -187,6 +187,8 @@ const App = () => {
   const [customKeywords, setCustomKeywords] = useState([]);
   const [configLoading, setConfigLoading] = useState(false);
   const [newItemInput, setNewItemInput] = useState({ deity: '', category: '', keyword: '' });
+  const [editingItem, setEditingItem] = useState(null); // { type, value }
+  const [editingValue, setEditingValue] = useState('');
   const [showPhoneLogin, setShowPhoneLogin] = useState(false);
   const [phoneNumber, setPhoneNumber] = useState('');
   const [otpCode, setOtpCode] = useState('');
@@ -592,8 +594,23 @@ const App = () => {
         setCustomKeywords(data.keywords || []);
         console.log('✅ Config lists loaded');
       } else {
-        // Initialize with defaults on first run
-        console.log('ℹ️ No config lists yet - using defaults');
+        // First-time seed: Initialize Firestore with defaults so admin can edit them
+        console.log('ℹ️ First-time seed of config lists...');
+        if (isAdmin) {
+          const seedData = {
+            deities: DEITY_OPTIONS.map(d => d.value),
+            categories: [...CATEGORY_OPTIONS],
+            keywords: [...DEFAULT_KEYWORDS],
+            updatedAt: window.firebase.firestore.FieldValue.serverTimestamp(),
+            updatedBy: user.uid,
+            seeded: true
+          };
+          await db.collection('appConfig').doc('lists').set(seedData);
+          setCustomDeities(seedData.deities);
+          setCustomCategories(seedData.categories);
+          setCustomKeywords(seedData.keywords);
+          console.log('✅ Seeded config lists with defaults');
+        }
       }
     } catch (error) {
       console.error('Error loading config lists:', error);
@@ -607,16 +624,14 @@ const App = () => {
     const trimmed = value.trim();
     if (!trimmed) return;
     
-    // Check for duplicates against defaults and custom
-    const defaults = type === 'deity' ? DEITY_OPTIONS.map(d => d.value)
-                    : type === 'category' ? CATEGORY_OPTIONS
-                    : DEFAULT_KEYWORDS;
-    const custom = type === 'deity' ? customDeities
+    // Get current list
+    const current = type === 'deity' ? customDeities
                   : type === 'category' ? customCategories
                   : customKeywords;
     
-    const allExisting = [...defaults, ...custom].map(s => s.toLowerCase());
-    if (allExisting.includes(trimmed.toLowerCase())) {
+    // Check for duplicates (case-insensitive)
+    const existing = current.map(s => s.toLowerCase());
+    if (existing.includes(trimmed.toLowerCase())) {
       alert(`"${trimmed}" already exists!`);
       return;
     }
@@ -628,7 +643,7 @@ const App = () => {
                       : type === 'category' ? 'categories'
                       : 'keywords';
       
-      const newList = [...custom, trimmed];
+      const newList = [...current, trimmed];
       
       await configRef.set({
         [fieldName]: newList,
@@ -636,12 +651,10 @@ const App = () => {
         updatedBy: user.uid
       }, { merge: true });
       
-      // Update local state
       if (type === 'deity') setCustomDeities(newList);
       else if (type === 'category') setCustomCategories(newList);
       else setCustomKeywords(newList);
       
-      // Clear input
       setNewItemInput(prev => ({ ...prev, [type]: '' }));
       
       console.log(`✅ Added ${type}: ${trimmed}`);
@@ -651,34 +664,95 @@ const App = () => {
     }
   };
   
-  const deleteConfigItem = async (type, value) => {
+  const editConfigItem = async (type, oldValue, newValue) => {
     if (!isAdmin) return;
+    const trimmed = newValue.trim();
+    if (!trimmed || trimmed === oldValue) return;
     
-    // Check if any bhajans use this
+    // Check for duplicates
+    const current = type === 'deity' ? customDeities
+                  : type === 'category' ? customCategories
+                  : customKeywords;
+    const existing = current.filter(s => s !== oldValue).map(s => s.toLowerCase());
+    if (existing.includes(trimmed.toLowerCase())) {
+      alert(`"${trimmed}" already exists!`);
+      return;
+    }
+    
+    // Check usage - can only rename if not in use OR user confirms
     const fieldName = type === 'deity' ? 'deity' 
                     : type === 'category' ? 'category'
                     : null;
     
+    let usageInfo = { publicUsage: 0, personalUsage: 0 };
+    
     if (fieldName) {
-      // Check public bhajans
-      const publicUsage = publicBhajans.filter(b => b[fieldName] === value).length;
-      const personalUsage = bhajans.filter(b => b[fieldName] === value).length;
-      const totalUsage = publicUsage + personalUsage;
-      
-      if (totalUsage > 0) {
-        alert(`Cannot delete "${value}"\n\n${totalUsage} bhajan${totalUsage !== 1 ? 's' : ''} still use this ${type}.\n(${publicUsage} public + ${personalUsage} personal)\n\nUpdate those bhajans first.`);
-        return;
-      }
+      usageInfo.publicUsage = publicBhajans.filter(b => b[fieldName] === oldValue).length;
+      usageInfo.personalUsage = bhajans.filter(b => b[fieldName] === oldValue).length;
     } else {
-      // Keywords - check if any bhajan has it in keywords array
-      const publicUsage = publicBhajans.filter(b => (b.keywords || []).includes(value)).length;
-      const personalUsage = bhajans.filter(b => (b.keywords || []).includes(value)).length;
-      const totalUsage = publicUsage + personalUsage;
+      // Keywords
+      usageInfo.publicUsage = publicBhajans.filter(b => (b.keywords || []).includes(oldValue)).length;
+      usageInfo.personalUsage = bhajans.filter(b => (b.keywords || []).includes(oldValue)).length;
+    }
+    
+    const totalUsage = usageInfo.publicUsage + usageInfo.personalUsage;
+    
+    if (totalUsage > 0) {
+      alert(`Cannot rename "${oldValue}"\n\n${totalUsage} bhajan${totalUsage !== 1 ? 's' : ''} still use this ${type}.\n(${usageInfo.publicUsage} public + ${usageInfo.personalUsage} personal)\n\nUpdate those bhajans first, then rename.`);
+      return;
+    }
+    
+    try {
+      const db = window.firebase.firestore();
+      const configRef = db.collection('appConfig').doc('lists');
+      const firestoreField = type === 'deity' ? 'deities' 
+                            : type === 'category' ? 'categories'
+                            : 'keywords';
       
-      if (totalUsage > 0) {
-        alert(`Cannot delete keyword "${value}"\n\n${totalUsage} bhajan${totalUsage !== 1 ? 's' : ''} still use this keyword.\n(${publicUsage} public + ${personalUsage} personal)\n\nRemove keyword from those bhajans first.`);
-        return;
-      }
+      const newList = current.map(item => item === oldValue ? trimmed : item);
+      
+      await configRef.set({
+        [firestoreField]: newList,
+        updatedAt: window.firebase.firestore.FieldValue.serverTimestamp(),
+        updatedBy: user.uid
+      }, { merge: true });
+      
+      if (type === 'deity') setCustomDeities(newList);
+      else if (type === 'category') setCustomCategories(newList);
+      else setCustomKeywords(newList);
+      
+      setEditingItem(null);
+      setEditingValue('');
+      
+      console.log(`✅ Renamed ${type}: ${oldValue} → ${trimmed}`);
+    } catch (error) {
+      console.error(`Error renaming ${type}:`, error);
+      alert('Could not rename: ' + error.message);
+    }
+  };
+  
+  const deleteConfigItem = async (type, value) => {
+    if (!isAdmin) return;
+    
+    const fieldName = type === 'deity' ? 'deity' 
+                    : type === 'category' ? 'category'
+                    : null;
+    
+    let usageInfo = { publicUsage: 0, personalUsage: 0 };
+    
+    if (fieldName) {
+      usageInfo.publicUsage = publicBhajans.filter(b => b[fieldName] === value).length;
+      usageInfo.personalUsage = bhajans.filter(b => b[fieldName] === value).length;
+    } else {
+      usageInfo.publicUsage = publicBhajans.filter(b => (b.keywords || []).includes(value)).length;
+      usageInfo.personalUsage = bhajans.filter(b => (b.keywords || []).includes(value)).length;
+    }
+    
+    const totalUsage = usageInfo.publicUsage + usageInfo.personalUsage;
+    
+    if (totalUsage > 0) {
+      alert(`Cannot delete "${value}"\n\n${totalUsage} bhajan${totalUsage !== 1 ? 's' : ''} still use this ${type}.\n(${usageInfo.publicUsage} public + ${usageInfo.personalUsage} personal)\n\nRemove from those bhajans first.`);
+      return;
     }
     
     if (!window.confirm(`Delete "${value}"?`)) return;
@@ -713,13 +787,13 @@ const App = () => {
     }
   };
   
-  // Combined lists (defaults + custom) - what UI actually uses
-  const allDeityOptions = [
-    ...DEITY_OPTIONS.map(d => ({ ...d, isDefault: true })),
-    ...customDeities.map(name => ({ value: name, emoji: '✨', isDefault: false }))
-  ];
-  const allCategoryOptions = [...CATEGORY_OPTIONS, ...customCategories];
-  const allKeywordOptions = [...DEFAULT_KEYWORDS, ...customKeywords];
+  // Combined lists (uses Firestore data if available, else defaults)
+  // Once admin visits admin panel, Firestore gets seeded and becomes source of truth
+  const allDeityOptions = customDeities.length > 0
+    ? customDeities.map(name => ({ value: name, emoji: '🕉️' }))
+    : DEITY_OPTIONS;
+  const allCategoryOptions = customCategories.length > 0 ? customCategories : CATEGORY_OPTIONS;
+  const allKeywordOptions = customKeywords.length > 0 ? customKeywords : DEFAULT_KEYWORDS;
 
   // ==============================================
   // ONBOARDING TOUR FUNCTIONS
@@ -4572,7 +4646,7 @@ const App = () => {
               <div className="bg-white rounded-2xl shadow-lg p-6 mb-6 border-2 border-indigo-200">
                 <h3 className="text-lg font-bold text-amber-900 mb-2">📋 Manage Lists</h3>
                 <p className="text-sm text-gray-600 mb-4">
-                  Add or delete deities, categories, and keywords. Changes apply to all users.
+                  Add, rename, or delete deities, categories, and keywords. Changes apply to all users.
                 </p>
                 
                 {configLoading && (
@@ -4583,32 +4657,51 @@ const App = () => {
                 
                 {/* Deities */}
                 <div className="mb-6">
-                  <h4 className="font-semibold text-amber-900 mb-2">🕉️ Deities</h4>
+                  <h4 className="font-semibold text-amber-900 mb-2">🕉️ Deities ({customDeities.length || DEITY_OPTIONS.length})</h4>
                   <div className="flex flex-wrap gap-2 mb-3">
-                    {DEITY_OPTIONS.map(d => (
-                      <span
-                        key={d.value}
-                        className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700 border border-gray-300"
-                        title="Default (cannot delete)"
-                      >
-                        {d.value}
-                        <span className="text-gray-400 text-[10px]">🔒</span>
-                      </span>
-                    ))}
-                    {customDeities.map(name => (
-                      <span
-                        key={name}
-                        className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800 border border-indigo-300"
-                      >
-                        {name}
-                        <button
-                          onClick={() => deleteConfigItem('deity', name)}
-                          className="ml-1 text-red-600 hover:text-red-800 font-bold"
-                          title="Delete"
+                    {(customDeities.length > 0 ? customDeities : DEITY_OPTIONS.map(d => d.value)).map(name => (
+                      editingItem?.type === 'deity' && editingItem?.value === name ? (
+                        <div key={name} className="inline-flex items-center gap-1 bg-yellow-50 border-2 border-yellow-400 rounded-full px-2 py-0.5">
+                          <input
+                            type="text"
+                            value={editingValue}
+                            onChange={(e) => setEditingValue(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') editConfigItem('deity', name, editingValue);
+                              if (e.key === 'Escape') { setEditingItem(null); setEditingValue(''); }
+                            }}
+                            autoFocus
+                            className="bg-transparent outline-none text-xs font-medium w-24 min-w-24"
+                          />
+                          <button
+                            onClick={() => editConfigItem('deity', name, editingValue)}
+                            className="text-green-600 hover:text-green-800 text-xs font-bold"
+                            title="Save (Enter)"
+                          >✓</button>
+                          <button
+                            onClick={() => { setEditingItem(null); setEditingValue(''); }}
+                            className="text-red-600 hover:text-red-800 text-xs font-bold"
+                            title="Cancel (Esc)"
+                          >×</button>
+                        </div>
+                      ) : (
+                        <span
+                          key={name}
+                          className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800 border border-indigo-300 hover:bg-indigo-200 transition-colors"
                         >
-                          ×
-                        </button>
-                      </span>
+                          {name}
+                          <button
+                            onClick={() => { setEditingItem({ type: 'deity', value: name }); setEditingValue(name); }}
+                            className="ml-1 text-blue-600 hover:text-blue-800 text-[10px]"
+                            title="Rename"
+                          >✏️</button>
+                          <button
+                            onClick={() => deleteConfigItem('deity', name)}
+                            className="ml-0.5 text-red-600 hover:text-red-800 font-bold"
+                            title="Delete"
+                          >×</button>
+                        </span>
+                      )
                     ))}
                   </div>
                   <div className="flex gap-2">
@@ -4632,32 +4725,49 @@ const App = () => {
                 
                 {/* Categories */}
                 <div className="mb-6">
-                  <h4 className="font-semibold text-amber-900 mb-2">📖 Categories</h4>
+                  <h4 className="font-semibold text-amber-900 mb-2">📖 Categories ({customCategories.length || CATEGORY_OPTIONS.length})</h4>
                   <div className="flex flex-wrap gap-2 mb-3">
-                    {CATEGORY_OPTIONS.map(c => (
-                      <span
-                        key={c}
-                        className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700 border border-gray-300"
-                        title="Default (cannot delete)"
-                      >
-                        {c}
-                        <span className="text-gray-400 text-[10px]">🔒</span>
-                      </span>
-                    ))}
-                    {customCategories.map(name => (
-                      <span
-                        key={name}
-                        className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800 border border-indigo-300"
-                      >
-                        {name}
-                        <button
-                          onClick={() => deleteConfigItem('category', name)}
-                          className="ml-1 text-red-600 hover:text-red-800 font-bold"
-                          title="Delete"
+                    {(customCategories.length > 0 ? customCategories : CATEGORY_OPTIONS).map(name => (
+                      editingItem?.type === 'category' && editingItem?.value === name ? (
+                        <div key={name} className="inline-flex items-center gap-1 bg-yellow-50 border-2 border-yellow-400 rounded-full px-2 py-0.5">
+                          <input
+                            type="text"
+                            value={editingValue}
+                            onChange={(e) => setEditingValue(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') editConfigItem('category', name, editingValue);
+                              if (e.key === 'Escape') { setEditingItem(null); setEditingValue(''); }
+                            }}
+                            autoFocus
+                            className="bg-transparent outline-none text-xs font-medium w-24 min-w-24"
+                          />
+                          <button
+                            onClick={() => editConfigItem('category', name, editingValue)}
+                            className="text-green-600 hover:text-green-800 text-xs font-bold"
+                          >✓</button>
+                          <button
+                            onClick={() => { setEditingItem(null); setEditingValue(''); }}
+                            className="text-red-600 hover:text-red-800 text-xs font-bold"
+                          >×</button>
+                        </div>
+                      ) : (
+                        <span
+                          key={name}
+                          className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800 border border-indigo-300 hover:bg-indigo-200 transition-colors"
                         >
-                          ×
-                        </button>
-                      </span>
+                          {name}
+                          <button
+                            onClick={() => { setEditingItem({ type: 'category', value: name }); setEditingValue(name); }}
+                            className="ml-1 text-blue-600 hover:text-blue-800 text-[10px]"
+                            title="Rename"
+                          >✏️</button>
+                          <button
+                            onClick={() => deleteConfigItem('category', name)}
+                            className="ml-0.5 text-red-600 hover:text-red-800 font-bold"
+                            title="Delete"
+                          >×</button>
+                        </span>
+                      )
                     ))}
                   </div>
                   <div className="flex gap-2">
@@ -4681,32 +4791,49 @@ const App = () => {
                 
                 {/* Keywords */}
                 <div>
-                  <h4 className="font-semibold text-amber-900 mb-2">🏷️ Keywords</h4>
+                  <h4 className="font-semibold text-amber-900 mb-2">🏷️ Keywords ({customKeywords.length || DEFAULT_KEYWORDS.length})</h4>
                   <div className="flex flex-wrap gap-2 mb-3">
-                    {DEFAULT_KEYWORDS.map(kw => (
-                      <span
-                        key={kw}
-                        className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700 border border-gray-300"
-                        title="Default (cannot delete)"
-                      >
-                        #{kw}
-                        <span className="text-gray-400 text-[10px]">🔒</span>
-                      </span>
-                    ))}
-                    {customKeywords.map(name => (
-                      <span
-                        key={name}
-                        className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800 border border-indigo-300"
-                      >
-                        #{name}
-                        <button
-                          onClick={() => deleteConfigItem('keyword', name)}
-                          className="ml-1 text-red-600 hover:text-red-800 font-bold"
-                          title="Delete"
+                    {(customKeywords.length > 0 ? customKeywords : DEFAULT_KEYWORDS).map(name => (
+                      editingItem?.type === 'keyword' && editingItem?.value === name ? (
+                        <div key={name} className="inline-flex items-center gap-1 bg-yellow-50 border-2 border-yellow-400 rounded-full px-2 py-0.5">
+                          <input
+                            type="text"
+                            value={editingValue}
+                            onChange={(e) => setEditingValue(e.target.value.toLowerCase().replace(/\s+/g, ''))}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') editConfigItem('keyword', name, editingValue);
+                              if (e.key === 'Escape') { setEditingItem(null); setEditingValue(''); }
+                            }}
+                            autoFocus
+                            className="bg-transparent outline-none text-xs font-medium w-24 min-w-24"
+                          />
+                          <button
+                            onClick={() => editConfigItem('keyword', name, editingValue)}
+                            className="text-green-600 hover:text-green-800 text-xs font-bold"
+                          >✓</button>
+                          <button
+                            onClick={() => { setEditingItem(null); setEditingValue(''); }}
+                            className="text-red-600 hover:text-red-800 text-xs font-bold"
+                          >×</button>
+                        </div>
+                      ) : (
+                        <span
+                          key={name}
+                          className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800 border border-indigo-300 hover:bg-indigo-200 transition-colors"
                         >
-                          ×
-                        </button>
-                      </span>
+                          #{name}
+                          <button
+                            onClick={() => { setEditingItem({ type: 'keyword', value: name }); setEditingValue(name); }}
+                            className="ml-1 text-blue-600 hover:text-blue-800 text-[10px]"
+                            title="Rename"
+                          >✏️</button>
+                          <button
+                            onClick={() => deleteConfigItem('keyword', name)}
+                            className="ml-0.5 text-red-600 hover:text-red-800 font-bold"
+                            title="Delete"
+                          >×</button>
+                        </span>
+                      )
                     ))}
                   </div>
                   <div className="flex gap-2">
@@ -4729,8 +4856,8 @@ const App = () => {
                 </div>
                 
                 <div className="mt-4 p-3 bg-blue-50 rounded-lg text-xs text-blue-800">
-                  💡 <strong>Gray items with 🔒</strong> are defaults and cannot be deleted.<br/>
-                  <strong>Colored items</strong> are custom - deletable if no bhajans use them.
+                  💡 Click <strong>✏️</strong> to rename, <strong>×</strong> to delete.<br/>
+                  Items in use by bhajans <strong>cannot be renamed or deleted</strong> - update those bhajans first.
                 </div>
               </div>
               
