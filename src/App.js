@@ -349,13 +349,35 @@ const App = () => {
       
       // Scroll to top for new view (unless coming back from browser back)
       if (!window.__sankirtanBackNav) {
+        // Instant scroll to top for forward navigation
         window.scrollTo(0, 0);
       } else {
-        // Restore scroll position
-        setTimeout(() => {
-          const savedScroll = scrollPositions[currentView] || 0;
-          window.scrollTo(0, savedScroll);
-        }, 50);
+        // Restore scroll position when going BACK
+        // Use requestAnimationFrame + multiple attempts to wait for DOM to render
+        const savedScroll = scrollPositions[currentView] || 0;
+        
+        if (savedScroll > 0) {
+          // Multiple restoration attempts to handle slow rendering (large lists)
+          const restoreScroll = () => {
+            window.scrollTo({ top: savedScroll, behavior: 'instant' });
+          };
+          
+          // Try immediately
+          restoreScroll();
+          // Try after first paint
+          requestAnimationFrame(() => {
+            restoreScroll();
+            // Try after second paint (when list has rendered)
+            requestAnimationFrame(() => {
+              restoreScroll();
+              // Final attempt after 100ms for very slow devices
+              setTimeout(restoreScroll, 100);
+              // One more attempt after 300ms as fallback
+              setTimeout(restoreScroll, 300);
+            });
+          });
+        }
+        
         window.__sankirtanBackNav = false;
       }
       
