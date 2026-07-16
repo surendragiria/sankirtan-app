@@ -2529,31 +2529,6 @@ const App = () => {
         )}
         
         {/* ==============================================
-            FLOATING FEEDBACK BUTTON (bottom right)
-            ============================================== */}
-        {!showFeedbackModal && !showOnboarding && !showInstallPrompt && !showIOSInstructions && (
-          <button
-            onClick={() => {
-              setShowFeedbackModal(true);
-              setFeedbackText('');
-              setFeedbackError('');
-              setFeedbackSuccess(false);
-            }}
-            className="fixed bottom-6 right-6 z-40 bg-gradient-to-br from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white rounded-full p-4 shadow-2xl transition-all hover:scale-110 group"
-            title="Send Feedback"
-          >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" 
-                d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-            </svg>
-            {/* Tooltip on hover */}
-            <span className="absolute bottom-full right-0 mb-2 px-3 py-1 bg-gray-900 text-white text-xs rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-              💬 Send feedback
-            </span>
-          </button>
-        )}
-        
-        {/* ==============================================
             FEEDBACK MODAL
             ============================================== */}
         {showFeedbackModal && (
@@ -2895,16 +2870,22 @@ const App = () => {
                 </div>
               )}
 
-              {/* Development Notice */}
-              <div className="bg-blue-50 border-2 border-blue-200 rounded-2xl p-6 text-center">
-                <div className="text-3xl mb-2">🚧</div>
-                <h3 className="text-lg font-bold text-blue-900 mb-2">Sankirtan is Under Active Development</h3>
-                <p className="text-sm text-blue-700 mb-3">
-                  You're seeing the foundation of the app. More features are being added weekly!
+              {/* Footer Credit */}
+              <div className="text-center py-6">
+                <p className="text-xs text-amber-700 mb-2">
+                  Founded for the Bhajan Community 🙏 by Grace of <strong>Babosa Bhagwan</strong> 🕉️
                 </p>
-                <p className="text-xs text-blue-600">
-                  Founded for the Bhajan Community 🕉️ by Grace of <strong>Babosa Bhagwan</strong> 🕉️
-                </p>
+                <button
+                  onClick={() => {
+                    setShowFeedbackModal(true);
+                    setFeedbackText('');
+                    setFeedbackError('');
+                    setFeedbackSuccess(false);
+                  }}
+                  className="text-xs text-blue-600 hover:text-blue-800 underline hover:no-underline transition-colors"
+                >
+                  💬 Share feedback or suggestions
+                </button>
               </div>
             </>
           )}
