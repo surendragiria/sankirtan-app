@@ -180,6 +180,13 @@ const App = () => {
   const [feedbackError, setFeedbackError] = useState('');
   const [feedbackList, setFeedbackList] = useState([]);
   const [feedbackListLoading, setFeedbackListLoading] = useState(false);
+  
+  // Custom config lists (Firestore-based, admin editable)
+  const [customDeities, setCustomDeities] = useState([]);
+  const [customCategories, setCustomCategories] = useState([]);
+  const [customKeywords, setCustomKeywords] = useState([]);
+  const [configLoading, setConfigLoading] = useState(false);
+  const [newItemInput, setNewItemInput] = useState({ deity: '', category: '', keyword: '' });
   const [showPhoneLogin, setShowPhoneLogin] = useState(false);
   const [phoneNumber, setPhoneNumber] = useState('');
   const [otpCode, setOtpCode] = useState('');
@@ -568,6 +575,151 @@ const App = () => {
       alert('Could not delete: ' + error.message);
     }
   };
+
+  // ==============================================
+  // CONFIG LISTS (Deities, Categories, Keywords)
+  // ==============================================
+  const loadConfigLists = async () => {
+    try {
+      setConfigLoading(true);
+      const db = window.firebase.firestore();
+      const configDoc = await db.collection('appConfig').doc('lists').get();
+      
+      if (configDoc.exists) {
+        const data = configDoc.data();
+        setCustomDeities(data.deities || []);
+        setCustomCategories(data.categories || []);
+        setCustomKeywords(data.keywords || []);
+        console.log('✅ Config lists loaded');
+      } else {
+        // Initialize with defaults on first run
+        console.log('ℹ️ No config lists yet - using defaults');
+      }
+    } catch (error) {
+      console.error('Error loading config lists:', error);
+    } finally {
+      setConfigLoading(false);
+    }
+  };
+  
+  const addConfigItem = async (type, value) => {
+    if (!isAdmin) return;
+    const trimmed = value.trim();
+    if (!trimmed) return;
+    
+    // Check for duplicates against defaults and custom
+    const defaults = type === 'deity' ? DEITY_OPTIONS.map(d => d.value)
+                    : type === 'category' ? CATEGORY_OPTIONS
+                    : DEFAULT_KEYWORDS;
+    const custom = type === 'deity' ? customDeities
+                  : type === 'category' ? customCategories
+                  : customKeywords;
+    
+    const allExisting = [...defaults, ...custom].map(s => s.toLowerCase());
+    if (allExisting.includes(trimmed.toLowerCase())) {
+      alert(`"${trimmed}" already exists!`);
+      return;
+    }
+    
+    try {
+      const db = window.firebase.firestore();
+      const configRef = db.collection('appConfig').doc('lists');
+      const fieldName = type === 'deity' ? 'deities' 
+                      : type === 'category' ? 'categories'
+                      : 'keywords';
+      
+      const newList = [...custom, trimmed];
+      
+      await configRef.set({
+        [fieldName]: newList,
+        updatedAt: window.firebase.firestore.FieldValue.serverTimestamp(),
+        updatedBy: user.uid
+      }, { merge: true });
+      
+      // Update local state
+      if (type === 'deity') setCustomDeities(newList);
+      else if (type === 'category') setCustomCategories(newList);
+      else setCustomKeywords(newList);
+      
+      // Clear input
+      setNewItemInput(prev => ({ ...prev, [type]: '' }));
+      
+      console.log(`✅ Added ${type}: ${trimmed}`);
+    } catch (error) {
+      console.error(`Error adding ${type}:`, error);
+      alert('Could not add: ' + error.message);
+    }
+  };
+  
+  const deleteConfigItem = async (type, value) => {
+    if (!isAdmin) return;
+    
+    // Check if any bhajans use this
+    const fieldName = type === 'deity' ? 'deity' 
+                    : type === 'category' ? 'category'
+                    : null;
+    
+    if (fieldName) {
+      // Check public bhajans
+      const publicUsage = publicBhajans.filter(b => b[fieldName] === value).length;
+      const personalUsage = bhajans.filter(b => b[fieldName] === value).length;
+      const totalUsage = publicUsage + personalUsage;
+      
+      if (totalUsage > 0) {
+        alert(`Cannot delete "${value}"\n\n${totalUsage} bhajan${totalUsage !== 1 ? 's' : ''} still use this ${type}.\n(${publicUsage} public + ${personalUsage} personal)\n\nUpdate those bhajans first.`);
+        return;
+      }
+    } else {
+      // Keywords - check if any bhajan has it in keywords array
+      const publicUsage = publicBhajans.filter(b => (b.keywords || []).includes(value)).length;
+      const personalUsage = bhajans.filter(b => (b.keywords || []).includes(value)).length;
+      const totalUsage = publicUsage + personalUsage;
+      
+      if (totalUsage > 0) {
+        alert(`Cannot delete keyword "${value}"\n\n${totalUsage} bhajan${totalUsage !== 1 ? 's' : ''} still use this keyword.\n(${publicUsage} public + ${personalUsage} personal)\n\nRemove keyword from those bhajans first.`);
+        return;
+      }
+    }
+    
+    if (!window.confirm(`Delete "${value}"?`)) return;
+    
+    try {
+      const db = window.firebase.firestore();
+      const configRef = db.collection('appConfig').doc('lists');
+      const firestoreField = type === 'deity' ? 'deities' 
+                            : type === 'category' ? 'categories'
+                            : 'keywords';
+      
+      const current = type === 'deity' ? customDeities
+                    : type === 'category' ? customCategories
+                    : customKeywords;
+      
+      const newList = current.filter(item => item !== value);
+      
+      await configRef.set({
+        [firestoreField]: newList,
+        updatedAt: window.firebase.firestore.FieldValue.serverTimestamp(),
+        updatedBy: user.uid
+      }, { merge: true });
+      
+      if (type === 'deity') setCustomDeities(newList);
+      else if (type === 'category') setCustomCategories(newList);
+      else setCustomKeywords(newList);
+      
+      console.log(`✅ Deleted ${type}: ${value}`);
+    } catch (error) {
+      console.error(`Error deleting ${type}:`, error);
+      alert('Could not delete: ' + error.message);
+    }
+  };
+  
+  // Combined lists (defaults + custom) - what UI actually uses
+  const allDeityOptions = [
+    ...DEITY_OPTIONS.map(d => ({ ...d, isDefault: true })),
+    ...customDeities.map(name => ({ value: name, emoji: '✨', isDefault: false }))
+  ];
+  const allCategoryOptions = [...CATEGORY_OPTIONS, ...customCategories];
+  const allKeywordOptions = [...DEFAULT_KEYWORDS, ...customKeywords];
 
   // ==============================================
   // ONBOARDING TOUR FUNCTIONS
@@ -1008,6 +1160,9 @@ const App = () => {
         const profile = userDoc.data();
         setUserProfile(profile);
         console.log('✅ Profile loaded:', profile.displayName);
+        
+        // Load custom deity/category/keyword lists in background
+        loadConfigLists();
         
         // Show onboarding tour for first-time users (once only)
         const hasSeenTour = localStorage.getItem('sankirtan-onboarding-completed');
@@ -1634,6 +1789,8 @@ const App = () => {
     loadFeedbackList();
     // Trigger public bhajans load for stats
     loadPublicBhajansIfNeeded();
+    // Load config lists (deities/categories/keywords)
+    loadConfigLists();
   };
 
   // Parse JSON and show preview
@@ -2974,7 +3131,7 @@ const App = () => {
                   className="px-3 py-2 border-2 border-orange-200 rounded-lg focus:ring-2 focus:ring-orange-200 focus:border-orange-400 outline-none text-sm bg-white"
                 >
                   <option value="">All Deities</option>
-                  {DEITY_OPTIONS.map(d => (
+                  {allDeityOptions.map(d => (
                     <option key={d.value} value={d.value}>{d.value}</option>
                   ))}
                 </select>
@@ -2985,7 +3142,7 @@ const App = () => {
                   className="px-3 py-2 border-2 border-orange-200 rounded-lg focus:ring-2 focus:ring-orange-200 focus:border-orange-400 outline-none text-sm bg-white"
                 >
                   <option value="">All Categories</option>
-                  {CATEGORY_OPTIONS.map(c => (
+                  {allCategoryOptions.map(c => (
                     <option key={c} value={c}>{c}</option>
                   ))}
                 </select>
@@ -3009,7 +3166,7 @@ const App = () => {
               <div className="mb-6">
                 <p className="text-xs text-amber-700 font-semibold mb-2">Quick Keywords (tap to filter):</p>
                 <div className="flex flex-wrap gap-2">
-                  {DEFAULT_KEYWORDS.map(kw => (
+                  {allKeywordOptions.map(kw => (
                     <button
                       key={kw}
                       onClick={() => setLibraryFilterKeyword(libraryFilterKeyword === kw ? '' : kw)}
@@ -3301,7 +3458,7 @@ const App = () => {
                       onChange={(e) => setBhajanForm({...bhajanForm, deity: e.target.value})}
                       className="w-full px-4 py-3 border-2 border-orange-200 rounded-xl focus:ring-4 focus:ring-orange-200 focus:border-orange-400 outline-none bg-white"
                     >
-                      {DEITY_OPTIONS.map(d => (
+                      {allDeityOptions.map(d => (
                         <option key={d.value} value={d.value}>{d.value}</option>
                       ))}
                     </select>
@@ -3316,7 +3473,7 @@ const App = () => {
                       onChange={(e) => setBhajanForm({...bhajanForm, category: e.target.value})}
                       className="w-full px-4 py-3 border-2 border-orange-200 rounded-xl focus:ring-4 focus:ring-orange-200 focus:border-orange-400 outline-none bg-white"
                     >
-                      {CATEGORY_OPTIONS.map(c => (
+                      {allCategoryOptions.map(c => (
                         <option key={c} value={c}>{c}</option>
                       ))}
                     </select>
@@ -3488,7 +3645,7 @@ const App = () => {
                     Keywords (tap to select)
                   </label>
                   <div className="flex flex-wrap gap-2">
-                    {DEFAULT_KEYWORDS.map(kw => (
+                    {allKeywordOptions.map(kw => (
                       <button
                         key={kw}
                         type="button"
@@ -4063,7 +4220,7 @@ const App = () => {
                   className="px-3 py-2 border-2 border-orange-200 rounded-lg focus:ring-2 focus:ring-orange-200 focus:border-orange-400 outline-none text-sm bg-white"
                 >
                   <option value="">All Deities</option>
-                  {DEITY_OPTIONS.map(d => (
+                  {allDeityOptions.map(d => (
                     <option key={d.value} value={d.value}>{d.value}</option>
                   ))}
                 </select>
@@ -4074,7 +4231,7 @@ const App = () => {
                   className="px-3 py-2 border-2 border-orange-200 rounded-lg focus:ring-2 focus:ring-orange-200 focus:border-orange-400 outline-none text-sm bg-white"
                 >
                   <option value="">All Categories</option>
-                  {CATEGORY_OPTIONS.map(c => (
+                  {allCategoryOptions.map(c => (
                     <option key={c} value={c}>{c}</option>
                   ))}
                 </select>
@@ -4110,7 +4267,7 @@ const App = () => {
               <div className="mb-6">
                 <p className="text-xs text-amber-700 font-semibold mb-2">Quick Keywords (tap to filter):</p>
                 <div className="flex flex-wrap gap-2">
-                  {DEFAULT_KEYWORDS.map(kw => (
+                  {allKeywordOptions.map(kw => (
                     <button
                       key={kw}
                       onClick={() => setPublicFilterKeyword(publicFilterKeyword === kw ? '' : kw)}
@@ -4411,6 +4568,172 @@ const App = () => {
                 </button>
               </div>
               
+              {/* MANAGE LISTS (Deities, Categories, Keywords) */}
+              <div className="bg-white rounded-2xl shadow-lg p-6 mb-6 border-2 border-indigo-200">
+                <h3 className="text-lg font-bold text-amber-900 mb-2">📋 Manage Lists</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Add or delete deities, categories, and keywords. Changes apply to all users.
+                </p>
+                
+                {configLoading && (
+                  <div className="text-center py-4 text-gray-500 text-sm">
+                    ⏳ Loading lists...
+                  </div>
+                )}
+                
+                {/* Deities */}
+                <div className="mb-6">
+                  <h4 className="font-semibold text-amber-900 mb-2">🕉️ Deities</h4>
+                  <div className="flex flex-wrap gap-2 mb-3">
+                    {DEITY_OPTIONS.map(d => (
+                      <span
+                        key={d.value}
+                        className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700 border border-gray-300"
+                        title="Default (cannot delete)"
+                      >
+                        {d.value}
+                        <span className="text-gray-400 text-[10px]">🔒</span>
+                      </span>
+                    ))}
+                    {customDeities.map(name => (
+                      <span
+                        key={name}
+                        className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800 border border-indigo-300"
+                      >
+                        {name}
+                        <button
+                          onClick={() => deleteConfigItem('deity', name)}
+                          className="ml-1 text-red-600 hover:text-red-800 font-bold"
+                          title="Delete"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={newItemInput.deity}
+                      onChange={(e) => setNewItemInput({...newItemInput, deity: e.target.value})}
+                      onKeyDown={(e) => e.key === 'Enter' && addConfigItem('deity', newItemInput.deity)}
+                      placeholder="Add new deity (e.g., Radha Rani)"
+                      className="flex-1 px-3 py-2 border-2 border-orange-200 rounded-lg text-sm outline-none focus:border-orange-400"
+                    />
+                    <button
+                      onClick={() => addConfigItem('deity', newItemInput.deity)}
+                      disabled={!newItemInput.deity.trim()}
+                      className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-4 py-2 rounded-lg text-sm disabled:opacity-50"
+                    >
+                      + Add
+                    </button>
+                  </div>
+                </div>
+                
+                {/* Categories */}
+                <div className="mb-6">
+                  <h4 className="font-semibold text-amber-900 mb-2">📖 Categories</h4>
+                  <div className="flex flex-wrap gap-2 mb-3">
+                    {CATEGORY_OPTIONS.map(c => (
+                      <span
+                        key={c}
+                        className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700 border border-gray-300"
+                        title="Default (cannot delete)"
+                      >
+                        {c}
+                        <span className="text-gray-400 text-[10px]">🔒</span>
+                      </span>
+                    ))}
+                    {customCategories.map(name => (
+                      <span
+                        key={name}
+                        className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800 border border-indigo-300"
+                      >
+                        {name}
+                        <button
+                          onClick={() => deleteConfigItem('category', name)}
+                          className="ml-1 text-red-600 hover:text-red-800 font-bold"
+                          title="Delete"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={newItemInput.category}
+                      onChange={(e) => setNewItemInput({...newItemInput, category: e.target.value})}
+                      onKeyDown={(e) => e.key === 'Enter' && addConfigItem('category', newItemInput.category)}
+                      placeholder="Add new category (e.g., Kirtan)"
+                      className="flex-1 px-3 py-2 border-2 border-orange-200 rounded-lg text-sm outline-none focus:border-orange-400"
+                    />
+                    <button
+                      onClick={() => addConfigItem('category', newItemInput.category)}
+                      disabled={!newItemInput.category.trim()}
+                      className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-4 py-2 rounded-lg text-sm disabled:opacity-50"
+                    >
+                      + Add
+                    </button>
+                  </div>
+                </div>
+                
+                {/* Keywords */}
+                <div>
+                  <h4 className="font-semibold text-amber-900 mb-2">🏷️ Keywords</h4>
+                  <div className="flex flex-wrap gap-2 mb-3">
+                    {DEFAULT_KEYWORDS.map(kw => (
+                      <span
+                        key={kw}
+                        className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700 border border-gray-300"
+                        title="Default (cannot delete)"
+                      >
+                        #{kw}
+                        <span className="text-gray-400 text-[10px]">🔒</span>
+                      </span>
+                    ))}
+                    {customKeywords.map(name => (
+                      <span
+                        key={name}
+                        className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800 border border-indigo-300"
+                      >
+                        #{name}
+                        <button
+                          onClick={() => deleteConfigItem('keyword', name)}
+                          className="ml-1 text-red-600 hover:text-red-800 font-bold"
+                          title="Delete"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={newItemInput.keyword}
+                      onChange={(e) => setNewItemInput({...newItemInput, keyword: e.target.value.toLowerCase().replace(/\s+/g, '')})}
+                      onKeyDown={(e) => e.key === 'Enter' && addConfigItem('keyword', newItemInput.keyword)}
+                      placeholder="Add new keyword (e.g., aarti)"
+                      className="flex-1 px-3 py-2 border-2 border-orange-200 rounded-lg text-sm outline-none focus:border-orange-400"
+                    />
+                    <button
+                      onClick={() => addConfigItem('keyword', newItemInput.keyword)}
+                      disabled={!newItemInput.keyword.trim()}
+                      className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-4 py-2 rounded-lg text-sm disabled:opacity-50"
+                    >
+                      + Add
+                    </button>
+                  </div>
+                </div>
+                
+                <div className="mt-4 p-3 bg-blue-50 rounded-lg text-xs text-blue-800">
+                  💡 <strong>Gray items with 🔒</strong> are defaults and cannot be deleted.<br/>
+                  <strong>Colored items</strong> are custom - deletable if no bhajans use them.
+                </div>
+              </div>
+              
               {/* USER FEEDBACK CARD */}
               <div className="bg-white rounded-2xl shadow-lg p-6 mb-6 border-2 border-blue-200">
                 <div className="flex items-center justify-between mb-3">
@@ -4663,7 +4986,7 @@ const App = () => {
                       onChange={(e) => setPublicBhajanForm({...publicBhajanForm, deity: e.target.value})}
                       className="w-full px-4 py-3 border-2 border-orange-200 rounded-xl outline-none bg-white"
                     >
-                      {DEITY_OPTIONS.map(d => (
+                      {allDeityOptions.map(d => (
                         <option key={d.value} value={d.value}>{d.value}</option>
                       ))}
                     </select>
@@ -4675,7 +4998,7 @@ const App = () => {
                       onChange={(e) => setPublicBhajanForm({...publicBhajanForm, category: e.target.value})}
                       className="w-full px-4 py-3 border-2 border-orange-200 rounded-xl outline-none bg-white"
                     >
-                      {CATEGORY_OPTIONS.map(c => (
+                      {allCategoryOptions.map(c => (
                         <option key={c} value={c}>{c}</option>
                       ))}
                     </select>
@@ -4741,7 +5064,7 @@ const App = () => {
                 <div>
                   <label className="block text-sm font-semibold text-amber-900 mb-2">Keywords</label>
                   <div className="flex flex-wrap gap-2">
-                    {DEFAULT_KEYWORDS.map(kw => (
+                    {allKeywordOptions.map(kw => (
                       <button
                         key={kw}
                         type="button"
