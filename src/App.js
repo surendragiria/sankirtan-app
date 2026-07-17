@@ -1445,13 +1445,13 @@ const App = () => {
       .trim();
   };
 
-  const applyExtractedText = (rawText, sourceLabel) => {
+  const applyExtractedText = (rawText, sourceLabel, formSetter = setBhajanForm) => {
     const text = cleanupExtractedText(rawText);
     if (!text || text.length < 3) {
       setOcrMessage('⚠️ No readable text found in this ' + sourceLabel + '. Try a clearer photo or type manually.');
       return false;
     }
-    setBhajanForm(prev => {
+    formSetter(prev => {
       const mergedLyrics = prev.lyrics.trim()
         ? prev.lyrics.trim() + '\n\n' + text
         : text;
@@ -1555,7 +1555,7 @@ const App = () => {
     }
   };
 
-  const handlePdfFileForOcr = async (file) => {
+  const handlePdfFileForOcr = async (file, formSetter = setBhajanForm) => {
     if (!file) return;
     setOcrProcessing(true);
     setOcrProgress(0);
@@ -1618,7 +1618,7 @@ const App = () => {
       // Release the PDF document itself
       try { pdf.destroy && pdf.destroy(); } catch (e) {}
 
-      applyExtractedText(extracted, 'PDF');
+      applyExtractedText(extracted, 'PDF', formSetter);
     } catch (err) {
       console.error('PDF import failed:', err);
       setOcrMessage('❌ Could not read this PDF. Check your internet (needed for first-time engine load) or type manually.');
