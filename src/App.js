@@ -70,6 +70,7 @@ const LANGUAGE_OPTIONS = [
 
 // Admin user ID (only this user can manage public library)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
+const APP_VERSION = '2026.07.17.s3';
 
 // Onboarding tour steps
 const ONBOARDING_STEPS = [
@@ -292,6 +293,7 @@ const App = () => {
   });
   const [publicBhajanFormError, setPublicBhajanFormError] = useState('');
   const [publicBhajanFormSaving, setPublicBhajanFormSaving] = useState(false);
+  const [showUpdatePrompt, setShowUpdatePrompt] = useState(false);
   
   // Check if current user is admin (with defensive comparison + debug)
   const isAdmin = useMemo(() => {
@@ -451,6 +453,27 @@ const App = () => {
       window.removeEventListener('offline', handleOffline);
     };
   }, []);
+
+  // ==============================================
+  // VERSION CHECK - Prompt on new deployment
+  // ==============================================
+  useEffect(() => {
+    try {
+      const savedVersion = localStorage.getItem('sankirtan-app-version');
+      if (savedVersion !== APP_VERSION) {
+        setShowUpdatePrompt(true);
+      }
+    } catch (e) {
+      console.log('Version check skipped');
+    }
+  }, []);
+
+  const dismissUpdatePrompt = () => {
+    try {
+      localStorage.setItem('sankirtan-app-version', APP_VERSION);
+    } catch (e) {}
+    setShowUpdatePrompt(false);
+  };
 
   // ==============================================
   // PWA INSTALL PROMPT
@@ -1939,6 +1962,165 @@ const App = () => {
   };
 
   // ==============================================
+  // PUBLIC BHAJAN FORM - HINDI TYPING HANDLERS
+  // ==============================================
+  const handlePublicHindiInput = (e, fieldName) => {
+    const value = e.target.value;
+    const oldValue = publicBhajanForm[fieldName] || '';
+
+    const spaceJustTyped = value.length > oldValue.length && 
+                           (value.endsWith(' ') || value.endsWith('\n') || value.endsWith('.')) &&
+                           !oldValue.endsWith(value.slice(-1));
+
+    setPublicBhajanForm(prev => ({ ...prev, [fieldName]: value }));
+
+    if (!hindiTypingEnabled) {
+      setShowSuggestions(false);
+      return;
+    }
+
+    const cursorPos = e.target.selectionStart;
+
+    if (spaceJustTyped) {
+      const separator = value.slice(-1);
+      const beforeSeparator = value.slice(0, -1);
+
+      let wordStart = beforeSeparator.length;
+      while (wordStart > 0 && beforeSeparator[wordStart - 1] !== ' ' && beforeSeparator[wordStart - 1] !== '\n') {
+        wordStart--;
+      }
+      const lastWord = beforeSeparator.substring(wordStart);
+
+      if (lastWord && /^[a-zA-Z]+$/.test(lastWord)) {
+        const lowerWord = lastWord.toLowerCase();
+        const currentLang = publicBhajanForm.language || 'Hindi';
+        const langObj = LANGUAGE_OPTIONS.find(l => l.value === currentLang);
+        const langCode = langObj?.code || 'hi';
+
+        if (langCode !== 'en') {
+          const cachedSuggestions = suggestionsCache[`${langCode}:${lowerWord}`] || 
+            suggestionsCache[lowerWord] ||
+            (langCode === 'hi' && HINDI_FALLBACK_MAP[lowerWord] ? [HINDI_FALLBACK_MAP[lowerWord]] : null);
+
+          if (cachedSuggestions && cachedSuggestions.length > 0) {
+            const replacement = cachedSuggestions[0];
+            const newValue = beforeSeparator.substring(0, wordStart) + replacement + separator;
+
+            setPublicBhajanForm(prev => ({ ...prev, [fieldName]: newValue }));
+            setShowSuggestions(false);
+            setCurrentWord('');
+
+            setTimeout(() => {
+              const target = e.target;
+              const newCursor = wordStart + replacement.length + 1;
+              target.selectionStart = newCursor;
+              target.selectionEnd = newCursor;
+            }, 0);
+            return;
+          }
+        }
+      }
+
+      setShowSuggestions(false);
+      setCurrentWord('');
+      return;
+    }
+
+    let wordStart = cursorPos;
+    while (wordStart > 0 && value[wordStart - 1] !== ' ' && value[wordStart - 1] !== '\n') {
+      wordStart--;
+    }
+    const wordText = value.substring(wordStart, cursorPos);
+
+    if (wordText && /^[a-zA-Z]+$/.test(wordText) && wordText.length >= 1) {
+      setCurrentWord(wordText);
+      setActiveTypingField(fieldName);
+
+      if (suggestionsAbortRef.current && suggestionsAbortRef.current._timerId) {
+        clearTimeout(suggestionsAbortRef.current._timerId);
+      }
+      const timerId = setTimeout(() => fetchGoogleSuggestions(wordText), 200);
+      suggestionsAbortRef.current = { 
+        _timerId: timerId,
+        abort: () => clearTimeout(timerId)
+      };
+      setShowSuggestions(true);
+    } else {
+      setShowSuggestions(false);
+      setCurrentWord('');
+    }
+  };
+
+  const handlePublicHindiKeyDown = (e, fieldName) => {
+    if (!hindiTypingEnabled) return;
+    if (e.key !== ' ' && e.key !== 'Enter' && e.key !== '.') return;
+
+    const target = e.target;
+    const cursorPos = target.selectionStart;
+    const value = target.value;
+
+    let wordStart = cursorPos - 1;
+    while (wordStart > 0 && value[wordStart - 1] !== ' ' && value[wordStart - 1] !== '\n') {
+      wordStart--;
+    }
+    const currentWordText = value.substring(wordStart, cursorPos);
+
+    if (!currentWordText || !/^[a-zA-Z]+$/.test(currentWordText)) {
+      setShowSuggestions(false);
+      return;
+    }
+
+    const lowerWord = currentWordText.toLowerCase();
+    const cachedSuggestions = suggestionsCache[lowerWord] || 
+      (HINDI_FALLBACK_MAP[lowerWord] ? [HINDI_FALLBACK_MAP[lowerWord]] : null);
+
+    if (cachedSuggestions && cachedSuggestions.length > 0) {
+      e.preventDefault();
+      const replacement = cachedSuggestions[0];
+      const separator = e.key === '.' ? '.' : (e.key === 'Enter' ? '\n' : ' ');
+      const newValue = value.substring(0, wordStart) + replacement + separator + value.substring(cursorPos);
+
+      setPublicBhajanForm(prev => ({ ...prev, [fieldName]: newValue }));
+
+      setShowSuggestions(false);
+      setCurrentWord('');
+
+      setTimeout(() => {
+        const newCursor = wordStart + replacement.length + 1;
+        target.selectionStart = newCursor;
+        target.selectionEnd = newCursor;
+      }, 0);
+    } else {
+      setShowSuggestions(false);
+    }
+  };
+
+  const applyPublicSuggestion = (suggestion, fieldName) => {
+    const fieldElement = document.getElementById(`public-hindi-input-${fieldName}`);
+    if (!fieldElement) return;
+
+    const cursorPos = fieldElement.selectionStart;
+    const value = fieldElement.value;
+
+    let wordStart = cursorPos;
+    while (wordStart > 0 && value[wordStart - 1] !== ' ' && value[wordStart - 1] !== '\n') {
+      wordStart--;
+    }
+
+    const newValue = value.substring(0, wordStart) + suggestion + ' ' + value.substring(cursorPos);
+    setPublicBhajanForm(prev => ({ ...prev, [fieldName]: newValue }));
+
+    setShowSuggestions(false);
+    setCurrentWord('');
+
+    requestAnimationFrame(() => {
+      fieldElement.focus();
+      const newCursor = wordStart + suggestion.length + 1;
+      fieldElement.setSelectionRange(newCursor, newCursor);
+    });
+  };
+
+  // ==============================================
   // PUBLIC LIBRARY OPERATIONS
   // ==============================================
   const openPublicLibrary = () => {
@@ -2989,6 +3171,42 @@ const App = () => {
         )}
         
         {/* ==============================================
+            APP UPDATE PROMPT
+            ============================================== */}
+        {showUpdatePrompt && (
+          <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden">
+              <div className="bg-gradient-to-br from-green-500 to-emerald-500 p-6 text-white text-center">
+                <div className="text-5xl mb-2">🎉</div>
+                <h3 className="text-2xl font-bold">App Updated!</h3>
+                <p className="text-sm text-green-100 mt-1">Sankirtan just got better</p>
+              </div>
+              <div className="p-6">
+                <p className="text-sm text-gray-700 mb-4">
+                  A new version of Sankirtan has been deployed. Here is what is new:
+                </p>
+                <ul className="text-sm text-gray-700 space-y-2 mb-6">
+                  <li className="flex items-start gap-2">
+                    <span className="text-green-500 font-bold">✓</span>
+                    <span>Google Hindi typing now works in Public Library add/edit forms</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-green-500 font-bold">✓</span>
+                    <span>You will now see this prompt every time the app is updated on GitHub</span>
+                  </li>
+                </ul>
+                <button
+                  onClick={dismissUpdatePrompt}
+                  className="w-full bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white font-bold py-3 rounded-xl shadow-lg"
+                >
+                  Awesome, let us go! 🚀
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+                {/* ==============================================
             FEEDBACK MODAL
             ============================================== */}
         {showFeedbackModal && (
@@ -5422,13 +5640,47 @@ const App = () => {
                   <label className="block text-sm font-semibold text-amber-900 mb-1">
                     Title <span className="text-red-500">*</span>
                   </label>
-                  <input
-                    type="text"
-                    value={publicBhajanForm.title}
-                    onChange={(e) => setPublicBhajanForm({...publicBhajanForm, title: e.target.value})}
-                    className="w-full px-4 py-3 border-2 border-orange-200 rounded-xl focus:ring-4 focus:ring-orange-200 focus:border-orange-400 outline-none text-lg"
-                    placeholder="e.g., ॐ जय जगदीश हरे"
-                  />
+                  <div className="relative">
+                    <input
+                      id="public-hindi-input-title"
+                      type="text"
+                      value={publicBhajanForm.title}
+                      onChange={(e) => handlePublicHindiInput(e, 'title')}
+                      onKeyDown={(e) => handlePublicHindiKeyDown(e, 'title')}
+                      onBlur={() => setTimeout(() => setShowSuggestions(false), 300)}
+                      onFocus={() => setActiveTypingField('title')}
+                      className="w-full px-4 py-3 border-2 border-orange-200 rounded-xl focus:ring-4 focus:ring-orange-200 focus:border-orange-400 outline-none text-lg"
+                      placeholder={hindiTypingEnabled ? "Type: om jai jagdish hare" : "e.g., ॐ जय जगदीश हरे"}
+                    />
+                    {hindiTypingEnabled && showSuggestions && activeTypingField === 'title' && transliterationSuggestions.length > 0 && (
+                      <div className="absolute bottom-full left-0 right-0 mb-2 bg-white border-2 border-orange-300 rounded-lg shadow-2xl p-2 flex flex-wrap gap-2 items-center z-30">
+                        <span className="text-xs text-gray-500 mr-1">
+                          <strong>"{currentWord}"</strong> →
+                        </span>
+                        {transliterationSuggestions.map((suggestion, idx) => (
+                          <button
+                            key={idx}
+                            type="button"
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              applyPublicSuggestion(suggestion, 'title');
+                            }}
+                            onTouchStart={(e) => {
+                              e.preventDefault();
+                              applyPublicSuggestion(suggestion, 'title');
+                            }}
+                            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                              idx === 0
+                                ? 'bg-orange-500 text-white hover:bg-orange-600 shadow-md'
+                                : 'bg-orange-100 text-amber-800 hover:bg-orange-200'
+                            }`}
+                          >
+                            {idx === 0 && '⭐ '}{suggestion}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* Deity and Category */}
@@ -5478,13 +5730,47 @@ const App = () => {
                   <label className="block text-sm font-semibold text-amber-900 mb-1">
                     तर्ज़ / धुन (Tune)
                   </label>
-                  <input
-                    type="text"
-                    value={publicBhajanForm.dhun}
-                    onChange={(e) => setPublicBhajanForm({...publicBhajanForm, dhun: e.target.value})}
-                    className="w-full px-4 py-3 border-2 border-orange-200 rounded-xl outline-none"
-                    placeholder="e.g., तर्ज़: तुझे देखा तो..."
-                  />
+                  <div className="relative">
+                    <input
+                      id="public-hindi-input-dhun"
+                      type="text"
+                      value={publicBhajanForm.dhun}
+                      onChange={(e) => handlePublicHindiInput(e, 'dhun')}
+                      onKeyDown={(e) => handlePublicHindiKeyDown(e, 'dhun')}
+                      onBlur={() => setTimeout(() => setShowSuggestions(false), 300)}
+                      onFocus={() => setActiveTypingField('dhun')}
+                      className="w-full px-4 py-3 border-2 border-orange-200 rounded-xl outline-none"
+                      placeholder={hindiTypingEnabled ? "Type in English, press space" : "e.g., तर्ज़: तुझे देखा तो..."}
+                    />
+                    {hindiTypingEnabled && showSuggestions && activeTypingField === 'dhun' && transliterationSuggestions.length > 0 && (
+                      <div className="absolute bottom-full left-0 right-0 mb-2 bg-white border-2 border-orange-300 rounded-lg shadow-2xl p-2 flex flex-wrap gap-2 items-center z-30">
+                        <span className="text-xs text-gray-500 mr-1">
+                          <strong>"{currentWord}"</strong> →
+                        </span>
+                        {transliterationSuggestions.map((suggestion, idx) => (
+                          <button
+                            key={idx}
+                            type="button"
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              applyPublicSuggestion(suggestion, 'dhun');
+                            }}
+                            onTouchStart={(e) => {
+                              e.preventDefault();
+                              applyPublicSuggestion(suggestion, 'dhun');
+                            }}
+                            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                              idx === 0
+                                ? 'bg-orange-500 text-white hover:bg-orange-600 shadow-md'
+                                : 'bg-orange-100 text-amber-800 hover:bg-orange-200'
+                            }`}
+                          >
+                            {idx === 0 && '⭐ '}{suggestion}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* Scale */}
@@ -5587,17 +5873,76 @@ const App = () => {
 
                 {/* Lyrics */}
                 <div>
-                  <label className="block text-sm font-semibold text-amber-900 mb-1">
-                    Lyrics <span className="text-red-500">*</span>
-                  </label>
-                  <textarea
-                    value={publicBhajanForm.lyrics}
-                    onChange={(e) => setPublicBhajanForm({...publicBhajanForm, lyrics: e.target.value})}
-                    rows={10}
-                    className="w-full px-4 py-3 border-2 border-orange-200 rounded-xl outline-none font-mono text-base"
-                    placeholder="भजन के बोल यहाँ लिखें..."
-                    style={{ lineHeight: '1.8' }}
-                  />
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-sm font-semibold text-amber-900">
+                      Lyrics <span className="text-red-500">*</span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setHindiTypingEnabled(!hindiTypingEnabled)}
+                      className={`text-xs font-semibold px-3 py-1 rounded-full transition-all ${
+                        hindiTypingEnabled
+                          ? 'bg-orange-500 text-white shadow-md'
+                          : 'bg-gray-100 text-gray-600 border border-gray-300'
+                      }`}
+                      title={hindiTypingEnabled ? 'Turn off Hindi typing' : 'Turn on Hindi typing'}
+                    >
+                      {hindiTypingEnabled ? '🇮🇳 हिंदी ON' : '🔤 Hindi OFF'}
+                    </button>
+                  </div>
+                  {hindiTypingEnabled && (
+                    <div className="mb-2 p-2 bg-orange-50 border border-orange-200 rounded-lg">
+                      <p className="text-xs text-orange-800">
+                        ✨ Type in English, press <kbd className="bg-white px-1.5 py-0.5 rounded border text-xs">space</kbd> to auto-convert to Hindi
+                      </p>
+                      <p className="text-xs text-orange-600 mt-1">
+                        Example: <code className="bg-white px-1 rounded">jai shri babosa</code> → जय श्री बाबोसा
+                      </p>
+                    </div>
+                  )}
+                  <div className="relative">
+                    <textarea
+                      id="public-hindi-input-lyrics"
+                      value={publicBhajanForm.lyrics}
+                      onChange={(e) => handlePublicHindiInput(e, 'lyrics')}
+                      onKeyDown={(e) => handlePublicHindiKeyDown(e, 'lyrics')}
+                      onBlur={() => setTimeout(() => setShowSuggestions(false), 300)}
+                      onFocus={() => setActiveTypingField('lyrics')}
+                      rows={10}
+                      className="w-full px-4 py-3 border-2 border-orange-200 rounded-xl outline-none font-mono text-base"
+                      placeholder={hindiTypingEnabled ? "Type: jai shri babosa (press space to convert)" : "भजन के बोल यहाँ लिखें..."}
+                      style={{ lineHeight: '1.8' }}
+                    />
+                    {hindiTypingEnabled && showSuggestions && activeTypingField === 'lyrics' && transliterationSuggestions.length > 0 && (
+                      <div className="absolute bottom-full left-0 right-0 mb-2 bg-white border-2 border-orange-400 rounded-xl shadow-2xl p-2 flex flex-wrap gap-2 items-center z-30">
+                        <span className="text-xs text-gray-500 mr-1">
+                          <strong>"{currentWord}"</strong> →
+                        </span>
+                        {transliterationSuggestions.map((suggestion, idx) => (
+                          <button
+                            key={idx}
+                            type="button"
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              applyPublicSuggestion(suggestion, 'lyrics');
+                            }}
+                            onTouchStart={(e) => {
+                              e.preventDefault();
+                              applyPublicSuggestion(suggestion, 'lyrics');
+                            }}
+                            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                              idx === 0
+                                ? 'bg-orange-500 text-white hover:bg-orange-600 shadow-md'
+                                : 'bg-orange-100 text-amber-800 hover:bg-orange-200'
+                            }`}
+                            title={idx === 0 ? 'Default (press space)' : `Alternative ${idx + 1}`}
+                          >
+                            {idx === 0 && '⭐ '}{suggestion}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* Keywords */}
@@ -5812,7 +6157,41 @@ const App = () => {
           </span>
         </div>
       )}
-      <div className="max-w-md w-full">
+      {/* App Update Prompt */}
+      {showUpdatePrompt && (
+        <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden">
+            <div className="bg-gradient-to-br from-green-500 to-emerald-500 p-6 text-white text-center">
+              <div className="text-5xl mb-2">🎉</div>
+              <h3 className="text-2xl font-bold">App Updated!</h3>
+              <p className="text-sm text-green-100 mt-1">Sankirtan just got better</p>
+            </div>
+            <div className="p-6">
+              <p className="text-sm text-gray-700 mb-4">
+                A new version of Sankirtan has been deployed. Here is what is new:
+              </p>
+              <ul className="text-sm text-gray-700 space-y-2 mb-6">
+                <li className="flex items-start gap-2">
+                  <span className="text-green-500 font-bold">✓</span>
+                  <span>Google Hindi typing now works in Public Library add/edit forms</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-green-500 font-bold">✓</span>
+                  <span>You will now see this prompt every time the app is updated on GitHub</span>
+                </li>
+              </ul>
+              <button
+                onClick={dismissUpdatePrompt}
+                className="w-full bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white font-bold py-3 rounded-xl shadow-lg"
+              >
+                Awesome, let us go! 🚀
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+            <div className="max-w-md w-full">
         <div className="bg-white rounded-3xl shadow-2xl overflow-hidden">
           <div className="bg-gradient-to-br from-orange-500 to-amber-500 p-8 text-white text-center">
             <div className="text-7xl mb-2">🕉️</div>
