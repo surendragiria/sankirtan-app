@@ -11,6 +11,10 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 // 3. Onboarding tour auto-plays ONLY on the very first login
 //    (flag stored in Firestore profile + localStorage). Replay it
 //    anytime via the ⓘ button in the header.
+// 4. Add bhajans from Image / PDF / Camera: on-device OCR
+//    (Tesseract.js + pdf.js via CDN) extracts lyrics text into the
+//    Add/Edit form. No files are uploaded - only text is saved to
+//    Firestore, so it works fully within the free Spark plan.
 // ==============================================
 
 // Constants for dropdowns
@@ -335,6 +339,14 @@ const App = () => {
   const [suggestionsCache, setSuggestionsCache] = useState({});
   const [activeTypingField, setActiveTypingField] = useState(null); // 'lyrics', 'title', 'dhun'
   const suggestionsAbortRef = useRef(null);
+
+  // OCR / File import states (image, PDF, camera → lyrics text)
+  const [ocrProcessing, setOcrProcessing] = useState(false);
+  const [ocrProgress, setOcrProgress] = useState(0);
+  const [ocrMessage, setOcrMessage] = useState('');
+  const cameraInputRef = useRef(null);
+  const imageInputRef = useRef(null);
+  const pdfInputRef = useRef(null);
   
   // Save Hindi typing preference
   useEffect(() => {
@@ -1369,6 +1381,167 @@ const App = () => {
   };
 
   // ==============================================
+  // OCR / FILE IMPORT (Image, PDF, Camera → Lyrics text)
+  // Text is extracted ON THE USER'S DEVICE (Tesseract.js + pdf.js
+  // loaded from CDN on demand). No files are uploaded or stored
+  // anywhere - only the extracted text is saved to Firestore,
+  // exactly like typed lyrics. Storage impact: negligible, fully
+  // within the free Firebase Spark plan.
+  // ==============================================
+  const loadScriptOnce = (src, globalName) => {
+    return new Promise((resolve, reject) => {
+      if (globalName && window[globalName]) return resolve();
+      const existing = document.querySelector('script[data-ocr-src="' + src + '"]');
+      if (existing) {
+        existing.addEventListener('load', () => resolve());
+        existing.addEventListener('error', () => reject(new Error('Failed to load ' + src)));
+        return;
+      }
+      const s = document.createElement('script');
+      s.src = src;
+      s.async = true;
+      s.dataset.ocrSrc = src;
+      s.onload = () => resolve();
+      s.onerror = () => reject(new Error('Failed to load ' + src));
+      document.head.appendChild(s);
+    });
+  };
+
+  const cleanupExtractedText = (text) => {
+    return (text || '')
+      .replace(/\r/g, '')
+      .split('\n')
+      .map(line => line.replace(/\s+/g, ' ').trim())
+      .join('\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+  };
+
+  const applyExtractedText = (rawText, sourceLabel) => {
+    const text = cleanupExtractedText(rawText);
+    if (!text || text.length < 3) {
+      setOcrMessage('⚠️ No readable text found in this ' + sourceLabel + '. Try a clearer photo or type manually.');
+      return false;
+    }
+    setBhajanForm(prev => {
+      const mergedLyrics = prev.lyrics.trim()
+        ? prev.lyrics.trim() + '\n\n' + text
+        : text;
+      let title = prev.title;
+      // Suggest a title from the first line if the title is still empty
+      if (!title.trim()) {
+        const firstLine = text.split('\n').map(l => l.trim()).find(l => l.length >= 3) || '';
+        title = firstLine.slice(0, 60);
+      }
+      return { ...prev, lyrics: mergedLyrics, title };
+    });
+    setOcrMessage('✅ Text extracted from ' + sourceLabel + '! Please review & edit below, then save.');
+    return true;
+  };
+
+  // Downscale large photos so OCR runs faster and more accurately
+  const fileToOptimizedDataUrl = (file, maxDim = 1800) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const img = new Image();
+        img.onload = () => {
+          const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.round(img.width * scale);
+          canvas.height = Math.round(img.height * scale);
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          resolve(canvas.toDataURL('image/jpeg', 0.9));
+        };
+        img.onerror = () => reject(new Error('Could not read this image file'));
+        img.src = reader.result;
+      };
+      reader.onerror = () => reject(new Error('Could not read this file'));
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const ocrImageSource = async (imageSource, sourceLabel) => {
+    await loadScriptOnce('https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js', 'Tesseract');
+    const result = await window.Tesseract.recognize(imageSource, 'hin+eng', {
+      logger: (m) => {
+        if (m.status === 'recognizing text') {
+          const pct = Math.round((m.progress || 0) * 100);
+          setOcrProgress(pct);
+          setOcrMessage('🔍 Reading text from ' + sourceLabel + '... ' + pct + '%');
+        } else if (m.status && m.status.indexOf('loading') !== -1) {
+          setOcrMessage('⏳ Loading OCR engine (first time may take a few seconds)...');
+        }
+      }
+    });
+    return result && result.data ? result.data.text : '';
+  };
+
+  const handleImageFileForOcr = async (file, sourceLabel) => {
+    if (!file) return;
+    setOcrProcessing(true);
+    setOcrProgress(0);
+    setOcrMessage('⏳ Preparing ' + sourceLabel + '...');
+    try {
+      const dataUrl = await fileToOptimizedDataUrl(file);
+      const text = await ocrImageSource(dataUrl, sourceLabel);
+      applyExtractedText(text, sourceLabel);
+    } catch (err) {
+      console.error('OCR failed:', err);
+      setOcrMessage('❌ Could not read text from this file. Check your internet (needed for first-time engine load) or type manually.');
+    } finally {
+      setOcrProcessing(false);
+    }
+  };
+
+  const handlePdfFileForOcr = async (file) => {
+    if (!file) return;
+    setOcrProcessing(true);
+    setOcrProgress(0);
+    setOcrMessage('⏳ Reading PDF...');
+    try {
+      await loadScriptOnce('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js', 'pdfjsLib');
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+      const buffer = await file.arrayBuffer();
+      const pdf = await window.pdfjsLib.getDocument({ data: buffer }).promise;
+      const maxPages = Math.min(pdf.numPages, 10); // safety cap
+      let extracted = '';
+
+      // 1) Try embedded text first (digital PDFs)
+      for (let p = 1; p <= maxPages; p++) {
+        setOcrMessage('📄 Reading page ' + p + ' of ' + maxPages + '...');
+        const page = await pdf.getPage(p);
+        const content = await page.getTextContent();
+        extracted += content.items.map(it => it.str).join(' ') + '\n\n';
+      }
+
+      // 2) Scanned PDF (no embedded text) → OCR each page image
+      if (cleanupExtractedText(extracted).length < 10) {
+        extracted = '';
+        for (let p = 1; p <= maxPages; p++) {
+          setOcrMessage('🔍 Scanning page ' + p + ' of ' + maxPages + ' for text...');
+          const page = await pdf.getPage(p);
+          const viewport = page.getViewport({ scale: 2 });
+          const canvas = document.createElement('canvas');
+          canvas.width = viewport.width;
+          canvas.height = viewport.height;
+          await page.render({ canvasContext: canvas.getContext('2d'), viewport: viewport }).promise;
+          extracted += (await ocrImageSource(canvas.toDataURL('image/png'), 'page ' + p)) + '\n\n';
+        }
+      }
+
+      applyExtractedText(extracted, 'PDF');
+    } catch (err) {
+      console.error('PDF import failed:', err);
+      setOcrMessage('❌ Could not read this PDF. Check your internet (needed for first-time engine load) or type manually.');
+    } finally {
+      setOcrProcessing(false);
+    }
+  };
+
+  // ==============================================
   // BHAJAN CRUD OPERATIONS
   // ==============================================
   const openAddBhajan = () => {
@@ -1385,6 +1558,9 @@ const App = () => {
     });
     setBhajanFormError('');
     setEditingBhajan(null);
+    setOcrMessage('');
+    setOcrProgress(0);
+    setOcrProcessing(false);
     setCurrentView('add-bhajan');
   };
 
@@ -3697,6 +3873,92 @@ const App = () => {
                     </button>
                   </div>
                   
+                  {/* Add lyrics from Image / PDF / Camera (on-device OCR - no files uploaded) */}
+                  <div className="mb-3 p-3 bg-blue-50 border-2 border-blue-200 rounded-xl">
+                    <p className="text-xs font-semibold text-blue-900 mb-2">
+                      📥 Auto-fill lyrics from a photo, PDF, or camera — text is read on your device, nothing is uploaded or stored as a file
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        disabled={ocrProcessing}
+                        onClick={() => cameraInputRef.current && cameraInputRef.current.click()}
+                        className="bg-blue-500 hover:bg-blue-600 text-white font-semibold px-3 py-2 rounded-lg text-sm disabled:opacity-50 flex items-center gap-1"
+                      >
+                        📷 Camera
+                      </button>
+                      <button
+                        type="button"
+                        disabled={ocrProcessing}
+                        onClick={() => imageInputRef.current && imageInputRef.current.click()}
+                        className="bg-blue-500 hover:bg-blue-600 text-white font-semibold px-3 py-2 rounded-lg text-sm disabled:opacity-50 flex items-center gap-1"
+                      >
+                        🖼️ Upload Image
+                      </button>
+                      <button
+                        type="button"
+                        disabled={ocrProcessing}
+                        onClick={() => pdfInputRef.current && pdfInputRef.current.click()}
+                        className="bg-blue-500 hover:bg-blue-600 text-white font-semibold px-3 py-2 rounded-lg text-sm disabled:opacity-50 flex items-center gap-1"
+                      >
+                        📄 Upload PDF
+                      </button>
+                    </div>
+
+                    {/* Hidden file inputs */}
+                    <input
+                      ref={cameraInputRef}
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      className="hidden"
+                      onChange={(e) => {
+                        const f = e.target.files && e.target.files[0];
+                        if (f) handleImageFileForOcr(f, 'photo');
+                        e.target.value = '';
+                      }}
+                    />
+                    <input
+                      ref={imageInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const f = e.target.files && e.target.files[0];
+                        if (f) handleImageFileForOcr(f, 'image');
+                        e.target.value = '';
+                      }}
+                    />
+                    <input
+                      ref={pdfInputRef}
+                      type="file"
+                      accept="application/pdf,.pdf"
+                      className="hidden"
+                      onChange={(e) => {
+                        const f = e.target.files && e.target.files[0];
+                        if (f) handlePdfFileForOcr(f);
+                        e.target.value = '';
+                      }}
+                    />
+
+                    {ocrProcessing && (
+                      <div className="mt-2">
+                        <div className="w-full bg-blue-200 rounded-full h-2">
+                          <div
+                            className="bg-blue-600 h-2 rounded-full transition-all"
+                            style={{ width: ocrProgress + '%' }}
+                          ></div>
+                        </div>
+                      </div>
+                    )}
+                    {ocrMessage && (
+                      <p className="text-xs font-semibold text-blue-900 mt-2">{ocrMessage}</p>
+                    )}
+                    <p className="text-xs text-blue-700 mt-2">
+                      💡 Works best with clear, printed Hindi/English text. Handwriting may need manual correction. Scanned PDFs supported (up to 10 pages).
+                    </p>
+                  </div>
+
                   {hindiTypingEnabled && (
                     <div className="mb-2 p-2 bg-orange-50 border border-orange-200 rounded-lg">
                       <p className="text-xs text-orange-800">
