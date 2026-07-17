@@ -4010,12 +4010,12 @@ const App = () => {
                 </div>
               </div>
 
-              {/* Filters */}
-              <div className="flex flex-wrap gap-2 mb-6">
+              {/* Filters - single row: Deity | Category | Keyword */}
+              <div className="flex flex-wrap gap-2 mb-3">
                 <select
                   value={filterDeity}
                   onChange={(e) => setFilterDeity(e.target.value)}
-                  className="px-3 py-2 border-2 border-orange-200 rounded-lg focus:ring-2 focus:ring-orange-200 focus:border-orange-400 outline-none text-sm bg-white"
+                  className="flex-1 min-w-[110px] px-3 py-2 border-2 border-orange-200 rounded-lg focus:ring-2 focus:ring-orange-200 focus:border-orange-400 outline-none text-sm bg-white"
                 >
                   <option value="">All Deities</option>
                   {allDeityOptions.map(d => (
@@ -4026,11 +4026,22 @@ const App = () => {
                 <select
                   value={filterCategory}
                   onChange={(e) => setFilterCategory(e.target.value)}
-                  className="px-3 py-2 border-2 border-orange-200 rounded-lg focus:ring-2 focus:ring-orange-200 focus:border-orange-400 outline-none text-sm bg-white"
+                  className="flex-1 min-w-[110px] px-3 py-2 border-2 border-orange-200 rounded-lg focus:ring-2 focus:ring-orange-200 focus:border-orange-400 outline-none text-sm bg-white"
                 >
                   <option value="">All Categories</option>
                   {allCategoryOptions.map(c => (
                     <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+
+                <select
+                  value={libraryFilterKeyword}
+                  onChange={(e) => setLibraryFilterKeyword(e.target.value)}
+                  className="flex-1 min-w-[110px] px-3 py-2 border-2 border-orange-200 rounded-lg focus:ring-2 focus:ring-orange-200 focus:border-orange-400 outline-none text-sm bg-white"
+                >
+                  <option value="">All Keywords</option>
+                  {allKeywordOptions.map(kw => (
+                    <option key={kw} value={kw}>#{kw}</option>
                   ))}
                 </select>
 
@@ -4044,29 +4055,27 @@ const App = () => {
                     }}
                     className="px-3 py-2 bg-red-50 border-2 border-red-200 text-red-700 rounded-lg text-sm hover:bg-red-100"
                   >
-                    Clear filters
+                    Clear
                   </button>
                 )}
               </div>
 
-              {/* Keyword Chips - Quick Filter */}
-              <div className="mb-6">
-                <p className="text-xs text-amber-700 font-semibold mb-2">Quick Keywords (tap to filter):</p>
-                <div className="flex flex-wrap gap-2">
-                  {allKeywordOptions.map(kw => (
-                    <button
-                      key={kw}
-                      onClick={() => setLibraryFilterKeyword(libraryFilterKeyword === kw ? '' : kw)}
-                      className={`px-3 py-1 rounded-full text-xs font-semibold transition-all ${
-                        libraryFilterKeyword === kw
-                          ? 'bg-orange-500 text-white shadow-md'
-                          : 'bg-orange-50 text-amber-800 border border-orange-200 hover:bg-orange-100'
-                      }`}
-                    >
-                      {libraryFilterKeyword === kw ? '✓ ' : ''}#{kw}
-                    </button>
-                  ))}
-                </div>
+              {/* Quick Keywords - top 4 chips only. Full keyword list is
+                  available in the "All Keywords" dropdown in the filters row above. */}
+              <div className="mb-6 flex flex-wrap gap-2 items-center">
+                {allKeywordOptions.slice(0, 4).map(kw => (
+                  <button
+                    key={kw}
+                    onClick={() => setLibraryFilterKeyword(libraryFilterKeyword === kw ? '' : kw)}
+                    className={`px-3 py-1 rounded-full text-xs font-semibold transition-all ${
+                      libraryFilterKeyword === kw
+                        ? 'bg-orange-500 text-white shadow-md'
+                        : 'bg-orange-50 text-amber-800 border border-orange-200 hover:bg-orange-100'
+                    }`}
+                  >
+                    {libraryFilterKeyword === kw ? '✓ ' : ''}#{kw}
+                  </button>
+                ))}
               </div>
 
               {/* Bhajans List */}
@@ -4211,27 +4220,24 @@ const App = () => {
                   </div>
                 )}
 
-                <div className="flex flex-wrap gap-2 mb-6">
-                  <span className={`px-3 py-1 rounded-full text-sm font-semibold ${darkMode ? 'bg-orange-900 text-orange-200' : 'bg-orange-100 text-orange-800'}`}>
-                    {selectedBhajan.deity}
-                  </span>
-                  <span className={`px-3 py-1 rounded-full text-sm font-semibold ${darkMode ? 'bg-amber-900 text-amber-200' : 'bg-amber-100 text-amber-800'}`}>
-                    📖 {selectedBhajan.category}
-                  </span>
-                  {selectedBhajan.language && (
-                    <span className={`px-3 py-1 rounded-full text-sm font-semibold ${darkMode ? 'bg-indigo-900 text-indigo-200' : 'bg-indigo-100 text-indigo-800'}`}>
-                      🗣️ {selectedBhajan.language}
-                    </span>
-                  )}
+                {/* Scale / Raag - compact single-line display. Shows the scale
+                    when set; otherwise a small "+ Add Scale" affordance that
+                    opens the edit form. Kept small so it doesn't reintroduce
+                    the clutter of the old badges strip. */}
+                <div className="mb-4 flex items-center gap-2">
                   {selectedBhajan.scale ? (
-                    <span className={`px-3 py-1 rounded-full text-sm font-semibold ${darkMode ? 'bg-purple-900 text-purple-200' : 'bg-purple-100 text-purple-800'}`}>
+                    <button
+                      onClick={() => openEditBhajan(selectedBhajan)}
+                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold transition-colors ${darkMode ? 'bg-purple-900 text-purple-200 hover:bg-purple-800' : 'bg-purple-100 text-purple-800 hover:bg-purple-200'}`}
+                      title="Click to change scale/raag"
+                    >
                       🎵 Scale: {selectedBhajan.scale}
-                    </span>
+                    </button>
                   ) : (
                     <button
                       onClick={() => openEditBhajan(selectedBhajan)}
-                      className={`px-3 py-1 rounded-full text-sm font-semibold border border-dashed ${darkMode ? 'bg-gray-700 text-gray-400 border-gray-500 hover:bg-gray-600' : 'bg-gray-100 text-gray-600 border-gray-400 hover:bg-purple-100 hover:text-purple-800'}`}
-                      title="Click to add scale/raag"
+                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold border border-dashed transition-colors ${darkMode ? 'bg-transparent text-gray-400 border-gray-500 hover:bg-gray-700 hover:text-gray-200' : 'bg-transparent text-gray-500 border-gray-400 hover:bg-purple-50 hover:text-purple-700 hover:border-purple-400'}`}
+                      title="Add scale/raag for this bhajan"
                     >
                       + Add Scale
                     </button>
@@ -5211,12 +5217,6 @@ const App = () => {
                     >
                       + Add Bhajan
                     </button>
-                    <button
-                      onClick={openAdminPanel}
-                      className="bg-purple-100 hover:bg-purple-200 text-purple-700 font-semibold px-4 py-2 rounded-xl text-sm flex items-center gap-1"
-                    >
-                      🔧 Admin Panel
-                    </button>
                   </div>
                 )}
               </div>
@@ -5328,8 +5328,8 @@ const App = () => {
                 )}
               </div>
 
-              {/* Quick Keywords - top 4 as chips + "More" dropdown for rest.
-                  Users hit the common tags without scanning a long chip list. */}
+              {/* Quick Keywords - top 4 chips only. Full keyword list is
+                  available in the "All Keywords" dropdown in the filters row above. */}
               <div className="mb-6 flex flex-wrap gap-2 items-center">
                 {allKeywordOptions.slice(0, 4).map(kw => (
                   <button
@@ -5344,22 +5344,6 @@ const App = () => {
                     {publicFilterKeyword === kw ? '✓ ' : ''}#{kw}
                   </button>
                 ))}
-                {allKeywordOptions.length > 4 && (
-                  <select
-                    value={
-                      allKeywordOptions.slice(0, 4).includes(publicFilterKeyword)
-                        ? ''
-                        : (publicFilterKeyword || '')
-                    }
-                    onChange={(e) => setPublicFilterKeyword(e.target.value)}
-                    className="px-2 py-1 rounded-full text-xs font-semibold bg-orange-50 border border-orange-200 text-amber-800 hover:bg-orange-100 outline-none cursor-pointer"
-                  >
-                    <option value="">+ More keywords</option>
-                    {allKeywordOptions.slice(4).map(kw => (
-                      <option key={kw} value={kw}>#{kw}</option>
-                    ))}
-                  </select>
-                )}
               </div>
 
               {/* Public Bhajans List */}
@@ -5554,23 +5538,6 @@ const App = () => {
                     </p>
                   </div>
                 )}
-
-                <div className="flex flex-wrap gap-2 mb-6">
-                  <span className={`px-3 py-1 rounded-full text-sm font-semibold ${darkMode ? 'bg-orange-900 text-orange-200' : 'bg-orange-100 text-orange-800'}`}>
-                    {selectedPublicBhajan.deity}
-                  </span>
-                  <span className={`px-3 py-1 rounded-full text-sm font-semibold ${darkMode ? 'bg-amber-900 text-amber-200' : 'bg-amber-100 text-amber-800'}`}>
-                    📖 {selectedPublicBhajan.category}
-                  </span>
-                  {selectedPublicBhajan.language && (
-                    <span className={`px-3 py-1 rounded-full text-sm font-semibold ${darkMode ? 'bg-indigo-900 text-indigo-200' : 'bg-indigo-100 text-indigo-800'}`}>
-                      🗣️ {selectedPublicBhajan.language}
-                    </span>
-                  )}
-                  <span className={`px-3 py-1 rounded-full text-sm font-semibold ${darkMode ? 'bg-blue-900 text-blue-200' : 'bg-blue-100 text-blue-800'}`}>
-                    🌐 Public
-                  </span>
-                </div>
 
                 <div className={`border-t pt-4 ${darkMode ? 'border-gray-700' : 'border-orange-100'}`}>
                   <pre
