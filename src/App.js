@@ -347,6 +347,11 @@ const App = () => {
   const cameraInputRef = useRef(null);
   const imageInputRef = useRef(null);
   const pdfInputRef = useRef(null);
+
+  // NEW: Refs for public bhajan form OCR inputs
+  const publicCameraInputRef = useRef(null);
+  const publicImageInputRef = useRef(null);
+  const publicPdfInputRef = useRef(null);
   
   // Save Hindi typing preference
   useEffect(() => {
@@ -1478,7 +1483,7 @@ const App = () => {
     return result && result.data ? result.data.text : '';
   };
 
-  const handleImageFileForOcr = async (file, sourceLabel) => {
+  const handleImageFileForOcr = async (file, sourceLabel, formSetter = setBhajanForm) => {
     if (!file) return;
     setOcrProcessing(true);
     setOcrProgress(0);
@@ -1486,7 +1491,7 @@ const App = () => {
     try {
       const dataUrl = await fileToOptimizedDataUrl(file);
       const text = await ocrImageSource(dataUrl, sourceLabel);
-      applyExtractedText(text, sourceLabel);
+      applyExtractedText(text, sourceLabel, formSetter);
     } catch (err) {
       console.error('OCR failed:', err);
       setOcrMessage('❌ Could not read text from this file. Check your internet (needed for first-time engine load) or type manually.');
@@ -5492,6 +5497,92 @@ const App = () => {
                     className="w-full px-4 py-3 border-2 border-orange-200 rounded-xl outline-none"
                     placeholder="e.g., Raag Yaman, C# Scale"
                   />
+                </div>
+
+                {/* NEW: Add lyrics from Image / PDF / Camera (on-device OCR) */}
+                <div className="mb-3 p-3 bg-blue-50 border-2 border-blue-200 rounded-xl">
+                  <p className="text-xs font-semibold text-blue-900 mb-2">
+                    📥 Auto-fill lyrics from a photo, PDF, or camera — text is read on your device, nothing is uploaded or stored as a file
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      disabled={ocrProcessing}
+                      onClick={() => publicCameraInputRef.current && publicCameraInputRef.current.click()}
+                      className="bg-blue-500 hover:bg-blue-600 text-white font-semibold px-3 py-2 rounded-lg text-sm disabled:opacity-50 flex items-center gap-1"
+                    >
+                      📷 Camera
+                    </button>
+                    <button
+                      type="button"
+                      disabled={ocrProcessing}
+                      onClick={() => publicImageInputRef.current && publicImageInputRef.current.click()}
+                      className="bg-blue-500 hover:bg-blue-600 text-white font-semibold px-3 py-2 rounded-lg text-sm disabled:opacity-50 flex items-center gap-1"
+                    >
+                      🖼️ Upload Image
+                    </button>
+                    <button
+                      type="button"
+                      disabled={ocrProcessing}
+                      onClick={() => publicPdfInputRef.current && publicPdfInputRef.current.click()}
+                      className="bg-blue-500 hover:bg-blue-600 text-white font-semibold px-3 py-2 rounded-lg text-sm disabled:opacity-50 flex items-center gap-1"
+                    >
+                      📄 Upload PDF
+                    </button>
+                  </div>
+
+                  {/* Hidden file inputs for public form */}
+                  <input
+                    ref={publicCameraInputRef}
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files && e.target.files[0];
+                      if (f) handleImageFileForOcr(f, 'photo', setPublicBhajanForm);
+                      e.target.value = '';
+                    }}
+                  />
+                  <input
+                    ref={publicImageInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files && e.target.files[0];
+                      if (f) handleImageFileForOcr(f, 'image', setPublicBhajanForm);
+                      e.target.value = '';
+                    }}
+                  />
+                  <input
+                    ref={publicPdfInputRef}
+                    type="file"
+                    accept="application/pdf,.pdf"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files && e.target.files[0];
+                      if (f) handlePdfFileForOcr(f, setPublicBhajanForm);
+                      e.target.value = '';
+                    }}
+                  />
+
+                  {ocrProcessing && (
+                    <div className="mt-2">
+                      <div className="w-full bg-blue-200 rounded-full h-2">
+                        <div
+                          className="bg-blue-600 h-2 rounded-full transition-all"
+                          style={{ width: ocrProgress + '%' }}
+                        ></div>
+                      </div>
+                    </div>
+                  )}
+                  {ocrMessage && (
+                    <p className="text-xs font-semibold text-blue-900 mt-2">{ocrMessage}</p>
+                  )}
+                  <p className="text-xs text-blue-700 mt-2">
+                    💡 Works best with clear, printed Hindi/English text. Handwriting may need manual correction. Scanned PDFs supported (up to 10 pages).
+                  </p>
                 </div>
 
                 {/* Lyrics */}
