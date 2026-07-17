@@ -3989,9 +3989,9 @@ const App = () => {
                       style={{ lineHeight: '1.8' }}
                     />
                     
-                    {/* Hindi Suggestions Popup - Sticky floating at top of viewport to avoid keyboard */}
+                    {/* Hindi Suggestions Popup - positioned above textarea */}
                     {hindiTypingEnabled && showSuggestions && activeTypingField === 'lyrics' && transliterationSuggestions.length > 0 && (
-                      <div className="fixed top-16 left-2 right-2 md:left-1/4 md:right-1/4 z-50 bg-white border-2 border-orange-400 rounded-xl shadow-2xl p-2 flex flex-wrap gap-2 items-center">
+                      <div className="absolute bottom-full left-0 right-0 mb-2 bg-white border-2 border-orange-400 rounded-xl shadow-2xl p-2 flex flex-wrap gap-2 items-center z-30">
                         <span className="text-xs text-gray-500 mr-1">
                           <strong>"{currentWord}"</strong> →
                         </span>
@@ -5400,7 +5400,7 @@ const App = () => {
             ============================================== */}
         {showPublicBhajanForm && isAdmin && (
           <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 overflow-y-auto">
-            <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full my-8">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full my-8 max-h-[90vh] overflow-y-auto">
               <div className="p-4 border-b border-orange-100 flex items-center justify-between sticky top-0 bg-white rounded-t-2xl z-10">
                 <h3 className="text-lg font-bold text-amber-900">
                   {editingPublicBhajan ? '✏️ Edit Public Bhajan' : '➕ Add Public Bhajan'}
