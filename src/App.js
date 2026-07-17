@@ -1491,18 +1491,50 @@ const App = () => {
   };
 
   const ocrImageSource = async (imageSource, sourceLabel) => {
+    // Check if Tesseract is already loaded (subsequent uses)
+    const isFirstUse = !window.Tesseract;
+    if (isFirstUse) {
+      setOcrMessage('📥 Downloading OCR engine (~2 MB, one-time only). Next time will be instant...');
+      setOcrProgress(0);
+    }
     await loadScriptOnce('https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js', 'Tesseract');
+
+    // Check if language files are cached (Tesseract stores them in browser)
+    // Language files are ~15-20 MB total for Hindi + English
+    const langModelsCached = localStorage.getItem('sankirtan-tesseract-langs-cached');
+
     const result = await window.Tesseract.recognize(imageSource, 'hin+eng', {
       logger: (m) => {
+        // Detailed status messages so users know what's happening
         if (m.status === 'recognizing text') {
           const pct = Math.round((m.progress || 0) * 100);
           setOcrProgress(pct);
           setOcrMessage('🔍 Reading text from ' + sourceLabel + '... ' + pct + '%');
+        } else if (m.status === 'loading tesseract core') {
+          setOcrMessage('⏳ Loading OCR core engine...');
+        } else if (m.status === 'initializing tesseract') {
+          setOcrMessage('⚙️ Initializing OCR engine...');
+        } else if (m.status === 'loading language traineddata') {
+          const pct = Math.round((m.progress || 0) * 100);
+          if (!langModelsCached) {
+            setOcrMessage('📥 Downloading Hindi + English language data (~15 MB, one-time)... ' + pct + '%');
+          } else {
+            setOcrMessage('📚 Loading language data from cache... ' + pct + '%');
+          }
+          setOcrProgress(pct);
+        } else if (m.status === 'initializing api') {
+          setOcrMessage('⚙️ Preparing OCR engine...');
         } else if (m.status && m.status.indexOf('loading') !== -1) {
-          setOcrMessage('⏳ Loading OCR engine (first time may take a few seconds)...');
+          setOcrMessage('⏳ ' + m.status + '...');
         }
       }
     });
+
+    // Mark language models as cached for next time
+    if (!langModelsCached) {
+      try { localStorage.setItem('sankirtan-tesseract-langs-cached', 'true'); } catch (e) {}
+    }
+
     return result && result.data ? result.data.text : '';
   };
 
@@ -1534,7 +1566,16 @@ const App = () => {
 
       const buffer = await file.arrayBuffer();
       const pdf = await window.pdfjsLib.getDocument({ data: buffer }).promise;
-      const maxPages = Math.min(pdf.numPages, 10); // safety cap
+      const PAGE_LIMIT = 10;
+      const maxPages = Math.min(pdf.numPages, PAGE_LIMIT); // safety cap
+
+      // Warn user if PDF has more pages than we'll process (silent truncation is bad UX)
+      if (pdf.numPages > PAGE_LIMIT) {
+        setOcrMessage('⚠️ PDF has ' + pdf.numPages + ' pages. Processing first ' + PAGE_LIMIT + ' only. To import more, split the PDF or upload the rest separately.');
+        // Give user a moment to read the warning
+        await new Promise(r => setTimeout(r, 2500));
+      }
+
       let extracted = '';
 
       // 1) Try embedded text first (digital PDFs)
@@ -1543,6 +1584,8 @@ const App = () => {
         const page = await pdf.getPage(p);
         const content = await page.getTextContent();
         extracted += content.items.map(it => it.str).join(' ') + '\n\n';
+        // Explicitly clean up page to free memory
+        try { page.cleanup && page.cleanup(); } catch (e) {}
       }
 
       // 2) Scanned PDF (no embedded text) → OCR each page image
@@ -1555,10 +1598,25 @@ const App = () => {
           const canvas = document.createElement('canvas');
           canvas.width = viewport.width;
           canvas.height = viewport.height;
-          await page.render({ canvasContext: canvas.getContext('2d'), viewport: viewport }).promise;
-          extracted += (await ocrImageSource(canvas.toDataURL('image/png'), 'page ' + p)) + '\n\n';
+          const ctx = canvas.getContext('2d');
+          await page.render({ canvasContext: ctx, viewport: viewport }).promise;
+          const dataUrl = canvas.toDataURL('image/png');
+          extracted += (await ocrImageSource(dataUrl, 'page ' + p)) + '\n\n';
+
+          // MEMORY FIX: Explicitly release canvas + page memory before next iteration.
+          // Without this, mobile browsers accumulate ~15 MB per page and can crash on
+          // multi-page scanned PDFs. Setting canvas dimensions to 0 releases GPU/CPU memory.
+          try {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            canvas.width = 0;
+            canvas.height = 0;
+            page.cleanup && page.cleanup();
+          } catch (e) { /* best effort */ }
         }
       }
+
+      // Release the PDF document itself
+      try { pdf.destroy && pdf.destroy(); } catch (e) {}
 
       applyExtractedText(extracted, 'PDF');
     } catch (err) {
@@ -4101,6 +4159,14 @@ const App = () => {
                     <p className="text-xs font-semibold text-blue-900 mb-2">
                       📥 Auto-fill lyrics from a photo, PDF, or camera — text is read on your device, nothing is uploaded or stored as a file
                     </p>
+
+                    {/* First-time warning about OCR engine download */}
+                    {!localStorage.getItem('sankirtan-tesseract-langs-cached') && !ocrProcessing && (
+                      <div className="mb-2 p-2 bg-amber-50 border border-amber-300 rounded-lg text-xs text-amber-900">
+                        ⚠️ <strong>First-time use:</strong> The OCR engine (~15 MB) will download once and be cached. Please use WiFi if possible.
+                      </div>
+                    )}
+
                     <div className="flex flex-wrap gap-2">
                       <button
                         type="button"
@@ -4165,16 +4231,22 @@ const App = () => {
                     />
 
                     {ocrProcessing && (
-                      <div className="mt-2">
-                        <div className="w-full bg-blue-200 rounded-full h-2">
+                      <div className="mt-3 p-3 bg-white border-2 border-blue-300 rounded-lg">
+                        <div className="w-full bg-blue-100 rounded-full h-3 mb-2">
                           <div
-                            className="bg-blue-600 h-2 rounded-full transition-all"
+                            className="bg-gradient-to-r from-blue-500 to-blue-600 h-3 rounded-full transition-all"
                             style={{ width: ocrProgress + '%' }}
                           ></div>
                         </div>
+                        <p className="text-xs font-semibold text-blue-900">{ocrMessage || 'Processing...'}</p>
+                        {!localStorage.getItem('sankirtan-tesseract-langs-cached') && (
+                          <p className="text-[10px] text-blue-700 mt-1">
+                            💡 First-time setup takes 30-60 seconds. Future uses will be instant.
+                          </p>
+                        )}
                       </div>
                     )}
-                    {ocrMessage && (
+                    {!ocrProcessing && ocrMessage && (
                       <p className="text-xs font-semibold text-blue-900 mt-2">{ocrMessage}</p>
                     )}
                     <p className="text-xs text-blue-700 mt-2">
@@ -5790,6 +5862,14 @@ const App = () => {
                   <p className="text-xs font-semibold text-blue-900 mb-2">
                     📥 Auto-fill lyrics from a photo, PDF, or camera — text is read on your device, nothing is uploaded or stored as a file
                   </p>
+
+                  {/* First-time warning about OCR engine download */}
+                  {!localStorage.getItem('sankirtan-tesseract-langs-cached') && !ocrProcessing && (
+                    <div className="mb-2 p-2 bg-amber-50 border border-amber-300 rounded-lg text-xs text-amber-900">
+                      ⚠️ <strong>First-time use:</strong> The OCR engine (~15 MB) will download once and be cached. Please use WiFi if possible.
+                    </div>
+                  )}
+
                   <div className="flex flex-wrap gap-2">
                     <button
                       type="button"
@@ -5854,16 +5934,22 @@ const App = () => {
                   />
 
                   {ocrProcessing && (
-                    <div className="mt-2">
-                      <div className="w-full bg-blue-200 rounded-full h-2">
+                    <div className="mt-3 p-3 bg-white border-2 border-blue-300 rounded-lg">
+                      <div className="w-full bg-blue-100 rounded-full h-3 mb-2">
                         <div
-                          className="bg-blue-600 h-2 rounded-full transition-all"
+                          className="bg-gradient-to-r from-blue-500 to-blue-600 h-3 rounded-full transition-all"
                           style={{ width: ocrProgress + '%' }}
                         ></div>
                       </div>
+                      <p className="text-xs font-semibold text-blue-900">{ocrMessage || 'Processing...'}</p>
+                      {!localStorage.getItem('sankirtan-tesseract-langs-cached') && (
+                        <p className="text-[10px] text-blue-700 mt-1">
+                          💡 First-time setup takes 30-60 seconds. Future uses will be instant.
+                        </p>
+                      )}
                     </div>
                   )}
-                  {ocrMessage && (
+                  {!ocrProcessing && ocrMessage && (
                     <p className="text-xs font-semibold text-blue-900 mt-2">{ocrMessage}</p>
                   )}
                   <p className="text-xs text-blue-700 mt-2">
@@ -6377,4 +6463,103 @@ const App = () => {
   );
 };
 
-export default App;
+// ==============================================
+// ERROR BOUNDARY
+// Catches any unhandled React errors (e.g. OCR crashes, Firestore errors)
+// and shows a friendly recovery screen instead of a white page.
+// Without this, ANY component crash = users see a blank screen with no
+// recovery option - they'd have to know to hard-refresh or clear cache.
+// ==============================================
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error: error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    // Log for debugging (visible in browser console + can be sent to error tracking later)
+    console.error('🚨 App crashed:', error);
+    console.error('Component stack:', errorInfo.componentStack);
+  }
+
+  handleReset = () => {
+    this.setState({ hasError: false, error: null });
+  };
+
+  handleHardReload = () => {
+    // Clear caches that might be causing repeated crashes
+    try {
+      // Do NOT clear login state or user preferences - only crash-related caches
+      localStorage.removeItem('sankirtan-tesseract-langs-cached');
+    } catch (e) {}
+    window.location.reload();
+  };
+
+  render() {
+    if (this.state.hasError) {
+      const errorMessage = this.state.error && this.state.error.message
+        ? this.state.error.message
+        : 'Unknown error';
+
+      return (
+        <div className="min-h-screen bg-gradient-to-br from-orange-50 via-amber-50 to-yellow-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-8 text-center border-2 border-orange-200">
+            <div className="text-6xl mb-4">🙏</div>
+            <h1 className="text-2xl font-bold text-amber-900 mb-2">
+              Something went wrong
+            </h1>
+            <p className="text-sm text-gray-600 mb-4">
+              We're sorry — Sankirtan encountered an unexpected issue.
+              Your data is safe.
+            </p>
+
+            <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4 text-left">
+              <p className="text-xs font-semibold text-red-900 mb-1">Error details:</p>
+              <p className="text-xs text-red-800 font-mono break-all">
+                {errorMessage}
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <button
+                onClick={this.handleReset}
+                className="w-full bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-semibold py-3 rounded-xl shadow-md"
+              >
+                🔄 Try Again
+              </button>
+              <button
+                onClick={this.handleHardReload}
+                className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold py-3 rounded-xl"
+              >
+                🧹 Reload App (clears cache)
+              </button>
+            </div>
+
+            <p className="text-xs text-gray-500 mt-4">
+              If this keeps happening, please share feedback so we can fix it.
+            </p>
+
+            <p className="text-xs text-amber-700 mt-4">
+              🕉️ बाबोसा जी की कृपा से यह जल्दी ठीक होगा
+            </p>
+          </div>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
+// Wrap App in ErrorBoundary before exporting
+const AppWithErrorBoundary = () => (
+  <ErrorBoundary>
+    <App />
+  </ErrorBoundary>
+);
+
+export default AppWithErrorBoundary;
