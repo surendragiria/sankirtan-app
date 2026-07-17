@@ -342,6 +342,31 @@ const App = () => {
   const [activeTypingField, setActiveTypingField] = useState(null); // 'lyrics', 'title', 'dhun'
   const suggestionsAbortRef = useRef(null);
 
+  // Voice search states
+  const [isListening, setIsListening] = useState(false);
+  const speechRecognitionRef = useRef(null);
+  const [speechLang, setSpeechLang] = useState('en-IN'); // 'en-IN' or 'hi-IN'
+
+  // Reading view settings
+  const [readingSettings, setReadingSettings] = useState(() => {
+    try {
+      const saved = localStorage.getItem('sankirtan-reading-settings');
+      return saved ? JSON.parse(saved) : { fontSize: 18, fontFamily: 'sans-serif', lineHeight: 1.8, textAlign: 'center' };
+    } catch {
+      return { fontSize: 18, fontFamily: 'sans-serif', lineHeight: 1.8, textAlign: 'center' };
+    }
+  });
+  const [showReadingSettings, setShowReadingSettings] = useState(false);
+
+  // Dark mode
+  const [darkMode, setDarkMode] = useState(() => {
+    try {
+      return localStorage.getItem('sankirtan-dark-mode') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
   // OCR / File import states (image, PDF, camera → lyrics text)
   const [ocrProcessing, setOcrProcessing] = useState(false);
   const [ocrProgress, setOcrProgress] = useState(0);
@@ -363,6 +388,20 @@ const App = () => {
       console.log('LocalStorage not available');
     }
   }, [hindiTypingEnabled]);
+
+  // Save reading settings
+  useEffect(() => {
+    try {
+      localStorage.setItem('sankirtan-reading-settings', JSON.stringify(readingSettings));
+    } catch (e) {}
+  }, [readingSettings]);
+
+  // Save dark mode
+  useEffect(() => {
+    try {
+      localStorage.setItem('sankirtan-dark-mode', darkMode.toString());
+    } catch (e) {}
+  }, [darkMode]);
 
   // ==============================================
   // NAVIGATION WITH HISTORY (browser back support)
@@ -1628,6 +1667,40 @@ const App = () => {
   };
 
   // ==============================================
+  // VOICE SEARCH (Web Speech API)
+  // ==============================================
+  const startVoiceSearch = (targetField) => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert('Voice search is not supported in this browser. Please use Chrome or Safari.');
+      return;
+    }
+    if (isListening && speechRecognitionRef.current) {
+      speechRecognitionRef.current.stop();
+      return;
+    }
+    const recognition = new SpeechRecognition();
+    speechRecognitionRef.current = recognition;
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.lang = speechLang;
+
+    recognition.onstart = () => setIsListening(true);
+    recognition.onend = () => setIsListening(false);
+    recognition.onerror = (e) => {
+      console.error('Speech error:', e.error);
+      setIsListening(false);
+    };
+    recognition.onresult = (e) => {
+      const transcript = e.results[0][0].transcript;
+      if (targetField === 'library') setSearchQuery(transcript);
+      else if (targetField === 'public') setPublicSearchQuery(transcript);
+      else if (targetField === 'bhajanPicker') setBhajanPickerSearch(transcript);
+    };
+    recognition.start();
+  };
+
+// ==============================================
   // BHAJAN CRUD OPERATIONS
   // ==============================================
   const openAddBhajan = () => {
@@ -3144,7 +3217,7 @@ const App = () => {
     const currentStep = ONBOARDING_STEPS[onboardingStep];
     
     return (
-      <div className="min-h-screen bg-gradient-to-br from-orange-50 via-amber-50 to-yellow-50">
+      <div className={`min-h-screen ${darkMode ? 'bg-gray-900 text-gray-100' : 'bg-gradient-to-br from-orange-50 via-amber-50 to-yellow-50'}`}>
         {/* ==============================================
             ONBOARDING TOUR MODAL
             ============================================== */}
@@ -3351,6 +3424,91 @@ const App = () => {
         )}
         
         {/* ==============================================
+            READING SETTINGS MODAL
+            ============================================== */}
+        {showReadingSettings && (
+          <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4">
+            <div className={`rounded-3xl shadow-2xl max-w-sm w-full overflow-hidden ${darkMode ? 'bg-gray-800 text-gray-100' : 'bg-white'}`}>
+              <div className={`p-6 text-center ${darkMode ? 'bg-gray-700' : 'bg-gradient-to-br from-orange-500 to-amber-500'} text-white`}>
+                <div className="text-5xl mb-2">📖</div>
+                <h3 className="text-2xl font-bold">Reading View</h3>
+                <p className="text-sm opacity-90 mt-1">Customize how lyrics appear</p>
+              </div>
+              <div className="p-6 space-y-5">
+                <div>
+                  <div className="flex justify-between mb-1">
+                    <label className="text-sm font-semibold">Font Size</label>
+                    <span className="text-sm">{readingSettings.fontSize}px</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="14"
+                    max="32"
+                    step="1"
+                    value={readingSettings.fontSize}
+                    onChange={(e) => setReadingSettings(prev => ({ ...prev, fontSize: parseInt(e.target.value) }))}
+                    className="w-full accent-orange-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold mb-1">Font Style</label>
+                  <select
+                    value={readingSettings.fontFamily}
+                    onChange={(e) => setReadingSettings(prev => ({ ...prev, fontFamily: e.target.value }))}
+                    className={`w-full px-3 py-2 rounded-lg border-2 outline-none ${darkMode ? 'bg-gray-700 border-gray-600 text-gray-100' : 'bg-white border-orange-200'}`}
+                  >
+                    <option value="sans-serif">Sans-Serif (Modern)</option>
+                    <option value="serif">Serif (Classic)</option>
+                    <option value="monospace">Monospace (Fixed)</option>
+                    <option value="cursive">Cursive (Decorative)</option>
+                    <option value="system-ui">System UI</option>
+                  </select>
+                </div>
+                <div>
+                  <div className="flex justify-between mb-1">
+                    <label className="text-sm font-semibold">Line Spacing</label>
+                    <span className="text-sm">{readingSettings.lineHeight}</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="1.2"
+                    max="2.5"
+                    step="0.1"
+                    value={readingSettings.lineHeight}
+                    onChange={(e) => setReadingSettings(prev => ({ ...prev, lineHeight: parseFloat(e.target.value) }))}
+                    className="w-full accent-orange-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold mb-2">Text Alignment</label>
+                  <div className="flex gap-2">
+                    {['left', 'center', 'right', 'justify'].map(align => (
+                      <button
+                        key={align}
+                        onClick={() => setReadingSettings(prev => ({ ...prev, textAlign: align }))}
+                        className={`flex-1 py-2 rounded-lg text-sm font-semibold capitalize transition-all ${
+                          readingSettings.textAlign === align
+                            ? 'bg-orange-500 text-white shadow-md'
+                            : darkMode ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-orange-50 text-amber-800 hover:bg-orange-100'
+                        }`}
+                      >
+                        {align}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowReadingSettings(false)}
+                  className="w-full bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-bold py-3 rounded-xl shadow-lg"
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ==============================================
             PWA INSTALL PROMPT (Android/Desktop)
             ============================================== */}
         {showInstallPrompt && deferredInstallPrompt && (
@@ -3482,6 +3640,21 @@ const App = () => {
                 {userProfile.verified && <span className="text-xs text-blue-600">✓ Verified</span>}
                 {isAdmin && <span className="text-xs text-purple-600 ml-1">👑 Admin</span>}
               </div>
+              <button
+                onClick={() => setDarkMode(!darkMode)}
+                className={`p-2 rounded-lg transition-colors ${darkMode ? 'text-yellow-400 hover:bg-gray-700' : 'text-gray-600 hover:bg-gray-100'}`}
+                title={darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+              >
+                {darkMode ? (
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+                  </svg>
+                ) : (
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                  </svg>
+                )}
+              </button>
               <button
                 onClick={() => {
                   setOnboardingStep(0);
@@ -3687,13 +3860,54 @@ const App = () => {
 
               {/* Search Bar */}
               <div className="mb-4">
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="🔍 Search bhajans (title, lyrics, keywords)..."
-                  className="w-full px-4 py-3 border-2 border-orange-200 rounded-xl focus:ring-4 focus:ring-orange-200 focus:border-orange-400 outline-none"
-                />
+                <div className="flex gap-2 mb-2">
+                  <button
+                    onClick={() => setSpeechLang(speechLang === 'en-IN' ? 'hi-IN' : 'en-IN')}
+                    className={`px-2 py-1 rounded-lg text-xs font-bold border transition-colors ${
+                      speechLang === 'hi-IN'
+                        ? 'bg-orange-500 text-white border-orange-500'
+                        : 'bg-white text-gray-600 border-gray-300 hover:border-orange-300'
+                    }`}
+                    title="Toggle voice search language"
+                  >
+                    {speechLang === 'hi-IN' ? '🇮🇳 HI' : '🇬🇧 EN'}
+                  </button>
+                  <span className="text-xs text-gray-500 self-center">Voice search language</span>
+                </div>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="🔍 Search bhajans (title, lyrics, keywords)..."
+                    className={`w-full px-4 py-3 pr-12 border-2 rounded-xl focus:ring-4 outline-none ${
+                      darkMode
+                        ? 'bg-gray-800 border-gray-600 text-gray-100 focus:ring-gray-700 focus:border-gray-500'
+                        : 'border-orange-200 focus:ring-orange-200 focus:border-orange-400'
+                    }`}
+                  />
+                  <button
+                    onClick={() => startVoiceSearch('library')}
+                    className={`absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-lg transition-colors ${
+                      isListening
+                        ? 'bg-red-500 text-white animate-pulse'
+                        : darkMode
+                          ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-700'
+                          : 'text-orange-400 hover:text-orange-600 hover:bg-orange-50'
+                    }`}
+                    title={isListening ? 'Listening...' : 'Voice search'}
+                  >
+                    {isListening ? (
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                      </svg>
+                    ) : (
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                      </svg>
+                    )}
+                  </button>
+                </div>
               </div>
 
               {/* Filters */}
@@ -3759,10 +3973,10 @@ const App = () => {
               {bhajansLoading ? (
                 <div className="text-center py-12">
                   <div className="animate-spin rounded-full h-10 w-10 border-4 border-orange-400 border-t-transparent mx-auto mb-3"></div>
-                  <p className="text-orange-700">Loading your bhajans...</p>
+                  <p className={`${darkMode ? 'text-orange-300' : 'text-orange-700'}`}>Loading your bhajans...</p>
                 </div>
               ) : filteredBhajans.length === 0 ? (
-                <div className="text-center py-12 bg-white rounded-2xl border-2 border-dashed border-orange-200">
+                <div className={`text-center py-12 rounded-2xl border-2 border-dashed ${darkMode ? 'bg-gray-800 border-gray-600' : 'bg-white border-orange-200'}`}>
                   {bhajans.length === 0 ? (
                     <>
                       <div className="text-6xl mb-4">📚</div>
@@ -3789,7 +4003,7 @@ const App = () => {
                     <button
                       key={bhajan.id}
                       onClick={() => openBhajanDetail(bhajan)}
-                      className="bg-white rounded-2xl shadow-md p-5 border-2 border-orange-100 hover:border-orange-400 hover:shadow-xl transition-all text-left"
+                      className={`rounded-2xl shadow-md p-5 border-2 hover:border-orange-400 hover:shadow-xl transition-all text-left ${darkMode ? 'bg-gray-800 border-gray-700 hover:border-orange-500' : 'bg-white border-orange-100'}`}
                     >
                       <div className="flex items-start justify-between mb-2">
                         <h3 className="text-lg font-bold text-amber-900 flex-1 line-clamp-2">
@@ -3872,39 +4086,48 @@ const App = () => {
               </div>
 
               {/* Bhajan Content */}
-              <div className="bg-white rounded-2xl shadow-lg p-6 md:p-8 mb-4">
-                <h1 className="text-3xl md:text-4xl font-bold text-amber-900 mb-3">
-                  {selectedBhajan.title}
-                </h1>
+              <div className={`rounded-2xl shadow-lg p-6 md:p-8 mb-4 ${darkMode ? 'bg-gray-800 border border-gray-700' : 'bg-white'}`}>
+                <div className="flex items-start justify-between mb-3">
+                  <h1 className={`text-3xl md:text-4xl font-bold mb-3 ${darkMode ? 'text-amber-100' : 'text-amber-900'}`}>
+                    {selectedBhajan.title}
+                  </h1>
+                  <button
+                    onClick={() => setShowReadingSettings(true)}
+                    className={`p-2 rounded-lg text-sm font-semibold flex items-center gap-1 transition-colors ${darkMode ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-orange-100 text-amber-800 hover:bg-orange-200'}`}
+                    title="Reading view options"
+                  >
+                    ⚙️ View
+                  </button>
+                </div>
 
                 {selectedBhajan.dhun && (
-                  <div className="bg-orange-50 border-l-4 border-orange-400 p-3 rounded-r-lg mb-4">
-                    <p className="text-sm text-orange-900">
+                  <div className={`border-l-4 border-orange-400 p-3 rounded-r-lg mb-4 ${darkMode ? 'bg-gray-700' : 'bg-orange-50'}`}>
+                    <p className={`text-sm ${darkMode ? 'text-orange-200' : 'text-orange-900'}`}>
                       <span className="font-semibold">तर्ज़ / धुन:</span> {selectedBhajan.dhun}
                     </p>
                   </div>
                 )}
 
                 <div className="flex flex-wrap gap-2 mb-6">
-                  <span className="bg-orange-100 text-orange-800 px-3 py-1 rounded-full text-sm font-semibold">
+                  <span className={`px-3 py-1 rounded-full text-sm font-semibold ${darkMode ? 'bg-orange-900 text-orange-200' : 'bg-orange-100 text-orange-800'}`}>
                     {selectedBhajan.deity}
                   </span>
-                  <span className="bg-amber-100 text-amber-800 px-3 py-1 rounded-full text-sm font-semibold">
+                  <span className={`px-3 py-1 rounded-full text-sm font-semibold ${darkMode ? 'bg-amber-900 text-amber-200' : 'bg-amber-100 text-amber-800'}`}>
                     📖 {selectedBhajan.category}
                   </span>
                   {selectedBhajan.language && (
-                    <span className="bg-indigo-100 text-indigo-800 px-3 py-1 rounded-full text-sm font-semibold">
+                    <span className={`px-3 py-1 rounded-full text-sm font-semibold ${darkMode ? 'bg-indigo-900 text-indigo-200' : 'bg-indigo-100 text-indigo-800'}`}>
                       🗣️ {selectedBhajan.language}
                     </span>
                   )}
                   {selectedBhajan.scale ? (
-                    <span className="bg-purple-100 text-purple-800 px-3 py-1 rounded-full text-sm font-semibold">
+                    <span className={`px-3 py-1 rounded-full text-sm font-semibold ${darkMode ? 'bg-purple-900 text-purple-200' : 'bg-purple-100 text-purple-800'}`}>
                       🎵 Scale: {selectedBhajan.scale}
                     </span>
                   ) : (
                     <button
                       onClick={() => openEditBhajan(selectedBhajan)}
-                      className="bg-gray-100 hover:bg-purple-100 text-gray-600 hover:text-purple-800 px-3 py-1 rounded-full text-sm font-semibold border border-dashed border-gray-400"
+                      className={`px-3 py-1 rounded-full text-sm font-semibold border border-dashed ${darkMode ? 'bg-gray-700 text-gray-400 border-gray-500 hover:bg-gray-600' : 'bg-gray-100 text-gray-600 border-gray-400 hover:bg-purple-100 hover:text-purple-800'}`}
                       title="Click to add scale/raag"
                     >
                       + Add Scale
@@ -3912,8 +4135,16 @@ const App = () => {
                   )}
                 </div>
 
-                <div className="border-t border-orange-100 pt-4">
-                  <pre className="whitespace-pre-wrap font-sans text-lg text-gray-800 leading-relaxed">
+                <div className={`border-t pt-4 ${darkMode ? 'border-gray-700' : 'border-orange-100'}`}>
+                  <pre
+                    className={`whitespace-pre-wrap text-lg leading-relaxed ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}
+                    style={{
+                      fontSize: `${readingSettings.fontSize}px`,
+                      fontFamily: readingSettings.fontFamily,
+                      lineHeight: readingSettings.lineHeight,
+                      textAlign: readingSettings.textAlign
+                    }}
+                  >
                     {selectedBhajan.lyrics}
                   </pre>
                 </div>
@@ -4894,13 +5125,54 @@ const App = () => {
 
               {/* Search Bar */}
               <div className="mb-4">
-                <input
-                  type="text"
-                  value={publicSearchQuery}
-                  onChange={(e) => setPublicSearchQuery(e.target.value)}
-                  placeholder="🔍 Search public bhajans..."
-                  className="w-full px-4 py-3 border-2 border-orange-200 rounded-xl focus:ring-4 focus:ring-orange-200 focus:border-orange-400 outline-none"
-                />
+                <div className="flex gap-2 mb-2">
+                  <button
+                    onClick={() => setSpeechLang(speechLang === 'en-IN' ? 'hi-IN' : 'en-IN')}
+                    className={`px-2 py-1 rounded-lg text-xs font-bold border transition-colors ${
+                      speechLang === 'hi-IN'
+                        ? 'bg-orange-500 text-white border-orange-500'
+                        : 'bg-white text-gray-600 border-gray-300 hover:border-orange-300'
+                    }`}
+                    title="Toggle voice search language"
+                  >
+                    {speechLang === 'hi-IN' ? '🇮🇳 HI' : '🇬🇧 EN'}
+                  </button>
+                  <span className="text-xs text-gray-500 self-center">Voice search language</span>
+                </div>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={publicSearchQuery}
+                    onChange={(e) => setPublicSearchQuery(e.target.value)}
+                    placeholder="🔍 Search public bhajans..."
+                    className={`w-full px-4 py-3 pr-12 border-2 rounded-xl focus:ring-4 outline-none ${
+                      darkMode
+                        ? 'bg-gray-800 border-gray-600 text-gray-100 focus:ring-gray-700 focus:border-gray-500'
+                        : 'border-orange-200 focus:ring-orange-200 focus:border-orange-400'
+                    }`}
+                  />
+                  <button
+                    onClick={() => startVoiceSearch('public')}
+                    className={`absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-lg transition-colors ${
+                      isListening
+                        ? 'bg-red-500 text-white animate-pulse'
+                        : darkMode
+                          ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-700'
+                          : 'text-orange-400 hover:text-orange-600 hover:bg-orange-50'
+                    }`}
+                    title={isListening ? 'Listening...' : 'Voice search'}
+                  >
+                    {isListening ? (
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                      </svg>
+                    ) : (
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                      </svg>
+                    )}
+                  </button>
+                </div>
               </div>
 
               {/* Filters */}
@@ -4978,10 +5250,10 @@ const App = () => {
               {publicLoading ? (
                 <div className="text-center py-12">
                   <div className="animate-spin rounded-full h-10 w-10 border-4 border-orange-400 border-t-transparent mx-auto mb-3"></div>
-                  <p className="text-orange-700">Loading public library...</p>
+                  <p className={`${darkMode ? 'text-orange-300' : 'text-orange-700'}`}>Loading public library...</p>
                 </div>
               ) : filteredPublicBhajans.length === 0 ? (
-                <div className="text-center py-12 bg-white rounded-2xl border-2 border-dashed border-orange-200">
+                <div className={`text-center py-12 rounded-2xl border-2 border-dashed ${darkMode ? 'bg-gray-800 border-gray-600' : 'bg-white border-orange-200'}`}>
                   {publicBhajans.length === 0 ? (
                     <>
                       <div className="text-6xl mb-4">🌐</div>
@@ -5012,7 +5284,7 @@ const App = () => {
                     return (
                       <div
                         key={bhajan.id}
-                        className="bg-white rounded-2xl shadow-md p-5 border-2 border-orange-100 hover:border-orange-400 hover:shadow-xl transition-all"
+                        className={`rounded-2xl shadow-md p-5 border-2 hover:border-orange-400 hover:shadow-xl transition-all ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-orange-100'}`}
                       >
                         <button
                           onClick={() => openPublicBhajanDetail(bhajan)}
@@ -5119,32 +5391,41 @@ const App = () => {
                 )}
               </div>
 
-              <div className="bg-white rounded-2xl shadow-lg p-6 md:p-8 mb-4">
-                <h1 className="text-3xl md:text-4xl font-bold text-amber-900 mb-3">
-                  {selectedPublicBhajan.title}
-                </h1>
+              <div className={`rounded-2xl shadow-lg p-6 md:p-8 mb-4 ${darkMode ? 'bg-gray-800 border border-gray-700' : 'bg-white'}`}>
+                <div className="flex items-start justify-between mb-3">
+                  <h1 className={`text-3xl md:text-4xl font-bold mb-3 ${darkMode ? 'text-amber-100' : 'text-amber-900'}`}>
+                    {selectedPublicBhajan.title}
+                  </h1>
+                  <button
+                    onClick={() => setShowReadingSettings(true)}
+                    className={`p-2 rounded-lg text-sm font-semibold flex items-center gap-1 transition-colors ${darkMode ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-orange-100 text-amber-800 hover:bg-orange-200'}`}
+                    title="Reading view options"
+                  >
+                    ⚙️ View
+                  </button>
+                </div>
 
                 {selectedPublicBhajan.dhun && (
-                  <div className="bg-orange-50 border-l-4 border-orange-400 p-3 rounded-r-lg mb-4">
-                    <p className="text-sm text-orange-900">
+                  <div className={`border-l-4 border-orange-400 p-3 rounded-r-lg mb-4 ${darkMode ? 'bg-gray-700' : 'bg-orange-50'}`}>
+                    <p className={`text-sm ${darkMode ? 'text-orange-200' : 'text-orange-900'}`}>
                       <span className="font-semibold">तर्ज़ / धुन:</span> {selectedPublicBhajan.dhun}
                     </p>
                   </div>
                 )}
 
                 <div className="flex flex-wrap gap-2 mb-6">
-                  <span className="bg-orange-100 text-orange-800 px-3 py-1 rounded-full text-sm font-semibold">
+                  <span className={`px-3 py-1 rounded-full text-sm font-semibold ${darkMode ? 'bg-orange-900 text-orange-200' : 'bg-orange-100 text-orange-800'}`}>
                     {selectedPublicBhajan.deity}
                   </span>
-                  <span className="bg-amber-100 text-amber-800 px-3 py-1 rounded-full text-sm font-semibold">
+                  <span className={`px-3 py-1 rounded-full text-sm font-semibold ${darkMode ? 'bg-amber-900 text-amber-200' : 'bg-amber-100 text-amber-800'}`}>
                     📖 {selectedPublicBhajan.category}
                   </span>
                   {selectedPublicBhajan.language && (
-                    <span className="bg-indigo-100 text-indigo-800 px-3 py-1 rounded-full text-sm font-semibold">
+                    <span className={`px-3 py-1 rounded-full text-sm font-semibold ${darkMode ? 'bg-indigo-900 text-indigo-200' : 'bg-indigo-100 text-indigo-800'}`}>
                       🗣️ {selectedPublicBhajan.language}
                     </span>
                   )}
-                  <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-semibold">
+                  <span className={`px-3 py-1 rounded-full text-sm font-semibold ${darkMode ? 'bg-blue-900 text-blue-200' : 'bg-blue-100 text-blue-800'}`}>
                     🌐 Public
                   </span>
                 </div>
@@ -5165,8 +5446,16 @@ const App = () => {
                   </button>
                 )}
 
-                <div className="border-t border-orange-100 pt-4">
-                  <pre className="whitespace-pre-wrap font-sans text-lg text-gray-800 leading-relaxed">
+                <div className={`border-t pt-4 ${darkMode ? 'border-gray-700' : 'border-orange-100'}`}>
+                  <pre
+                    className={`whitespace-pre-wrap text-lg leading-relaxed ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}
+                    style={{
+                      fontSize: `${readingSettings.fontSize}px`,
+                      fontFamily: readingSettings.fontFamily,
+                      lineHeight: readingSettings.lineHeight,
+                      textAlign: readingSettings.textAlign
+                    }}
+                  >
                     {selectedPublicBhajan.lyrics}
                   </pre>
                 </div>
@@ -6192,10 +6481,24 @@ const App = () => {
             )}
           </div>
           
-          <div className="bg-white rounded-2xl shadow-lg p-6 md:p-8">
-            <pre 
-              className="whitespace-pre-wrap font-sans text-gray-800 leading-relaxed"
-              style={{ fontSize: `${liveFontSize}px`, lineHeight: '1.7' }}
+          <div className={`rounded-2xl shadow-lg p-6 md:p-8 ${darkMode ? 'bg-gray-800 border border-gray-700' : 'bg-white'}`}>
+            <div className="flex justify-end mb-2">
+              <button
+                onClick={() => setShowReadingSettings(true)}
+                className={`p-2 rounded-lg text-sm font-semibold flex items-center gap-1 transition-colors ${darkMode ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-orange-100 text-amber-800 hover:bg-orange-200'}`}
+                title="Reading view options"
+              >
+                ⚙️ View
+              </button>
+            </div>
+            <pre
+              className={`whitespace-pre-wrap leading-relaxed ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}
+              style={{
+                fontSize: `${Math.max(readingSettings.fontSize, liveFontSize)}px`,
+                fontFamily: readingSettings.fontFamily,
+                lineHeight: readingSettings.lineHeight,
+                textAlign: readingSettings.textAlign
+              }}
             >
               {currentBhajan.lyrics}
             </pre>
