@@ -345,7 +345,7 @@ const App = () => {
   // Voice search states
   const [isListening, setIsListening] = useState(false);
   const speechRecognitionRef = useRef(null);
-  const [speechLang, setSpeechLang] = useState('en-IN'); // 'en-IN' or 'hi-IN'
+  const [speechLang, setSpeechLang] = useState('hi-IN'); // 'hi-IN' or 'en-IN'
 
   // Reading view settings
   const [readingSettings, setReadingSettings] = useState(() => {
@@ -1681,8 +1681,8 @@ const App = () => {
     }
     const recognition = new SpeechRecognition();
     speechRecognitionRef.current = recognition;
-    recognition.continuous = false;
-    recognition.interimResults = false;
+    recognition.continuous = true;
+    recognition.interimResults = true;
     recognition.lang = speechLang;
 
     recognition.onstart = () => setIsListening(true);
@@ -1692,10 +1692,20 @@ const App = () => {
       setIsListening(false);
     };
     recognition.onresult = (e) => {
-      const transcript = e.results[0][0].transcript;
-      if (targetField === 'library') setSearchQuery(transcript);
-      else if (targetField === 'public') setPublicSearchQuery(transcript);
-      else if (targetField === 'bhajanPicker') setBhajanPickerSearch(transcript);
+      let finalTranscript = '';
+      let interimTranscript = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const transcript = e.results[i][0].transcript;
+        if (e.results[i].isFinal) {
+          finalTranscript += transcript;
+        } else {
+          interimTranscript += transcript;
+        }
+      }
+      const textToUse = finalTranscript || interimTranscript;
+      if (targetField === 'library') setSearchQuery(textToUse);
+      else if (targetField === 'public') setPublicSearchQuery(textToUse);
+      else if (targetField === 'bhajanPicker') setBhajanPickerSearch(textToUse);
     };
     recognition.start();
   };
@@ -3917,7 +3927,7 @@ const App = () => {
                   onChange={(e) => setFilterDeity(e.target.value)}
                   className="px-3 py-2 border-2 border-orange-200 rounded-lg focus:ring-2 focus:ring-orange-200 focus:border-orange-400 outline-none text-sm bg-white"
                 >
-                  <option value="">All Deities</option>
+                  <option value="">Deities</option>
                   {allDeityOptions.map(d => (
                     <option key={d.value} value={d.value}>{d.value}</option>
                   ))}
@@ -3928,7 +3938,7 @@ const App = () => {
                   onChange={(e) => setFilterCategory(e.target.value)}
                   className="px-3 py-2 border-2 border-orange-200 rounded-lg focus:ring-2 focus:ring-orange-200 focus:border-orange-400 outline-none text-sm bg-white"
                 >
-                  <option value="">All Categories</option>
+                  <option value="">Categories</option>
                   {allCategoryOptions.map(c => (
                     <option key={c} value={c}>{c}</option>
                   ))}
@@ -5092,27 +5102,27 @@ const App = () => {
                       📚 My Library
                     </button>
                   </div>
-                  <button
-                    onClick={() => setCurrentView('dashboard')}
-                    className="text-orange-600 hover:text-orange-800 text-sm"
-                    title="Go to Dashboard"
-                  >
-                    🏠 Dashboard
-                  </button>
                 </div>
                 {isAdmin && (
-                  <div className="flex gap-2">
+                  <div className="flex gap-1.5 flex-nowrap">
+                    <button
+                      onClick={openPrograms}
+                      className="bg-white border-2 border-orange-300 hover:border-orange-500 text-amber-800 font-semibold px-2 py-1.5 rounded-lg text-xs flex items-center gap-1 whitespace-nowrap"
+                      title="View your programs"
+                    >
+                      🎵 Programs
+                    </button>
                     <button
                       onClick={openAddPublicBhajan}
-                      className="bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white font-semibold px-4 py-2 rounded-xl text-sm flex items-center gap-1 shadow-md"
+                      className="bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white font-semibold px-2 py-1.5 rounded-lg text-xs flex items-center gap-1 shadow-md whitespace-nowrap"
                     >
                       + Add Bhajan
                     </button>
                     <button
                       onClick={openAdminPanel}
-                      className="bg-purple-100 hover:bg-purple-200 text-purple-700 font-semibold px-4 py-2 rounded-xl text-sm flex items-center gap-1"
+                      className="bg-purple-100 hover:bg-purple-200 text-purple-700 font-semibold px-2 py-1.5 rounded-lg text-xs flex items-center gap-1 whitespace-nowrap"
                     >
-                      🔧 Admin Panel
+                      🔧 Admin
                     </button>
                   </div>
                 )}
@@ -5182,7 +5192,7 @@ const App = () => {
                   onChange={(e) => setPublicFilterDeity(e.target.value)}
                   className="px-3 py-2 border-2 border-orange-200 rounded-lg focus:ring-2 focus:ring-orange-200 focus:border-orange-400 outline-none text-sm bg-white"
                 >
-                  <option value="">All Deities</option>
+                  <option value="">Deities</option>
                   {allDeityOptions.map(d => (
                     <option key={d.value} value={d.value}>{d.value}</option>
                   ))}
@@ -5193,31 +5203,19 @@ const App = () => {
                   onChange={(e) => setPublicFilterCategory(e.target.value)}
                   className="px-3 py-2 border-2 border-orange-200 rounded-lg focus:ring-2 focus:ring-orange-200 focus:border-orange-400 outline-none text-sm bg-white"
                 >
-                  <option value="">All Categories</option>
+                  <option value="">Categories</option>
                   {allCategoryOptions.map(c => (
                     <option key={c} value={c}>{c}</option>
                   ))}
                 </select>
 
-                <select
-                  value={publicFilterLanguage}
-                  onChange={(e) => setPublicFilterLanguage(e.target.value)}
-                  className="px-3 py-2 border-2 border-orange-200 rounded-lg focus:ring-2 focus:ring-orange-200 focus:border-orange-400 outline-none text-sm bg-white"
-                >
-                  <option value="">All Languages</option>
-                  {LANGUAGE_OPTIONS.map(l => (
-                    <option key={l.value} value={l.value}>{l.label}</option>
-                  ))}
-                </select>
-
-                {(publicSearchQuery || publicFilterDeity || publicFilterCategory || publicFilterKeyword || publicFilterLanguage) && (
+                {(publicSearchQuery || publicFilterDeity || publicFilterCategory || publicFilterKeyword) && (
                   <button
                     onClick={() => {
                       setPublicSearchQuery('');
                       setPublicFilterDeity('');
                       setPublicFilterCategory('');
                       setPublicFilterKeyword('');
-                      setPublicFilterLanguage('');
                     }}
                     className="px-3 py-2 bg-red-50 border-2 border-red-200 text-red-700 rounded-lg text-sm hover:bg-red-100"
                   >
@@ -5228,13 +5226,13 @@ const App = () => {
 
               {/* Keyword Chips - Quick Filter */}
               <div className="mb-6">
-                <p className="text-xs text-amber-700 font-semibold mb-2">Quick Keywords (tap to filter):</p>
-                <div className="flex flex-wrap gap-2">
-                  {allKeywordOptions.map(kw => (
+                <p className="text-xs text-amber-700 font-semibold mb-2">Quick Keywords:</p>
+                <div className="flex flex-nowrap gap-1.5 overflow-x-auto pb-1 -mx-1 px-1">
+                  {allKeywordOptions.slice(0, 5).map(kw => (
                     <button
                       key={kw}
                       onClick={() => setPublicFilterKeyword(publicFilterKeyword === kw ? '' : kw)}
-                      className={`px-3 py-1 rounded-full text-xs font-semibold transition-all ${
+                      className={`flex-shrink-0 px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all whitespace-nowrap ${
                         publicFilterKeyword === kw
                           ? 'bg-orange-500 text-white shadow-md'
                           : 'bg-orange-50 text-amber-800 border border-orange-200 hover:bg-orange-100'
