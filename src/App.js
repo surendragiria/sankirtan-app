@@ -50,24 +50,6 @@ const DEFAULT_KEYWORDS = [
   'gujarati', 'filmy', 'folk', 'traditional', 'peaceful'
 ];
 
-// Language options for bhajans (with Google Input Tools language codes)
-const LANGUAGE_OPTIONS = [
-  { value: 'Hindi', code: 'hi', label: 'हिंदी (Hindi)' },
-  { value: 'English', code: 'en', label: 'English' },
-  { value: 'Marwari', code: 'hi', label: 'मारवाड़ी (Marwari)' },
-  { value: 'Gujarati', code: 'gu', label: 'ગુજરાતી (Gujarati)' },
-  { value: 'Marathi', code: 'mr', label: 'मराठी (Marathi)' },
-  { value: 'Punjabi', code: 'pa', label: 'ਪੰਜਾਬੀ (Punjabi)' },
-  { value: 'Bengali', code: 'bn', label: 'বাংলা (Bengali)' },
-  { value: 'Tamil', code: 'ta', label: 'தமிழ் (Tamil)' },
-  { value: 'Telugu', code: 'te', label: 'తెలుగు (Telugu)' },
-  { value: 'Kannada', code: 'kn', label: 'ಕನ್ನಡ (Kannada)' },
-  { value: 'Malayalam', code: 'ml', label: 'മലയാളം (Malayalam)' },
-  { value: 'Sanskrit', code: 'sa', label: 'संस्कृतम् (Sanskrit)' },
-  { value: 'Odia', code: 'or', label: 'ଓଡ଼ିଆ (Odia)' },
-  { value: 'Other', code: 'en', label: 'Other' }
-];
-
 // Admin user ID (only this user can manage public library)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
 const APP_VERSION = '2026.07.17.s3';
@@ -220,7 +202,7 @@ const App = () => {
   const [userCount, setUserCount] = useState(0);
 
   // NEW: My Library states
-  const [currentView, setCurrentView] = useState('public-library'); // HOME = Public Library. Views: 'public-library', 'library', 'dashboard', 'bhajan-detail', 'add-bhajan', 'edit-bhajan', 'programs', 'program-detail', 'create-program', 'edit-program', 'live-program', 'public-bhajan-detail', 'admin-panel'
+  const [currentView, setCurrentView] = useState('public-library'); // HOME = Public Library. Views: 'public-library', 'library', 'bhajan-detail', 'add-bhajan', 'edit-bhajan', 'programs', 'program-detail', 'create-program', 'edit-program', 'live-program', 'public-bhajan-detail', 'admin-panel'
   const [scrollPositions, setScrollPositions] = useState({});
   const [bhajans, setBhajans] = useState([]);
   const [selectedBhajan, setSelectedBhajan] = useState(null);
@@ -261,7 +243,6 @@ const App = () => {
   const [publicLoading, setPublicLoading] = useState(false);
   const [publicSearchQuery, setPublicSearchQuery] = useState('');
   const [publicFilterKeyword, setPublicFilterKeyword] = useState('');
-  const [publicFilterLanguage, setPublicFilterLanguage] = useState('');
   const [libraryFilterKeyword, setLibraryFilterKeyword] = useState('');
   const [publicFilterDeity, setPublicFilterDeity] = useState('');
   const [publicFilterCategory, setPublicFilterCategory] = useState('');
@@ -1979,16 +1960,10 @@ const App = () => {
     suggestionsAbortRef.current = controller;
     
     try {
-      // Get language code from current form (default to Hindi)
-      const currentLang = bhajanForm.language || publicBhajanForm.language || 'Hindi';
-      const langObj = LANGUAGE_OPTIONS.find(l => l.value === currentLang);
-      const langCode = langObj?.code || 'hi';
-      
-      // Skip transliteration for English
-      if (langCode === 'en') {
-        setTransliterationSuggestions([]);
-        return;
-      }
+      // Always use Hindi transliteration. The user's Hindi ON/OFF toggle
+      // controls whether transliteration runs at all - if they're typing
+      // English, they turn the toggle off in the form.
+      const langCode = 'hi';
       
       const url = `https://inputtools.google.com/request?text=${encodeURIComponent(word)}&itc=${langCode}-t-i0-und&num=5&cp=0&cs=1&ie=utf-8&oe=utf-8`;
       const response = await fetch(url, { signal: controller.signal });
@@ -2099,34 +2074,30 @@ const App = () => {
       // Only convert if it's English letters
       if (lastWord && /^[a-zA-Z]+$/.test(lastWord)) {
         const lowerWord = lastWord.toLowerCase();
-        const currentLang = bhajanForm.language || 'Hindi';
-        const langObj = LANGUAGE_OPTIONS.find(l => l.value === currentLang);
-        const langCode = langObj?.code || 'hi';
+        // Always Hindi transliteration when Hindi typing is on
+        const langCode = 'hi';
         
-        // Skip conversion for English
-        if (langCode !== 'en') {
-          const cachedSuggestions = suggestionsCache[`${langCode}:${lowerWord}`] || 
-            suggestionsCache[lowerWord] ||
-            (langCode === 'hi' && HINDI_FALLBACK_MAP[lowerWord] ? [HINDI_FALLBACK_MAP[lowerWord]] : null);
+        const cachedSuggestions = suggestionsCache[`${langCode}:${lowerWord}`] ||
+          suggestionsCache[lowerWord] ||
+          (HINDI_FALLBACK_MAP[lowerWord] ? [HINDI_FALLBACK_MAP[lowerWord]] : null);
+        
+        if (cachedSuggestions && cachedSuggestions.length > 0) {
+          // Auto-replace with top suggestion
+          const replacement = cachedSuggestions[0];
+          const newValue = beforeSeparator.substring(0, wordStart) + replacement + separator;
           
-          if (cachedSuggestions && cachedSuggestions.length > 0) {
-            // Auto-replace with top suggestion
-            const replacement = cachedSuggestions[0];
-            const newValue = beforeSeparator.substring(0, wordStart) + replacement + separator;
-            
-            setBhajanForm(prev => ({ ...prev, [fieldName]: newValue }));
-            setShowSuggestions(false);
-            setCurrentWord('');
-            
-            // Restore cursor to end
-            setTimeout(() => {
-              const target = e.target;
-              const newCursor = wordStart + replacement.length + 1;
-              target.selectionStart = newCursor;
-              target.selectionEnd = newCursor;
-            }, 0);
-            return;
-          }
+          setBhajanForm(prev => ({ ...prev, [fieldName]: newValue }));
+          setShowSuggestions(false);
+          setCurrentWord('');
+          
+          // Restore cursor to end
+          setTimeout(() => {
+            const target = e.target;
+            const newCursor = wordStart + replacement.length + 1;
+            target.selectionStart = newCursor;
+            target.selectionEnd = newCursor;
+          }, 0);
+          return;
         }
       }
       
@@ -2223,31 +2194,28 @@ const App = () => {
 
       if (lastWord && /^[a-zA-Z]+$/.test(lastWord)) {
         const lowerWord = lastWord.toLowerCase();
-        const currentLang = publicBhajanForm.language || 'Hindi';
-        const langObj = LANGUAGE_OPTIONS.find(l => l.value === currentLang);
-        const langCode = langObj?.code || 'hi';
+        // Always Hindi transliteration when Hindi typing is on
+        const langCode = 'hi';
 
-        if (langCode !== 'en') {
-          const cachedSuggestions = suggestionsCache[`${langCode}:${lowerWord}`] || 
-            suggestionsCache[lowerWord] ||
-            (langCode === 'hi' && HINDI_FALLBACK_MAP[lowerWord] ? [HINDI_FALLBACK_MAP[lowerWord]] : null);
+        const cachedSuggestions = suggestionsCache[`${langCode}:${lowerWord}`] ||
+          suggestionsCache[lowerWord] ||
+          (HINDI_FALLBACK_MAP[lowerWord] ? [HINDI_FALLBACK_MAP[lowerWord]] : null);
 
-          if (cachedSuggestions && cachedSuggestions.length > 0) {
-            const replacement = cachedSuggestions[0];
-            const newValue = beforeSeparator.substring(0, wordStart) + replacement + separator;
+        if (cachedSuggestions && cachedSuggestions.length > 0) {
+          const replacement = cachedSuggestions[0];
+          const newValue = beforeSeparator.substring(0, wordStart) + replacement + separator;
 
-            setPublicBhajanForm(prev => ({ ...prev, [fieldName]: newValue }));
-            setShowSuggestions(false);
-            setCurrentWord('');
+          setPublicBhajanForm(prev => ({ ...prev, [fieldName]: newValue }));
+          setShowSuggestions(false);
+          setCurrentWord('');
 
-            setTimeout(() => {
-              const target = e.target;
-              const newCursor = wordStart + replacement.length + 1;
-              target.selectionStart = newCursor;
-              target.selectionEnd = newCursor;
-            }, 0);
-            return;
-          }
+          setTimeout(() => {
+            const target = e.target;
+            const newCursor = wordStart + replacement.length + 1;
+            target.selectionStart = newCursor;
+            target.selectionEnd = newCursor;
+          }, 0);
+          return;
         }
       }
 
@@ -2448,7 +2416,6 @@ const App = () => {
     if (publicFilterDeity && bhajan.deity !== publicFilterDeity) return false;
     if (publicFilterCategory && bhajan.category !== publicFilterCategory) return false;
     if (publicFilterKeyword && (!bhajan.keywords || !bhajan.keywords.includes(publicFilterKeyword))) return false;
-    if (publicFilterLanguage && bhajan.language !== publicFilterLanguage) return false;
     return true;
   });
 
@@ -3708,7 +3675,7 @@ const App = () => {
         <header className="bg-white/80 backdrop-blur-md sticky top-0 z-40 shadow-sm">
           <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
             <button
-              onClick={() => setCurrentView('dashboard')}
+              onClick={() => setCurrentView('public-library')}
               className="flex items-center gap-3 hover:opacity-80 transition-opacity"
             >
               <div className="text-3xl">🕉️</div>
@@ -3786,120 +3753,6 @@ const App = () => {
         <main className="max-w-6xl mx-auto px-4 py-6">
           
           {/* ==============================================
-              DASHBOARD VIEW
-              ============================================== */}
-          {currentView === 'dashboard' && (
-            <>
-              {/* Welcome Card */}
-              <div className="bg-gradient-to-br from-orange-500 to-amber-500 rounded-3xl shadow-xl p-8 text-white mb-6">
-                <h2 className="text-3xl font-bold mb-2">
-                  Welcome, {userProfile.displayName}! 🙏
-                </h2>
-                <p className="text-orange-100 mb-4">
-                  Your bhajan journey begins here.
-                </p>
-                <div className="grid grid-cols-3 gap-4 mt-6">
-                  <div className="bg-white/20 backdrop-blur-sm rounded-xl p-4 text-center">
-                    <div className="text-2xl font-bold">{userProfile.stats?.bhajanCount || 0}</div>
-                    <div className="text-xs text-orange-100">Bhajans</div>
-                  </div>
-                  <div className="bg-white/20 backdrop-blur-sm rounded-xl p-4 text-center">
-                    <div className="text-2xl font-bold">{userProfile.stats?.publicBhajanCount || 0}</div>
-                    <div className="text-xs text-orange-100">Public</div>
-                  </div>
-                  <div className="bg-white/20 backdrop-blur-sm rounded-xl p-4 text-center">
-                    <div className="text-2xl font-bold">{userProfile.stats?.followerCount || 0}</div>
-                    <div className="text-xs text-orange-100">Followers</div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Feature Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                {/* My Library - NOW ACTIVE */}
-                <button
-                  onClick={() => setCurrentView('library')}
-                  className="bg-white rounded-2xl shadow-md p-6 border-2 border-orange-300 hover:border-orange-500 hover:shadow-xl transition-all text-left group"
-                >
-                  <div className="text-4xl mb-3">📚</div>
-                  <h3 className="text-lg font-bold text-amber-900 mb-2">My Library</h3>
-                  <p className="text-sm text-gray-600 mb-3">
-                    Add and manage your personal bhajan collection
-                  </p>
-                  <span className="inline-block bg-green-100 text-green-700 text-xs font-semibold px-3 py-1 rounded-full">
-                    ✨ Available Now! ({bhajans.length} bhajans)
-                  </span>
-                </button>
-
-                <button
-                  onClick={openPublicLibrary}
-                  className="bg-white rounded-2xl shadow-md p-6 border-2 border-orange-300 hover:border-orange-500 hover:shadow-xl transition-all text-left group"
-                >
-                  <div className="text-4xl mb-3">🌐</div>
-                  <h3 className="text-lg font-bold text-amber-900 mb-2">Public Library</h3>
-                  <p className="text-sm text-gray-600 mb-3">
-                    Browse curated bhajans & save your favorites
-                  </p>
-                  <span className="inline-block bg-green-100 text-green-700 text-xs font-semibold px-3 py-1 rounded-full">
-                    ✨ {publicBhajans.length > 0 ? `${publicBhajans.length} bhajans available` : 'Loading bhajans...'}
-                  </span>
-                </button>
-
-                <button
-                  onClick={openPrograms}
-                  className="bg-white rounded-2xl shadow-md p-6 border-2 border-orange-300 hover:border-orange-500 hover:shadow-xl transition-all text-left group"
-                >
-                  <div className="text-4xl mb-3">🎵</div>
-                  <h3 className="text-lg font-bold text-amber-900 mb-2">Programs & Setlists</h3>
-                  <p className="text-sm text-gray-600 mb-3">
-                    Create playlists for live performances
-                  </p>
-                  <span className="inline-block bg-green-100 text-green-700 text-xs font-semibold px-3 py-1 rounded-full">
-                    ✨ Available Now! ({programs.length} programs)
-                  </span>
-                </button>
-              </div>
-
-              {/* ADMIN PANEL CARD (Only visible to admin) */}
-              {isAdmin && (
-                <div className="mb-6">
-                  <button
-                    onClick={openAdminPanel}
-                    className="w-full bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 text-white rounded-2xl shadow-xl p-6 flex items-center justify-between transition-all"
-                  >
-                    <div className="flex items-center gap-4">
-                      <div className="text-5xl">👑</div>
-                      <div className="text-left">
-                        <h3 className="text-xl font-bold mb-1">Admin Panel</h3>
-                        <p className="text-purple-100 text-sm">Manage Public Library • Import Bhajans • View Stats</p>
-                      </div>
-                    </div>
-                    <div className="text-3xl">→</div>
-                  </button>
-                </div>
-              )}
-
-              {/* Footer Credit */}
-              <div className="text-center py-6">
-                <p className="text-xs text-amber-700 mb-2">
-                  Founded for the Bhajan Community 🙏 by Grace of <strong>Babosa Bhagwan</strong> 🕉️
-                </p>
-                <button
-                  onClick={() => {
-                    setShowFeedbackModal(true);
-                    setFeedbackText('');
-                    setFeedbackError('');
-                    setFeedbackSuccess(false);
-                  }}
-                  className="text-xs text-blue-600 hover:text-blue-800 underline hover:no-underline transition-colors"
-                >
-                  💬 Share feedback or suggestions
-                </button>
-              </div>
-            </>
-          )}
-
-          {/* ==============================================
               MY LIBRARY VIEW
               ============================================== */}
           {currentView === 'library' && (
@@ -3921,13 +3774,6 @@ const App = () => {
                       📚 My Library
                     </button>
                   </div>
-                  <button
-                    onClick={() => setCurrentView('dashboard')}
-                    className="text-orange-600 hover:text-orange-800 text-sm"
-                    title="Go to Dashboard"
-                  >
-                    🏠 Dashboard
-                  </button>
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
                   <button
@@ -4393,25 +4239,6 @@ const App = () => {
                   </div>
                 </div>
 
-                {/* Language dropdown */}
-                <div className="mb-4">
-                  <label className="block text-sm font-semibold text-amber-900 mb-1">
-                    Language / भाषा
-                  </label>
-                  <select
-                    value={bhajanForm.language}
-                    onChange={(e) => setBhajanForm({...bhajanForm, language: e.target.value})}
-                    className="w-full px-4 py-3 border-2 border-orange-200 rounded-xl focus:ring-4 focus:ring-orange-200 focus:border-orange-400 outline-none bg-white"
-                  >
-                    {LANGUAGE_OPTIONS.map(l => (
-                      <option key={l.value} value={l.value}>{l.label}</option>
-                    ))}
-                  </select>
-                  <p className="text-xs text-gray-500 mt-1">
-                    💡 Typing will convert to selected script automatically
-                  </p>
-                </div>
-
                 {/* Dhun / Tarz */}
                 <div className="mb-4">
                   <label className="block text-sm font-semibold text-amber-900 mb-1">
@@ -4734,7 +4561,7 @@ const App = () => {
             <>
               <div className="flex items-center justify-between mb-4">
                 <button
-                  onClick={() => setCurrentView('dashboard')}
+                  onClick={() => setCurrentView('public-library')}
                   className="text-orange-600 hover:text-orange-800 flex items-center gap-1 text-sm"
                 >
                   ← Dashboard
@@ -5201,24 +5028,16 @@ const App = () => {
                       📚 My Library
                     </button>
                   </div>
-                  <button
-                    onClick={() => setCurrentView('dashboard')}
-                    className="text-orange-600 hover:text-orange-800 text-sm"
-                    title="Go to Dashboard"
-                  >
-                    🏠 Dashboard
-                  </button>
-                </div>
-                {isAdmin && (
-                  <div className="flex gap-2">
+                  {/* Add Bhajan (admin-only) - placed where Dashboard used to be */}
+                  {isAdmin && (
                     <button
                       onClick={openAddPublicBhajan}
                       className="bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white font-semibold px-4 py-2 rounded-xl text-sm flex items-center gap-1 shadow-md"
                     >
                       + Add Bhajan
                     </button>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
 
               <div className="mb-4">
@@ -5312,14 +5131,13 @@ const App = () => {
                   ))}
                 </select>
 
-                {(publicSearchQuery || publicFilterDeity || publicFilterCategory || publicFilterKeyword || publicFilterLanguage) && (
+                {(publicSearchQuery || publicFilterDeity || publicFilterCategory || publicFilterKeyword) && (
                   <button
                     onClick={() => {
                       setPublicSearchQuery('');
                       setPublicFilterDeity('');
                       setPublicFilterCategory('');
                       setPublicFilterKeyword('');
-                      setPublicFilterLanguage('');
                     }}
                     className="px-3 py-2 bg-red-50 border-2 border-red-200 text-red-700 rounded-lg text-sm hover:bg-red-100"
                   >
@@ -5458,6 +5276,25 @@ const App = () => {
                   })}
                 </div>
               )}
+
+              {/* Small feedback link at the bottom - was previously on the
+                  removed Dashboard. Kept subtle so it doesn't distract. */}
+              <div className="text-center mt-12 mb-4">
+                <p className={`text-xs mb-2 ${darkMode ? 'text-gray-500' : 'text-amber-700'}`}>
+                  Founded for the Bhajan Community 🙏 by Grace of <strong>Babosa Bhagwan</strong> 🕉️
+                </p>
+                <button
+                  onClick={() => {
+                    setShowFeedbackModal(true);
+                    setFeedbackText('');
+                    setFeedbackError('');
+                    setFeedbackSuccess(false);
+                  }}
+                  className={`text-xs underline hover:no-underline transition-colors ${darkMode ? 'text-blue-400 hover:text-blue-300' : 'text-blue-600 hover:text-blue-800'}`}
+                >
+                  💬 Share feedback or suggestions
+                </button>
+              </div>
             </>
           )}
 
@@ -5589,7 +5426,7 @@ const App = () => {
             <>
               <div className="flex items-center justify-between mb-4">
                 <button
-                  onClick={() => setCurrentView('dashboard')}
+                  onClick={() => setCurrentView('public-library')}
                   className="text-orange-600 hover:text-orange-800 flex items-center gap-1 text-sm"
                 >
                   ← Dashboard
@@ -6163,20 +6000,6 @@ const App = () => {
                       ))}
                     </select>
                   </div>
-                </div>
-
-                {/* Language */}
-                <div>
-                  <label className="block text-sm font-semibold text-amber-900 mb-1">Language / भाषा</label>
-                  <select
-                    value={publicBhajanForm.language}
-                    onChange={(e) => setPublicBhajanForm({...publicBhajanForm, language: e.target.value})}
-                    className="w-full px-4 py-3 border-2 border-orange-200 rounded-xl outline-none bg-white"
-                  >
-                    {LANGUAGE_OPTIONS.map(l => (
-                      <option key={l.value} value={l.value}>{l.label}</option>
-                    ))}
-                  </select>
                 </div>
 
                 {/* Dhun */}
