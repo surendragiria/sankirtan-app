@@ -346,6 +346,18 @@ const App = () => {
   // Wake lock for reading view - separate from live mode's wake lock
   const [readingWakeLock, setReadingWakeLock] = useState(null);
 
+  // Compact card view - saved to localStorage so users don't have to re-toggle
+  const [compactView, setCompactView] = useState(() => {
+    try {
+      return localStorage.getItem('sankirtan-compact-view') === 'true';
+    } catch {
+      return false;
+    }
+  });
+  useEffect(() => {
+    try { localStorage.setItem('sankirtan-compact-view', compactView.toString()); } catch (e) {}
+  }, [compactView]);
+
   // Dark mode
   const [darkMode, setDarkMode] = useState(() => {
     try {
@@ -3689,10 +3701,10 @@ const App = () => {
               {isAdmin && (
                 <button
                   onClick={openAdminPanel}
-                  className="flex items-center gap-1 bg-purple-100 hover:bg-purple-200 text-purple-700 text-xs font-semibold px-3 py-1.5 rounded-lg"
+                  className="flex items-center gap-1 bg-purple-100 hover:bg-purple-200 text-purple-700 text-xs font-semibold px-2 sm:px-3 py-1.5 rounded-lg"
                   title="Admin Panel"
                 >
-                  🔧 Admin
+                  🔧<span className="hidden sm:inline"> Admin</span>
                 </button>
               )}
               {userProfile.photoURL && (
@@ -3779,16 +3791,9 @@ const App = () => {
                   <button
                     onClick={openPrograms}
                     className="bg-white border-2 border-orange-300 hover:border-orange-500 text-amber-800 font-semibold px-3 py-2 rounded-xl text-sm flex items-center gap-1"
-                    title="View your programs"
+                    title="View and manage your programs / setlists"
                   >
                     🎵 Programs ({programs.length})
-                  </button>
-                  <button
-                    onClick={openCreateProgram}
-                    className="bg-white border-2 border-orange-300 hover:border-orange-500 text-amber-800 font-semibold px-3 py-2 rounded-xl text-sm flex items-center gap-1"
-                    title="Create a new program / setlist from your bhajans"
-                  >
-                    <span className="text-lg leading-none">+</span> Create Program
                   </button>
                   <button
                     onClick={openAddBhajan}
@@ -3799,39 +3804,37 @@ const App = () => {
                 </div>
               </div>
 
-              <div className="mb-4">
-                <h2 className="text-2xl font-bold text-amber-900">📚 My Library</h2>
-                <p className="text-sm text-amber-700">Your personal bhajan collection ({bhajans.length} bhajans)</p>
-              </div>
+              {/* Tiny count line replaces the "📚 My Library" heading - tab already indicates page.
+                  Shown as a small helper text so users still see how many bhajans they have. */}
+              <p className={`text-xs mb-3 ${darkMode ? 'text-gray-400' : 'text-amber-700'}`}>
+                {bhajans.length} bhajan{bhajans.length === 1 ? '' : 's'} in your collection
+              </p>
 
-              {/* Search Bar */}
+              {/* Search Bar - voice language toggle sits inline with mic */}
               <div className="mb-4">
-                <div className="flex gap-2 mb-2">
-                  <button
-                    onClick={() => setSpeechLang(speechLang === 'en-IN' ? 'hi-IN' : 'en-IN')}
-                    className={`px-2 py-1 rounded-lg text-xs font-bold border transition-colors ${
-                      speechLang === 'hi-IN'
-                        ? 'bg-orange-500 text-white border-orange-500'
-                        : 'bg-white text-gray-600 border-gray-300 hover:border-orange-300'
-                    }`}
-                    title="Toggle voice search language"
-                  >
-                    {speechLang === 'hi-IN' ? '🇮🇳 HI' : '🇬🇧 EN'}
-                  </button>
-                  <span className="text-xs text-gray-500 self-center">Voice search language</span>
-                </div>
                 <div className="relative">
                   <input
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="🔍 Search bhajans (title, lyrics, keywords)..."
-                    className={`w-full px-4 py-3 pr-12 border-2 rounded-xl focus:ring-4 outline-none ${
+                    className={`w-full px-4 py-3 pr-24 border-2 rounded-xl focus:ring-4 outline-none ${
                       darkMode
                         ? 'bg-gray-800 border-gray-600 text-gray-100 focus:ring-gray-700 focus:border-gray-500'
                         : 'border-orange-200 focus:ring-orange-200 focus:border-orange-400'
                     }`}
                   />
+                  <button
+                    onClick={() => setSpeechLang(speechLang === 'en-IN' ? 'hi-IN' : 'en-IN')}
+                    className={`absolute right-11 top-1/2 -translate-y-1/2 px-1.5 py-0.5 rounded text-[10px] font-bold border transition-colors ${
+                      speechLang === 'hi-IN'
+                        ? 'bg-orange-500 text-white border-orange-500'
+                        : 'bg-white text-gray-600 border-gray-300 hover:border-orange-300'
+                    }`}
+                    title={`Voice input: ${speechLang === 'hi-IN' ? 'Hindi' : 'English'}`}
+                  >
+                    {speechLang === 'hi-IN' ? 'HI' : 'EN'}
+                  </button>
                   <button
                     onClick={() => startVoiceSearch('library')}
                     className={`absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-lg transition-colors ${
@@ -3856,12 +3859,33 @@ const App = () => {
                 </div>
               </div>
 
-              {/* Filters - single row: Deity | Category | Keyword */}
+              {/* Clear filters link */}
+              {(searchQuery || filterDeity || filterCategory || libraryFilterKeyword) && (
+                <div className="flex justify-end mb-1">
+                  <button
+                    onClick={() => {
+                      setSearchQuery('');
+                      setFilterDeity('');
+                      setFilterCategory('');
+                      setLibraryFilterKeyword('');
+                    }}
+                    className="text-xs text-red-600 hover:text-red-800 underline hover:no-underline"
+                  >
+                    ✕ Clear filters
+                  </button>
+                </div>
+              )}
+
+              {/* Filters - single row: Deity | Category | Keyword. Active filters highlighted. */}
               <div className="flex flex-wrap gap-2 mb-3">
                 <select
                   value={filterDeity}
                   onChange={(e) => setFilterDeity(e.target.value)}
-                  className="flex-1 min-w-[110px] px-3 py-2 border-2 border-orange-200 rounded-lg focus:ring-2 focus:ring-orange-200 focus:border-orange-400 outline-none text-sm bg-white"
+                  className={`flex-1 min-w-[110px] px-3 py-2 border-2 rounded-lg focus:ring-2 focus:ring-orange-200 focus:border-orange-400 outline-none text-sm bg-white transition-all ${
+                    filterDeity
+                      ? 'border-amber-500 ring-2 ring-amber-200 font-semibold text-amber-900'
+                      : 'border-orange-200'
+                  }`}
                 >
                   <option value="">All Deities</option>
                   {allDeityOptions.map(d => (
@@ -3872,7 +3896,11 @@ const App = () => {
                 <select
                   value={filterCategory}
                   onChange={(e) => setFilterCategory(e.target.value)}
-                  className="flex-1 min-w-[110px] px-3 py-2 border-2 border-orange-200 rounded-lg focus:ring-2 focus:ring-orange-200 focus:border-orange-400 outline-none text-sm bg-white"
+                  className={`flex-1 min-w-[110px] px-3 py-2 border-2 rounded-lg focus:ring-2 focus:ring-orange-200 focus:border-orange-400 outline-none text-sm bg-white transition-all ${
+                    filterCategory
+                      ? 'border-amber-500 ring-2 ring-amber-200 font-semibold text-amber-900'
+                      : 'border-orange-200'
+                  }`}
                 >
                   <option value="">All Categories</option>
                   {allCategoryOptions.map(c => (
@@ -3883,27 +3911,17 @@ const App = () => {
                 <select
                   value={libraryFilterKeyword}
                   onChange={(e) => setLibraryFilterKeyword(e.target.value)}
-                  className="flex-1 min-w-[110px] px-3 py-2 border-2 border-orange-200 rounded-lg focus:ring-2 focus:ring-orange-200 focus:border-orange-400 outline-none text-sm bg-white"
+                  className={`flex-1 min-w-[110px] px-3 py-2 border-2 rounded-lg focus:ring-2 focus:ring-orange-200 focus:border-orange-400 outline-none text-sm bg-white transition-all ${
+                    libraryFilterKeyword
+                      ? 'border-amber-500 ring-2 ring-amber-200 font-semibold text-amber-900'
+                      : 'border-orange-200'
+                  }`}
                 >
                   <option value="">All Keywords</option>
                   {allKeywordOptions.map(kw => (
                     <option key={kw} value={kw}>#{kw}</option>
                   ))}
                 </select>
-
-                {(searchQuery || filterDeity || filterCategory || libraryFilterKeyword) && (
-                  <button
-                    onClick={() => {
-                      setSearchQuery('');
-                      setFilterDeity('');
-                      setFilterCategory('');
-                      setLibraryFilterKeyword('');
-                    }}
-                    className="px-3 py-2 bg-red-50 border-2 border-red-200 text-red-700 rounded-lg text-sm hover:bg-red-100"
-                  >
-                    Clear
-                  </button>
-                )}
               </div>
 
               {/* Quick Keywords - top 4 chips only. Full keyword list is
@@ -3953,60 +3971,103 @@ const App = () => {
                   )}
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {filteredBhajans.map(bhajan => (
-                    <button
-                      key={bhajan.id}
-                      onClick={() => openBhajanDetail(bhajan)}
-                      className={`rounded-2xl shadow-md p-5 border-2 hover:border-orange-400 hover:shadow-xl transition-all text-left ${darkMode ? 'bg-gray-800 border-gray-700 hover:border-orange-500' : 'bg-white border-orange-100'}`}
-                    >
-                      <div className="flex items-start justify-between mb-2">
-                        <h3 className="text-lg font-bold text-amber-900 flex-1 line-clamp-2">
-                          {bhajan.title}
-                        </h3>
-                      </div>
+                <>
+                  {/* View density toggle */}
+                  <div className="flex justify-end mb-2">
+                    <div className="inline-flex bg-orange-50 rounded-lg p-0.5 border border-orange-200">
+                      <button
+                        onClick={() => setCompactView(false)}
+                        className={`px-2 py-1 rounded text-xs font-semibold transition-colors ${!compactView ? 'bg-white text-amber-900 shadow' : 'text-amber-600 hover:text-amber-800'}`}
+                        title="Full card view"
+                      >
+                        ▤ Full
+                      </button>
+                      <button
+                        onClick={() => setCompactView(true)}
+                        className={`px-2 py-1 rounded text-xs font-semibold transition-colors ${compactView ? 'bg-white text-amber-900 shadow' : 'text-amber-600 hover:text-amber-800'}`}
+                        title="Compact list view"
+                      >
+                        ☰ Compact
+                      </button>
+                    </div>
+                  </div>
 
-                      {bhajan.dhun && (
-                        <p className="text-xs text-orange-600 mb-2">
-                          <span className="font-semibold">तर्ज़:</span> {bhajan.dhun}
-                        </p>
-                      )}
+                <div className={compactView ? 'space-y-2' : 'grid grid-cols-1 md:grid-cols-2 gap-4'}>
+                  {filteredBhajans.map(bhajan => {
+                    // COMPACT VIEW
+                    if (compactView) {
+                      return (
+                        <button
+                          key={bhajan.id}
+                          onClick={() => openBhajanDetail(bhajan)}
+                          className={`w-full text-left rounded-xl p-3 border-2 hover:border-orange-400 transition-all flex items-center gap-3 ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-orange-100'}`}
+                        >
+                          <div className="flex-1 min-w-0">
+                            <h3 className={`text-sm font-bold truncate ${darkMode ? 'text-amber-100' : 'text-amber-900'}`}>
+                              {bhajan.title}
+                            </h3>
+                            <p className={`text-xs truncate ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                              {bhajan.deity} · {bhajan.category}{bhajan.scale ? ` · 🎵 ${bhajan.scale}` : ''}
+                            </p>
+                          </div>
+                        </button>
+                      );
+                    }
 
-                      <div className="flex flex-wrap gap-1 mb-2">
-                        <span className="text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded-full">
-                          {bhajan.deity}
-                        </span>
-                        <span className="text-xs bg-amber-100 text-amber-800 px-2 py-1 rounded-full">
-                          {bhajan.category}
-                        </span>
-                        {bhajan.scale && (
-                          <span className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded-full">
-                            🎵 {bhajan.scale}
-                          </span>
+                    // FULL CARD VIEW
+                    return (
+                      <button
+                        key={bhajan.id}
+                        onClick={() => openBhajanDetail(bhajan)}
+                        className={`rounded-2xl shadow-md p-5 border-2 hover:border-orange-400 hover:shadow-xl transition-all text-left ${darkMode ? 'bg-gray-800 border-gray-700 hover:border-orange-500' : 'bg-white border-orange-100'}`}
+                      >
+                        <div className="flex items-start justify-between mb-2">
+                          <h3 className="text-lg font-bold text-amber-900 flex-1 line-clamp-2">
+                            {bhajan.title}
+                          </h3>
+                        </div>
+
+                        {bhajan.dhun && (
+                          <p className="text-xs text-orange-600 mb-2">
+                            <span className="font-semibold">तर्ज़:</span> {bhajan.dhun}
+                          </p>
                         )}
-                      </div>
 
-                      <p className="text-sm text-gray-700 line-clamp-3 mb-2 whitespace-pre-line">
-                        {bhajan.lyrics}
-                      </p>
-
-                      {bhajan.keywords && bhajan.keywords.length > 0 && (
-                        <div className="flex flex-wrap gap-1">
-                          {bhajan.keywords.slice(0, 4).map(kw => (
-                            <span key={kw} className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">
-                              #{kw}
+                        <div className="flex flex-wrap gap-1 mb-2">
+                          <span className="text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded-full">
+                            {bhajan.deity}
+                          </span>
+                          <span className="text-xs bg-amber-100 text-amber-800 px-2 py-1 rounded-full">
+                            {bhajan.category}
+                          </span>
+                          {bhajan.scale && (
+                            <span className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded-full">
+                              🎵 {bhajan.scale}
                             </span>
-                          ))}
-                          {bhajan.keywords.length > 4 && (
-                            <span className="text-xs text-gray-500">+{bhajan.keywords.length - 4}</span>
                           )}
                         </div>
-                      )}
 
-                      <p className="text-xs text-orange-500 mt-3">Read →</p>
-                    </button>
-                  ))}
+                        <p className="text-sm text-gray-700 line-clamp-3 mb-2 whitespace-pre-line">
+                          {bhajan.lyrics}
+                        </p>
+
+                        {bhajan.keywords && bhajan.keywords.length > 0 && (
+                          <div className="flex flex-wrap gap-1">
+                            {bhajan.keywords.slice(0, 4).map(kw => (
+                              <span key={kw} className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">
+                                #{kw}
+                              </span>
+                            ))}
+                            {bhajan.keywords.length > 4 && (
+                              <span className="text-xs text-gray-500">+{bhajan.keywords.length - 4}</span>
+                            )}
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })}
                 </div>
+                </>
               )}
             </>
           )}
@@ -4091,6 +4152,24 @@ const App = () => {
                 </div>
 
                 <div className={`border-t pt-4 ${darkMode ? 'border-gray-700' : 'border-orange-100'}`}>
+                  {/* Quick font size adjust */}
+                  <div className="flex items-center justify-end gap-1 mb-2">
+                    <button
+                      onClick={() => setReadingSettings(prev => ({ ...prev, fontSize: Math.max(14, prev.fontSize - 2) }))}
+                      className={`px-2 py-1 rounded-md text-xs font-semibold transition-colors ${darkMode ? 'bg-gray-700 hover:bg-gray-600 text-gray-200' : 'bg-orange-50 hover:bg-orange-100 text-amber-800 border border-orange-200'}`}
+                      title="Decrease font size"
+                    >
+                      Aa−
+                    </button>
+                    <span className={`text-xs w-8 text-center ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{readingSettings.fontSize}</span>
+                    <button
+                      onClick={() => setReadingSettings(prev => ({ ...prev, fontSize: Math.min(40, prev.fontSize + 2) }))}
+                      className={`px-2 py-1 rounded-md text-xs font-semibold transition-colors ${darkMode ? 'bg-gray-700 hover:bg-gray-600 text-gray-200' : 'bg-orange-50 hover:bg-orange-100 text-amber-800 border border-orange-200'}`}
+                      title="Increase font size"
+                    >
+                      Aa+
+                    </button>
+                  </div>
                   <pre
                     className={`whitespace-pre-wrap text-lg leading-relaxed ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}
                     style={{
@@ -5040,38 +5119,33 @@ const App = () => {
                 </div>
               </div>
 
+              {/* Search Bar - page title removed as tab already indicates location.
+                  Voice language toggle now sits inline with mic for less clutter. */}
               <div className="mb-4">
-                <h2 className="text-2xl font-bold text-amber-900">🌐 Public Library</h2>
-              </div>
-
-              {/* Search Bar */}
-              <div className="mb-4">
-                <div className="flex gap-2 mb-2">
-                  <button
-                    onClick={() => setSpeechLang(speechLang === 'en-IN' ? 'hi-IN' : 'en-IN')}
-                    className={`px-2 py-1 rounded-lg text-xs font-bold border transition-colors ${
-                      speechLang === 'hi-IN'
-                        ? 'bg-orange-500 text-white border-orange-500'
-                        : 'bg-white text-gray-600 border-gray-300 hover:border-orange-300'
-                    }`}
-                    title="Toggle voice search language"
-                  >
-                    {speechLang === 'hi-IN' ? '🇮🇳 HI' : '🇬🇧 EN'}
-                  </button>
-                  <span className="text-xs text-gray-500 self-center">Voice search language</span>
-                </div>
                 <div className="relative">
                   <input
                     type="text"
                     value={publicSearchQuery}
                     onChange={(e) => setPublicSearchQuery(e.target.value)}
                     placeholder="🔍 Search public bhajans..."
-                    className={`w-full px-4 py-3 pr-12 border-2 rounded-xl focus:ring-4 outline-none ${
+                    className={`w-full px-4 py-3 pr-24 border-2 rounded-xl focus:ring-4 outline-none ${
                       darkMode
                         ? 'bg-gray-800 border-gray-600 text-gray-100 focus:ring-gray-700 focus:border-gray-500'
                         : 'border-orange-200 focus:ring-orange-200 focus:border-orange-400'
                     }`}
                   />
+                  {/* Voice language toggle (compact, sits inline next to mic) */}
+                  <button
+                    onClick={() => setSpeechLang(speechLang === 'en-IN' ? 'hi-IN' : 'en-IN')}
+                    className={`absolute right-11 top-1/2 -translate-y-1/2 px-1.5 py-0.5 rounded text-[10px] font-bold border transition-colors ${
+                      speechLang === 'hi-IN'
+                        ? 'bg-orange-500 text-white border-orange-500'
+                        : 'bg-white text-gray-600 border-gray-300 hover:border-orange-300'
+                    }`}
+                    title={`Voice input: ${speechLang === 'hi-IN' ? 'Hindi' : 'English'}`}
+                  >
+                    {speechLang === 'hi-IN' ? 'HI' : 'EN'}
+                  </button>
                   <button
                     onClick={() => startVoiceSearch('public')}
                     className={`absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-lg transition-colors ${
@@ -5096,12 +5170,35 @@ const App = () => {
                 </div>
               </div>
 
-              {/* Filters - single row: Deity | Category | Keyword */}
+              {/* Clear filters link - only appears when a filter is active.
+                  Sits above the dropdowns row so it doesn't wrap awkwardly. */}
+              {(publicSearchQuery || publicFilterDeity || publicFilterCategory || publicFilterKeyword) && (
+                <div className="flex justify-end mb-1">
+                  <button
+                    onClick={() => {
+                      setPublicSearchQuery('');
+                      setPublicFilterDeity('');
+                      setPublicFilterCategory('');
+                      setPublicFilterKeyword('');
+                    }}
+                    className="text-xs text-red-600 hover:text-red-800 underline hover:no-underline"
+                  >
+                    ✕ Clear filters
+                  </button>
+                </div>
+              )}
+
+              {/* Filters - single row: Deity | Category | Keyword.
+                  Active filters get amber ring + bold font so users see them at a glance. */}
               <div className="flex flex-wrap gap-2 mb-3">
                 <select
                   value={publicFilterDeity}
                   onChange={(e) => setPublicFilterDeity(e.target.value)}
-                  className="flex-1 min-w-[110px] px-3 py-2 border-2 border-orange-200 rounded-lg focus:ring-2 focus:ring-orange-200 focus:border-orange-400 outline-none text-sm bg-white"
+                  className={`flex-1 min-w-[110px] px-3 py-2 border-2 rounded-lg focus:ring-2 focus:ring-orange-200 focus:border-orange-400 outline-none text-sm bg-white transition-all ${
+                    publicFilterDeity
+                      ? 'border-amber-500 ring-2 ring-amber-200 font-semibold text-amber-900'
+                      : 'border-orange-200'
+                  }`}
                 >
                   <option value="">All Deities</option>
                   {allDeityOptions.map(d => (
@@ -5112,7 +5209,11 @@ const App = () => {
                 <select
                   value={publicFilterCategory}
                   onChange={(e) => setPublicFilterCategory(e.target.value)}
-                  className="flex-1 min-w-[110px] px-3 py-2 border-2 border-orange-200 rounded-lg focus:ring-2 focus:ring-orange-200 focus:border-orange-400 outline-none text-sm bg-white"
+                  className={`flex-1 min-w-[110px] px-3 py-2 border-2 rounded-lg focus:ring-2 focus:ring-orange-200 focus:border-orange-400 outline-none text-sm bg-white transition-all ${
+                    publicFilterCategory
+                      ? 'border-amber-500 ring-2 ring-amber-200 font-semibold text-amber-900'
+                      : 'border-orange-200'
+                  }`}
                 >
                   <option value="">All Categories</option>
                   {allCategoryOptions.map(c => (
@@ -5123,27 +5224,17 @@ const App = () => {
                 <select
                   value={publicFilterKeyword}
                   onChange={(e) => setPublicFilterKeyword(e.target.value)}
-                  className="flex-1 min-w-[110px] px-3 py-2 border-2 border-orange-200 rounded-lg focus:ring-2 focus:ring-orange-200 focus:border-orange-400 outline-none text-sm bg-white"
+                  className={`flex-1 min-w-[110px] px-3 py-2 border-2 rounded-lg focus:ring-2 focus:ring-orange-200 focus:border-orange-400 outline-none text-sm bg-white transition-all ${
+                    publicFilterKeyword
+                      ? 'border-amber-500 ring-2 ring-amber-200 font-semibold text-amber-900'
+                      : 'border-orange-200'
+                  }`}
                 >
                   <option value="">All Keywords</option>
                   {allKeywordOptions.map(kw => (
                     <option key={kw} value={kw}>#{kw}</option>
                   ))}
                 </select>
-
-                {(publicSearchQuery || publicFilterDeity || publicFilterCategory || publicFilterKeyword) && (
-                  <button
-                    onClick={() => {
-                      setPublicSearchQuery('');
-                      setPublicFilterDeity('');
-                      setPublicFilterCategory('');
-                      setPublicFilterKeyword('');
-                    }}
-                    className="px-3 py-2 bg-red-50 border-2 border-red-200 text-red-700 rounded-lg text-sm hover:bg-red-100"
-                  >
-                    Clear
-                  </button>
-                )}
               </div>
 
               {/* Quick Keywords - top 4 chips only. Full keyword list is
@@ -5196,9 +5287,67 @@ const App = () => {
                   )}
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <>
+                  {/* View density toggle - saved to localStorage.
+                      Compact = title + first line of lyrics only (fits 4-6 cards per screen).
+                      Full = title + tags + 3 lines lyrics + keywords (default). */}
+                  <div className="flex justify-end mb-2">
+                    <div className="inline-flex bg-orange-50 rounded-lg p-0.5 border border-orange-200">
+                      <button
+                        onClick={() => setCompactView(false)}
+                        className={`px-2 py-1 rounded text-xs font-semibold transition-colors ${!compactView ? 'bg-white text-amber-900 shadow' : 'text-amber-600 hover:text-amber-800'}`}
+                        title="Full card view"
+                      >
+                        ▤ Full
+                      </button>
+                      <button
+                        onClick={() => setCompactView(true)}
+                        className={`px-2 py-1 rounded text-xs font-semibold transition-colors ${compactView ? 'bg-white text-amber-900 shadow' : 'text-amber-600 hover:text-amber-800'}`}
+                        title="Compact list view"
+                      >
+                        ☰ Compact
+                      </button>
+                    </div>
+                  </div>
+
+                <div className={compactView ? 'space-y-2' : 'grid grid-cols-1 md:grid-cols-2 gap-4'}>
                   {filteredPublicBhajans.map(bhajan => {
                     const isSaved = savedBhajanIds.has(bhajan.id);
+
+                    // COMPACT VIEW - title + one lyrics line + save state on right.
+                    // Clicking the row opens the bhajan (same as full card).
+                    if (compactView) {
+                      return (
+                        <button
+                          key={bhajan.id}
+                          onClick={() => openPublicBhajanDetail(bhajan)}
+                          className={`w-full text-left rounded-xl p-3 border-2 hover:border-orange-400 transition-all flex items-center gap-3 ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-orange-100'}`}
+                        >
+                          <div className="flex-1 min-w-0">
+                            <h3 className={`text-sm font-bold truncate ${darkMode ? 'text-amber-100' : 'text-amber-900'}`}>
+                              {bhajan.title}
+                            </h3>
+                            <p className={`text-xs truncate ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                              {bhajan.deity} · {bhajan.category}
+                            </p>
+                          </div>
+                          {isSaved ? (
+                            <span className="bg-green-100 text-green-700 text-xs font-semibold px-2 py-1 rounded-full flex-shrink-0">
+                              ✓
+                            </span>
+                          ) : (
+                            <span
+                              onClick={(e) => { e.stopPropagation(); saveToMyLibrary(bhajan); }}
+                              className="bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white text-xs font-semibold px-2 py-1 rounded-full flex-shrink-0 cursor-pointer"
+                            >
+                              + Save
+                            </span>
+                          )}
+                        </button>
+                      );
+                    }
+
+                    // FULL CARD VIEW
                     return (
                       <div
                         key={bhajan.id}
@@ -5244,13 +5393,9 @@ const App = () => {
                           )}
                         </button>
 
+                        {/* Action row - only Save/In Library. "Read" removed since
+                            clicking the card body above already opens the bhajan. */}
                         <div className="flex gap-2 mt-3 pt-3 border-t border-orange-100">
-                          <button
-                            onClick={() => openPublicBhajanDetail(bhajan)}
-                            className="flex-1 bg-orange-100 hover:bg-orange-200 text-amber-800 font-semibold py-2 rounded-lg text-sm"
-                          >
-                            📖 Read
-                          </button>
                           {isSaved ? (
                             <span className="flex-1 bg-green-100 text-green-700 font-semibold py-2 rounded-lg text-sm text-center">
                               ✓ In Your Library
@@ -5275,6 +5420,7 @@ const App = () => {
                     );
                   })}
                 </div>
+                </>
               )}
 
               {/* Small feedback link at the bottom - was previously on the
@@ -5325,7 +5471,7 @@ const App = () => {
                     <button
                       onClick={() => saveToMyLibrary(selectedPublicBhajan)}
                       disabled={savingToLibrary}
-                      className="bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-semibold px-2.5 py-1 rounded-full text-xs disabled:opacity-50 flex items-center gap-1"
+                      className="bg-green-100 hover:bg-green-200 text-green-700 font-semibold px-2.5 py-1 rounded-full text-xs disabled:opacity-50 flex items-center gap-1"
                     >
                       {savingToLibrary ? '...' : '💾 Save'}
                     </button>
@@ -5377,6 +5523,25 @@ const App = () => {
                 )}
 
                 <div className={`border-t pt-4 ${darkMode ? 'border-gray-700' : 'border-orange-100'}`}>
+                  {/* Quick font size adjust - no need to open Reading View modal for
+                      common tweaks. Range clamped to 14-40px to match the modal slider. */}
+                  <div className="flex items-center justify-end gap-1 mb-2">
+                    <button
+                      onClick={() => setReadingSettings(prev => ({ ...prev, fontSize: Math.max(14, prev.fontSize - 2) }))}
+                      className={`px-2 py-1 rounded-md text-xs font-semibold transition-colors ${darkMode ? 'bg-gray-700 hover:bg-gray-600 text-gray-200' : 'bg-orange-50 hover:bg-orange-100 text-amber-800 border border-orange-200'}`}
+                      title="Decrease font size"
+                    >
+                      Aa−
+                    </button>
+                    <span className={`text-xs w-8 text-center ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{readingSettings.fontSize}</span>
+                    <button
+                      onClick={() => setReadingSettings(prev => ({ ...prev, fontSize: Math.min(40, prev.fontSize + 2) }))}
+                      className={`px-2 py-1 rounded-md text-xs font-semibold transition-colors ${darkMode ? 'bg-gray-700 hover:bg-gray-600 text-gray-200' : 'bg-orange-50 hover:bg-orange-100 text-amber-800 border border-orange-200'}`}
+                      title="Increase font size"
+                    >
+                      Aa+
+                    </button>
+                  </div>
                   <pre
                     className={`whitespace-pre-wrap text-lg leading-relaxed ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}
                     style={{
