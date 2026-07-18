@@ -358,6 +358,61 @@ const App = () => {
     try { localStorage.setItem('sankirtan-compact-view', compactView.toString()); } catch (e) {}
   }, [compactView]);
 
+  // Progressive rendering - show first N cards, load more as user scrolls.
+  // Keeps initial DOM small (~20 nodes instead of 175) which speeds up
+  // first paint significantly, especially on lower-end phones.
+  const PAGE_SIZE = 20;
+  const [publicVisibleCount, setPublicVisibleCount] = useState(PAGE_SIZE);
+  const [libraryVisibleCount, setLibraryVisibleCount] = useState(PAGE_SIZE);
+  const publicLoadMoreRef = useRef(null);
+  const libraryLoadMoreRef = useRef(null);
+
+  // Reset visible count when filters change - so filtering doesn't require
+  // scrolling back down through invisible-but-loaded chunks.
+  useEffect(() => {
+    setPublicVisibleCount(PAGE_SIZE);
+  }, [publicSearchQuery, publicFilterDeity, publicFilterCategory, publicFilterKeyword]);
+  useEffect(() => {
+    setLibraryVisibleCount(PAGE_SIZE);
+  }, [searchQuery, filterDeity, filterCategory, libraryFilterKeyword]);
+
+  // Set up IntersectionObserver for Public Library "load more" sentinel.
+  // When user scrolls the sentinel into view, bump visible count by PAGE_SIZE.
+  // Non-fatal if IntersectionObserver isn't supported - all bhajans still
+  // render, they just come in one chunk instead of progressively.
+  useEffect(() => {
+    if (currentView !== 'public-library') return;
+    if (!publicLoadMoreRef.current) return;
+    if (typeof IntersectionObserver === 'undefined') {
+      // Old browser - just show everything
+      setPublicVisibleCount(9999);
+      return;
+    }
+    const observer = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting) {
+        setPublicVisibleCount(prev => prev + PAGE_SIZE);
+      }
+    }, { rootMargin: '400px' }); // Start loading before user hits bottom
+    observer.observe(publicLoadMoreRef.current);
+    return () => observer.disconnect();
+  }, [currentView, publicVisibleCount]);
+
+  useEffect(() => {
+    if (currentView !== 'library') return;
+    if (!libraryLoadMoreRef.current) return;
+    if (typeof IntersectionObserver === 'undefined') {
+      setLibraryVisibleCount(9999);
+      return;
+    }
+    const observer = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting) {
+        setLibraryVisibleCount(prev => prev + PAGE_SIZE);
+      }
+    }, { rootMargin: '400px' });
+    observer.observe(libraryLoadMoreRef.current);
+    return () => observer.disconnect();
+  }, [currentView, libraryVisibleCount]);
+
   // Dark mode
   const [darkMode, setDarkMode] = useState(() => {
     try {
@@ -1235,7 +1290,43 @@ const App = () => {
     setPublicLoading(true);
     const db = window.firebase.firestore();
     const publicRef = db.collection('publicBhajans');
-    
+
+    // CACHE HYDRATION: Show cached bhajans instantly while fresh data loads
+    // in background. Cache is a JSON string in localStorage with:
+    //   { list: [...bhajans], savedAt: timestamp }
+    // On subsequent visits users see content in <100ms instead of waiting
+    // for a network round-trip. Fresh data replaces cache silently once it
+    // arrives.
+    const CACHE_KEY = 'sankirtan-public-bhajans-cache';
+    const CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
+    try {
+      const raw = localStorage.getItem(CACHE_KEY);
+      if (raw) {
+        const cached = JSON.parse(raw);
+        const isStale = !cached.savedAt || (Date.now() - cached.savedAt) > CACHE_MAX_AGE_MS;
+        if (cached.list && cached.list.length > 0 && !isStale) {
+          setPublicBhajans(cached.list);
+          setPublicLoading(false);
+          console.log(`📦 Hydrated ${cached.list.length} bhajans from cache (age: ${Math.round((Date.now() - cached.savedAt) / 1000)}s)`);
+        }
+      }
+    } catch (e) {
+      console.warn('Cache hydration failed, continuing with network fetch:', e);
+    }
+
+    // Save fresh list to cache (called after successful loads)
+    const saveCache = (list) => {
+      try {
+        localStorage.setItem(CACHE_KEY, JSON.stringify({
+          list,
+          savedAt: Date.now()
+        }));
+      } catch (e) {
+        // Quota exceeded / private browsing - non-fatal, just skip cache
+        console.warn('Cache save failed (non-fatal):', e);
+      }
+    };
+
     // Simple, reliable fetch - default source (network first, cache fallback)
     const loadPublicBhajans = async () => {
       try {
@@ -1244,16 +1335,17 @@ const App = () => {
         snapshot.forEach((doc) => {
           list.push({ id: doc.id, ...doc.data() });
         });
-        
+
         list.sort((a, b) => {
           const timeA = a.createdAt?.seconds || 0;
           const timeB = b.createdAt?.seconds || 0;
           return timeB - timeA;
         });
-        
+
         setPublicBhajans(list);
         setPublicLoading(false);
-        console.log(`✅ Loaded ${list.length} public bhajans`);
+        saveCache(list);
+        console.log(`✅ Loaded ${list.length} public bhajans from network`);
       } catch (error) {
         console.error('Error loading public bhajans:', error);
         setPublicLoading(false);
@@ -1274,6 +1366,7 @@ const App = () => {
               });
               if (list.length > 0) {
                 setPublicBhajans(list);
+                saveCache(list);
                 console.log(`✅ Retry ${idx + 1}: Loaded ${list.length} public bhajans`);
               }
             } catch (retryErr) {
@@ -1302,6 +1395,7 @@ const App = () => {
           });
           setPublicBhajans(list);
           setPublicLoading(false);
+          saveCache(list);
         },
         (error) => {
           console.log('Real-time listener error (using cached data):', error.message);
@@ -3942,11 +4036,38 @@ const App = () => {
                 ))}
               </div>
 
-              {/* Bhajans List */}
+              {/* Bhajans List - skeleton loaders while data loads */}
               {bhajansLoading ? (
-                <div className="text-center py-12">
-                  <div className="animate-spin rounded-full h-10 w-10 border-4 border-orange-400 border-t-transparent mx-auto mb-3"></div>
-                  <p className={`${darkMode ? 'text-orange-300' : 'text-orange-700'}`}>Loading your bhajans...</p>
+                <div className={compactView ? 'space-y-2' : 'grid grid-cols-1 md:grid-cols-2 gap-4'}>
+                  {[...Array(6)].map((_, i) => (
+                    compactView ? (
+                      <div
+                        key={i}
+                        className={`rounded-xl p-3 border-2 flex items-center gap-3 animate-pulse ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-orange-100'}`}
+                      >
+                        <div className="flex-1 min-w-0 space-y-2">
+                          <div className={`h-3 rounded w-3/4 ${darkMode ? 'bg-gray-700' : 'bg-orange-100'}`}></div>
+                          <div className={`h-2 rounded w-1/2 ${darkMode ? 'bg-gray-700' : 'bg-orange-50'}`}></div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div
+                        key={i}
+                        className={`rounded-2xl shadow-md p-5 border-2 animate-pulse ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-orange-100'}`}
+                      >
+                        <div className={`h-5 rounded w-3/4 mb-3 ${darkMode ? 'bg-gray-700' : 'bg-orange-100'}`}></div>
+                        <div className="flex gap-2 mb-3">
+                          <div className={`h-5 w-16 rounded-full ${darkMode ? 'bg-gray-700' : 'bg-orange-100'}`}></div>
+                          <div className={`h-5 w-14 rounded-full ${darkMode ? 'bg-gray-700' : 'bg-amber-50'}`}></div>
+                        </div>
+                        <div className="space-y-2">
+                          <div className={`h-3 rounded ${darkMode ? 'bg-gray-700' : 'bg-gray-100'}`}></div>
+                          <div className={`h-3 rounded w-5/6 ${darkMode ? 'bg-gray-700' : 'bg-gray-100'}`}></div>
+                          <div className={`h-3 rounded w-4/6 ${darkMode ? 'bg-gray-700' : 'bg-gray-100'}`}></div>
+                        </div>
+                      </div>
+                    )
+                  ))}
                 </div>
               ) : filteredBhajans.length === 0 ? (
                 <div className={`text-center py-12 rounded-2xl border-2 border-dashed ${darkMode ? 'bg-gray-800 border-gray-600' : 'bg-white border-orange-200'}`}>
@@ -3993,7 +4114,7 @@ const App = () => {
                   </div>
 
                 <div className={compactView ? 'space-y-2' : 'grid grid-cols-1 md:grid-cols-2 gap-4'}>
-                  {filteredBhajans.map(bhajan => {
+                  {filteredBhajans.slice(0, libraryVisibleCount).map(bhajan => {
                     // COMPACT VIEW
                     if (compactView) {
                       return (
@@ -4067,6 +4188,24 @@ const App = () => {
                     );
                   })}
                 </div>
+
+                {/* Load more sentinel */}
+                {libraryVisibleCount < filteredBhajans.length && (
+                  <div ref={libraryLoadMoreRef} className="text-center py-6">
+                    <div className="inline-flex items-center gap-2 text-xs text-orange-600">
+                      <div className="w-4 h-4 border-2 border-orange-400 border-t-transparent rounded-full animate-spin"></div>
+                      Loading more bhajans...
+                    </div>
+                    <p className="text-xs text-gray-400 mt-1">
+                      Showing {libraryVisibleCount} of {filteredBhajans.length}
+                    </p>
+                  </div>
+                )}
+                {libraryVisibleCount >= filteredBhajans.length && filteredBhajans.length > PAGE_SIZE && (
+                  <p className="text-center text-xs text-gray-400 py-6">
+                    ✨ You've seen all {filteredBhajans.length} bhajans
+                  </p>
+                )}
                 </>
               )}
             </>
@@ -5255,11 +5394,46 @@ const App = () => {
                 ))}
               </div>
 
-              {/* Public Bhajans List */}
+              {/* Public Bhajans List - skeleton loaders while data loads.
+                  Structured placeholders feel much faster than a plain spinner
+                  because users see the layout appear immediately. */}
               {publicLoading ? (
-                <div className="text-center py-12">
-                  <div className="animate-spin rounded-full h-10 w-10 border-4 border-orange-400 border-t-transparent mx-auto mb-3"></div>
-                  <p className={`${darkMode ? 'text-orange-300' : 'text-orange-700'}`}>Loading public library...</p>
+                <div className={compactView ? 'space-y-2' : 'grid grid-cols-1 md:grid-cols-2 gap-4'}>
+                  {[...Array(6)].map((_, i) => (
+                    compactView ? (
+                      <div
+                        key={i}
+                        className={`rounded-xl p-3 border-2 flex items-center gap-3 animate-pulse ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-orange-100'}`}
+                      >
+                        <div className="flex-1 min-w-0 space-y-2">
+                          <div className={`h-3 rounded w-3/4 ${darkMode ? 'bg-gray-700' : 'bg-orange-100'}`}></div>
+                          <div className={`h-2 rounded w-1/2 ${darkMode ? 'bg-gray-700' : 'bg-orange-50'}`}></div>
+                        </div>
+                        <div className={`h-6 w-10 rounded-full flex-shrink-0 ${darkMode ? 'bg-gray-700' : 'bg-orange-100'}`}></div>
+                      </div>
+                    ) : (
+                      <div
+                        key={i}
+                        className={`rounded-2xl shadow-md p-5 border-2 animate-pulse ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-orange-100'}`}
+                      >
+                        {/* Title placeholder */}
+                        <div className={`h-5 rounded w-3/4 mb-3 ${darkMode ? 'bg-gray-700' : 'bg-orange-100'}`}></div>
+                        {/* Tags row placeholder */}
+                        <div className="flex gap-2 mb-3">
+                          <div className={`h-5 w-16 rounded-full ${darkMode ? 'bg-gray-700' : 'bg-orange-100'}`}></div>
+                          <div className={`h-5 w-14 rounded-full ${darkMode ? 'bg-gray-700' : 'bg-amber-50'}`}></div>
+                        </div>
+                        {/* Lyrics placeholder - 3 lines */}
+                        <div className="space-y-2 mb-3">
+                          <div className={`h-3 rounded ${darkMode ? 'bg-gray-700' : 'bg-gray-100'}`}></div>
+                          <div className={`h-3 rounded w-5/6 ${darkMode ? 'bg-gray-700' : 'bg-gray-100'}`}></div>
+                          <div className={`h-3 rounded w-4/6 ${darkMode ? 'bg-gray-700' : 'bg-gray-100'}`}></div>
+                        </div>
+                        {/* Bottom action placeholder */}
+                        <div className={`h-9 rounded-lg mt-3 ${darkMode ? 'bg-gray-700' : 'bg-orange-50'}`}></div>
+                      </div>
+                    )
+                  ))}
                 </div>
               ) : filteredPublicBhajans.length === 0 ? (
                 <div className={`text-center py-12 rounded-2xl border-2 border-dashed ${darkMode ? 'bg-gray-800 border-gray-600' : 'bg-white border-orange-200'}`}>
@@ -5311,7 +5485,7 @@ const App = () => {
                   </div>
 
                 <div className={compactView ? 'space-y-2' : 'grid grid-cols-1 md:grid-cols-2 gap-4'}>
-                  {filteredPublicBhajans.map(bhajan => {
+                  {filteredPublicBhajans.slice(0, publicVisibleCount).map(bhajan => {
                     const isSaved = savedBhajanIds.has(bhajan.id);
 
                     // COMPACT VIEW - title + one lyrics line + save state on right.
@@ -5420,11 +5594,28 @@ const App = () => {
                     );
                   })}
                 </div>
+
+                {/* Load more sentinel - IntersectionObserver watches this div
+                    and bumps visibleCount when it scrolls into view. Also
+                    shows a subtle "loading more" indicator + a count summary. */}
+                {publicVisibleCount < filteredPublicBhajans.length && (
+                  <div ref={publicLoadMoreRef} className="text-center py-6">
+                    <div className="inline-flex items-center gap-2 text-xs text-orange-600">
+                      <div className="w-4 h-4 border-2 border-orange-400 border-t-transparent rounded-full animate-spin"></div>
+                      Loading more bhajans...
+                    </div>
+                    <p className="text-xs text-gray-400 mt-1">
+                      Showing {publicVisibleCount} of {filteredPublicBhajans.length}
+                    </p>
+                  </div>
+                )}
+                {publicVisibleCount >= filteredPublicBhajans.length && filteredPublicBhajans.length > PAGE_SIZE && (
+                  <p className="text-center text-xs text-gray-400 py-6">
+                    ✨ You've seen all {filteredPublicBhajans.length} bhajans
+                  </p>
+                )}
                 </>
               )}
-
-              {/* Small feedback link at the bottom - was previously on the
-                  removed Dashboard. Kept subtle so it doesn't distract. */}
               <div className="text-center mt-12 mb-4">
                 <p className={`text-xs mb-2 ${darkMode ? 'text-gray-500' : 'text-amber-700'}`}>
                   Founded for the Bhajan Community 🙏 by Grace of <strong>Babosa Bhagwan</strong> 🕉️
