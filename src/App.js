@@ -1181,7 +1181,7 @@ const App = () => {
   // LOAD USER'S BHAJANS (Real-time)
   // ==============================================
   useEffect(() => {
-    if (!user || !userProfile) {
+    if (!user) {
       setBhajans([]);
       return;
     }
@@ -1189,7 +1189,33 @@ const App = () => {
     setBhajansLoading(true);
     const db = window.firebase.firestore();
     const bhajansRef = db.collection('users').doc(user.uid).collection('bhajans');
-    
+
+    // CACHE HYDRATION: Show cached bhajans instantly (<50ms) while
+    // fresh data loads from Firestore in background. On repeat visits
+    // the user sees their library immediately instead of a spinner.
+    const CACHE_KEY = `sankirtan-my-bhajans-${user.uid}`;
+    const CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
+    try {
+      const raw = localStorage.getItem(CACHE_KEY);
+      if (raw) {
+        const cached = JSON.parse(raw);
+        const isStale = !cached.savedAt || (Date.now() - cached.savedAt) > CACHE_MAX_AGE_MS;
+        if (cached.list && cached.list.length > 0 && !isStale) {
+          setBhajans(cached.list);
+          setBhajansLoading(false);
+          console.log(`📦 My Library: hydrated ${cached.list.length} bhajans from cache`);
+        }
+      }
+    } catch (e) {
+      console.warn('My Library cache hydration failed:', e);
+    }
+
+    const saveCache = (list) => {
+      try {
+        localStorage.setItem(CACHE_KEY, JSON.stringify({ list, savedAt: Date.now() }));
+      } catch (e) { /* quota exceeded - non-fatal */ }
+    };
+
     // Load with .get() first (reliable across networks)
     const loadBhajans = async () => {
       try {
@@ -1206,6 +1232,7 @@ const App = () => {
         });
         setBhajans(bhajanList);
         setBhajansLoading(false);
+        saveCache(bhajanList);
         console.log(`✅ Loaded ${bhajanList.length} bhajans`);
       } catch (error) {
         console.error('Error loading bhajans:', error);
@@ -1231,6 +1258,7 @@ const App = () => {
               return timeB - timeA;
             });
             setBhajans(bhajanList);
+            saveCache(bhajanList);
           },
           (error) => {
             console.log('Bhajans real-time error (using cached):', error.message);
@@ -1241,13 +1269,13 @@ const App = () => {
     }
 
     return () => unsubscribe();
-  }, [user, userProfile]);
+  }, [user]);
 
   // ==============================================
   // LOAD USER'S PROGRAMS (Real-time)
   // ==============================================
   useEffect(() => {
-    if (!user || !userProfile) {
+    if (!user) {
       setPrograms([]);
       return;
     }
@@ -1255,7 +1283,27 @@ const App = () => {
     setProgramsLoading(true);
     const db = window.firebase.firestore();
     const programsRef = db.collection('users').doc(user.uid).collection('programs');
-    
+
+    // CACHE HYDRATION for programs
+    const PROG_CACHE_KEY = `sankirtan-programs-${user.uid}`;
+    try {
+      const raw = localStorage.getItem(PROG_CACHE_KEY);
+      if (raw) {
+        const cached = JSON.parse(raw);
+        if (cached.list && cached.list.length > 0 && cached.savedAt && (Date.now() - cached.savedAt) < 24 * 60 * 60 * 1000) {
+          setPrograms(cached.list);
+          setProgramsLoading(false);
+          console.log(`📦 Programs: hydrated ${cached.list.length} from cache`);
+        }
+      }
+    } catch (e) { /* non-fatal */ }
+
+    const saveProgramsCache = (list) => {
+      try {
+        localStorage.setItem(PROG_CACHE_KEY, JSON.stringify({ list, savedAt: Date.now() }));
+      } catch (e) { /* quota exceeded */ }
+    };
+
     const loadPrograms = async () => {
       try {
         const snapshot = await programsRef.get();
@@ -1270,6 +1318,7 @@ const App = () => {
         });
         setPrograms(programList);
         setProgramsLoading(false);
+        saveProgramsCache(programList);
         console.log(`✅ Loaded ${programList.length} programs`);
       } catch (error) {
         console.error('Error loading programs:', error);
@@ -1294,6 +1343,7 @@ const App = () => {
               return timeB - timeA;
             });
             setPrograms(programList);
+            saveProgramsCache(programList);
           },
           (error) => {
             console.log('Programs real-time error:', error.message);
@@ -1304,7 +1354,7 @@ const App = () => {
     }
 
     return () => unsubscribe();
-  }, [user, userProfile]);
+  }, [user]);
 
   // ==============================================
   // LOAD PUBLIC LIBRARY BHAJANS
