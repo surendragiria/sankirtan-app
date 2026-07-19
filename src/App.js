@@ -6836,7 +6836,7 @@ const App = () => {
   // LANDING / SIGN-IN SCREEN
   // ==============================================
   return (
-    <div className="min-h-screen bg-gradient-to-br from-orange-400 via-orange-500 to-amber-500 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-[#FDF8E4] flex items-center justify-center p-4">
       {/* Offline Indicator */}
       {isOffline && (
         <div className="fixed top-0 left-0 right-0 bg-red-500 text-white px-4 py-2 text-center text-sm font-semibold z-50 shadow-md">
@@ -6881,26 +6881,29 @@ const App = () => {
       )}
 
             <div className="max-w-md w-full">
-        <div className="bg-white rounded-3xl shadow-2xl overflow-hidden">
-          <div className="bg-gradient-to-br from-orange-500 to-amber-500 p-8 text-white text-center">
-            <div className="text-7xl mb-2">🕉️</div>
-            <h1 className="text-4xl font-bold mb-1">Sankirtan</h1>
-            <p className="text-orange-100 text-base">भजन से भगवान तक</p>
-            <div className="mt-4 pt-4 border-t border-white/30">
-              <p className="text-xs text-orange-100 leading-relaxed">
+        <div className="bg-[#FFFEF7] rounded-3xl shadow-xl overflow-hidden border border-[#0B5A70]/10">
+          {/* Cream hero with wordmark - matches new brand aesthetic.
+              Wordmark component reused from header (single source of truth). */}
+          <div className="bg-[#FDF8E4] p-8 text-center border-b border-[#0B5A70]/10">
+            <SankirtanWordmark className="h-14 sm:h-16 w-auto mx-auto" />
+            <p className="text-sm text-[#0B5A70] mt-3" style={{ fontFamily: "'Noto Sans Devanagari', system-ui, sans-serif" }}>
+              भजन से भगवान तक
+            </p>
+            <div className="mt-4 pt-4 border-t border-[#0B5A70]/15">
+              <p className="text-xs text-[#0B5A70]/70 leading-relaxed">
                 The devotional music platform for<br/>
-                <strong>singers, artists & devotees</strong>
+                <strong className="text-[#0B5A70]">singers, artists & devotees</strong>
               </p>
             </div>
           </div>
 
-          <div className="p-6 space-y-4">
+          <div className="p-6 space-y-4 bg-[#FFFEF7]">
             {!showPhoneLogin ? (
               <>
                 <button
                   onClick={handleGoogleLogin}
                   disabled={authLoading}
-                  className="w-full bg-white border-2 border-gray-300 hover:border-orange-400 hover:bg-orange-50 transition-all flex items-center justify-center gap-3 py-3 px-4 rounded-xl font-semibold text-gray-700 disabled:opacity-50"
+                  className="w-full bg-white border border-[#0B5A70]/20 hover:border-[#E65100]/50 hover:bg-[#FDF8E4] transition-all flex items-center justify-center gap-3 py-3 px-4 rounded-xl font-semibold text-gray-700 disabled:opacity-50"
                 >
                   <svg className="w-5 h-5" viewBox="0 0 48 48">
                     <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
@@ -6915,7 +6918,7 @@ const App = () => {
                 {false && (
                   <button
                     onClick={() => setShowPhoneLogin(true)}
-                    className="w-full bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-semibold py-3 px-4 rounded-xl transition-all flex items-center justify-center gap-2"
+                    className="w-full bg-[#E65100] hover:bg-[#B84418] text-white font-semibold py-3 px-4 rounded-xl transition-all flex items-center justify-center gap-2"
                   >
                     📱 Continue with Phone
                   </button>
@@ -6928,19 +6931,20 @@ const App = () => {
                 )}
 
                 <div className="flex items-center gap-3 my-4">
-                  <div className="flex-1 border-t border-gray-200"></div>
-                  <span className="text-xs text-gray-400">Available Features</span>
-                  <div className="flex-1 border-t border-gray-200"></div>
+                  <div className="flex-1 border-t border-[#0B5A70]/15"></div>
+                  <span className="text-[10px] text-[#0B5A70]/50 uppercase tracking-wider font-semibold">What you'll do</span>
+                  <div className="flex-1 border-t border-[#0B5A70]/15"></div>
                 </div>
 
-                <div className="text-center text-xs text-gray-500 space-y-1">
-                  <p>📚 Personal bhajan library</p>
-                  <p>🔍 Smart search & filters</p>
-                  <p>☁️ Cloud sync across devices</p>
-                  <p>🎵 Coming soon: Programs, Parody</p>
+                {/* Benefit-focused features. Verb-first, action-oriented.
+                    Answers "what do I get to DO?" not "what does the app HAVE?" */}
+                <div className="text-center text-xs text-[#0B5A70]/80 space-y-1.5">
+                  <p>🎵 Sing your favourites, anywhere</p>
+                  <p>🔍 Find any bhajan instantly</p>
+                  <p>🎤 Perform live with confidence</p>
                 </div>
 
-                <p className="text-xs text-gray-400 text-center mt-4">
+                <p className="text-[11px] text-[#0B5A70]/50 text-center mt-4">
                   By signing up, you agree to our<br/>
                   Terms of Service & Privacy Policy
                 </p>
@@ -7048,18 +7052,20 @@ const App = () => {
             )}
 
             {userCount > 0 && (
-              <div className="text-center pt-4 border-t border-orange-100">
-                <p className="text-xs text-amber-700">
-                  🌟 <strong>{userCount}+</strong> {userCount === 1 ? 'devotee has' : 'devotees have'} joined
+              <div className="text-center pt-4 border-t border-[#0B5A70]/10">
+                <p className="text-xs text-[#0B5A70]">
+                  🌟 <strong className="text-[#E65100]">{userCount}+</strong> {userCount === 1 ? 'devotee has' : 'devotees have'} joined
                 </p>
               </div>
             )}
           </div>
         </div>
 
-        <div className="text-center mt-4 text-white/80 text-xs">
+        {/* Footer credit - now on cream background so uses teal (not white) text.
+            Music note replaces 🕉️ for consistency with new brand identity. */}
+        <div className="text-center mt-4 text-[#0B5A70]/60 text-xs">
           <p>Founded for the Bhajan Community</p>
-          <p className="mt-1">🕉️ by Grace of <strong>Babosa Bhagwan</strong> 🕉️</p>
+          <p className="mt-1">🎵 by Grace of <strong className="text-[#0B5A70]">Babosa Bhagwan</strong> 🎵</p>
         </div>
       </div>
     </div>
