@@ -3311,57 +3311,57 @@ const App = () => {
   // ==============================================
   if (user && showProfileSetup) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-orange-50 via-amber-50 to-yellow-50 py-8 px-4">
+      <div className="min-h-screen bg-[#FFF8F0] py-8 px-4">
         <div className="max-w-md mx-auto">
           <div className="bg-white rounded-2xl shadow-2xl overflow-hidden">
-            <div className="bg-gradient-to-br from-orange-500 to-amber-500 p-6 text-white text-center">
+            <div className="bg-[#0B5A70] p-6 text-white text-center">
               <div className="text-5xl mb-2">🙏</div>
               <h2 className="text-2xl font-bold">Welcome to Sankirtan!</h2>
-              <p className="text-orange-100 text-sm mt-1">Let's set up your profile</p>
+              <p className="text-white/80 text-sm mt-1">Let's set up your profile</p>
             </div>
 
             <div className="p-6 space-y-4">
               <div>
-                <label className="block text-sm font-semibold text-amber-900 mb-1">
+                <label className="block text-sm font-semibold text-[#0B5A70] mb-1">
                   Your Name <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
                   value={profileForm.displayName}
                   onChange={(e) => setProfileForm({...profileForm, displayName: e.target.value})}
-                  className="w-full px-4 py-3 border-2 border-orange-200 rounded-xl focus:ring-4 focus:ring-orange-200 focus:border-orange-400 outline-none"
+                  className="w-full px-4 py-3 border-2 border-[#0B5A70]/12 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none"
                   placeholder="Enter your full name"
                   autoFocus
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-amber-900 mb-1">
+                <label className="block text-sm font-semibold text-[#0B5A70] mb-1">
                   Bio (optional)
                 </label>
                 <textarea
                   value={profileForm.bio}
                   onChange={(e) => setProfileForm({...profileForm, bio: e.target.value})}
-                  className="w-full px-4 py-2 border-2 border-orange-200 rounded-xl focus:ring-4 focus:ring-orange-200 focus:border-orange-400 outline-none"
+                  className="w-full px-4 py-2 border-2 border-[#0B5A70]/12 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none"
                   placeholder="e.g., Bhajan singer, Kirtan lover"
                   rows={2}
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-amber-900 mb-1">
+                <label className="block text-sm font-semibold text-[#0B5A70] mb-1">
                   Location (optional)
                 </label>
                 <input
                   type="text"
                   value={profileForm.location}
                   onChange={(e) => setProfileForm({...profileForm, location: e.target.value})}
-                  className="w-full px-4 py-3 border-2 border-orange-200 rounded-xl focus:ring-4 focus:ring-orange-200 focus:border-orange-400 outline-none"
+                  className="w-full px-4 py-3 border-2 border-[#0B5A70]/12 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none"
                   placeholder="e.g., Delhi, India"
                 />
               </div>
 
-              <div className="pt-2 border-t border-orange-100">
+              <div className="pt-2 border-t border-[#0B5A70]/8">
                 <p className="text-xs text-gray-500 mb-2">📱 Social & Contact (optional)</p>
                 
                 <div className="space-y-2">
@@ -3369,21 +3369,21 @@ const App = () => {
                     type="text"
                     value={profileForm.whatsapp}
                     onChange={(e) => setProfileForm({...profileForm, whatsapp: e.target.value})}
-                    className="w-full px-3 py-2 border-2 border-orange-100 rounded-lg focus:ring-2 focus:ring-orange-200 focus:border-orange-300 outline-none text-sm"
+                    className="w-full px-3 py-2 border-2 border-[#0B5A70]/10 rounded-lg focus:ring-2 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none text-sm"
                     placeholder="WhatsApp number"
                   />
                   <input
                     type="text"
                     value={profileForm.youtube}
                     onChange={(e) => setProfileForm({...profileForm, youtube: e.target.value})}
-                    className="w-full px-3 py-2 border-2 border-orange-100 rounded-lg focus:ring-2 focus:ring-orange-200 focus:border-orange-300 outline-none text-sm"
+                    className="w-full px-3 py-2 border-2 border-[#0B5A70]/10 rounded-lg focus:ring-2 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none text-sm"
                     placeholder="YouTube channel URL"
                   />
                   <input
                     type="text"
                     value={profileForm.instagram}
                     onChange={(e) => setProfileForm({...profileForm, instagram: e.target.value})}
-                    className="w-full px-3 py-2 border-2 border-orange-100 rounded-lg focus:ring-2 focus:ring-orange-200 focus:border-orange-300 outline-none text-sm"
+                    className="w-full px-3 py-2 border-2 border-[#0B5A70]/10 rounded-lg focus:ring-2 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none text-sm"
                     placeholder="Instagram handle"
                   />
                 </div>
@@ -3398,7 +3398,7 @@ const App = () => {
               <button
                 onClick={saveProfile}
                 disabled={authLoading || !profileForm.displayName.trim()}
-                className="w-full bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-bold py-3 rounded-xl shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full bg-[#0B5A70] hover:bg-[#094a5d] text-white font-bold py-3 rounded-xl shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {authLoading ? 'Saving...' : '🚀 Complete Setup'}
               </button>
@@ -3423,7 +3423,7 @@ const App = () => {
     const currentStep = ONBOARDING_STEPS[onboardingStep];
     
     return (
-      <div className={`min-h-screen ${darkMode ? 'bg-gray-900 text-gray-100' : 'bg-gradient-to-br from-orange-50 via-amber-50 to-yellow-50'}`}>
+      <div className={`min-h-screen ${darkMode ? 'bg-gray-900 text-gray-100' : 'bg-[#FFF8F0]'}`}>
         {/* ==============================================
             ONBOARDING TOUR MODAL
             ============================================== */}
@@ -3431,7 +3431,7 @@ const App = () => {
           <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 ">
             <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden">
               {/* Header with gradient */}
-              <div className="bg-gradient-to-br from-orange-500 to-amber-500 p-6 text-white text-center relative">
+              <div className="bg-[#0B5A70] p-6 text-white text-center relative">
                 {/* Skip button */}
                 <button
                   onClick={skipOnboarding}
@@ -3461,14 +3461,14 @@ const App = () => {
                   ))}
                 </div>
                 
-                <p className="text-xs text-orange-100">
+                <p className="text-xs text-white/80">
                   Step {onboardingStep + 1} of {ONBOARDING_STEPS.length}
                 </p>
               </div>
               
               {/* Content */}
               <div className="p-6 text-center">
-                <h3 className="text-2xl font-bold text-amber-900 mb-3">
+                <h3 className="text-2xl font-bold text-[#0B5A70] mb-3">
                   {currentStep.title}
                 </h3>
                 <p className="text-gray-700 leading-relaxed text-base mb-6">
@@ -3487,7 +3487,7 @@ const App = () => {
                   )}
                   <button
                     onClick={nextOnboardingStep}
-                    className="flex-1 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-semibold py-3 rounded-xl shadow-lg transition-all"
+                    className="flex-1 bg-[#0B5A70] hover:bg-[#094a5d] text-white font-semibold py-3 rounded-xl shadow-lg transition-all"
                   >
                     {onboardingStep === ONBOARDING_STEPS.length - 1 ? "Let's Start! 🚀" : 'Next →'}
                   </button>
@@ -3550,7 +3550,7 @@ const App = () => {
           <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4">
             <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden">
               {/* Header */}
-              <div className="bg-gradient-to-br from-orange-500 to-amber-500 p-6 text-white text-center relative">
+              <div className="bg-[#0B5A70] p-6 text-white text-center relative">
                 <button
                   onClick={() => setShowFeedbackModal(false)}
                   className="absolute top-3 right-3 text-white/80 hover:text-white text-2xl leading-none w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center"
@@ -3559,7 +3559,7 @@ const App = () => {
                 </button>
                 <div className="text-5xl mb-2">💬</div>
                 <h3 className="text-2xl font-bold">Share Your Feedback</h3>
-                <p className="text-sm text-orange-100 mt-1">
+                <p className="text-sm text-white/80 mt-1">
                   Your thoughts help us improve Sankirtan
                 </p>
               </div>
@@ -3570,7 +3570,7 @@ const App = () => {
                   // Success message
                   <div className="text-center py-6">
                     <div className="text-6xl mb-3">🙏</div>
-                    <h4 className="text-xl font-bold text-amber-900 mb-2">Thank You!</h4>
+                    <h4 className="text-xl font-bold text-[#0B5A70] mb-2">Thank You!</h4>
                     <p className="text-gray-600">
                       Your feedback has been received.
                       <br />
@@ -3579,7 +3579,7 @@ const App = () => {
                   </div>
                 ) : (
                   <>
-                    <label className="block text-sm font-semibold text-amber-900 mb-2">
+                    <label className="block text-sm font-semibold text-[#0B5A70] mb-2">
                       Tell us what you think...
                     </label>
                     <textarea
@@ -3590,7 +3590,7 @@ const App = () => {
                       }}
                       rows={6}
                       maxLength={1000}
-                      className="w-full px-4 py-3 border-2 border-orange-200 rounded-xl focus:ring-4 focus:ring-orange-200 focus:border-orange-400 outline-none resize-none text-base"
+                      className="w-full px-4 py-3 border-2 border-[#0B5A70]/12 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none resize-none text-base"
                       placeholder="What do you love? What could be better? Any bugs? Ideas for new features? We're listening... 🙏"
                     />
                     <div className="text-right text-xs text-gray-500 mt-1">
@@ -3603,7 +3603,7 @@ const App = () => {
                       </div>
                     )}
                     
-                    <div className="mt-4 p-3 bg-orange-50 rounded-lg text-xs text-amber-800">
+                    <div className="mt-4 p-3 bg-[#0B5A70]/5 rounded-lg text-xs text-[#0B5A70]">
                       💡 Your name & email will be included so we can follow up if needed.
                     </div>
                     
@@ -3617,7 +3617,7 @@ const App = () => {
                       <button
                         onClick={submitFeedback}
                         disabled={feedbackSubmitting || !feedbackText.trim()}
-                        className="flex-1 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-semibold py-3 rounded-xl shadow-lg disabled:opacity-50 transition-all"
+                        className="flex-1 bg-[#0B5A70] hover:bg-[#094a5d] text-white font-semibold py-3 rounded-xl shadow-lg disabled:opacity-50 transition-all"
                       >
                         {feedbackSubmitting ? 'Sending...' : '📤 Send Feedback'}
                       </button>
@@ -3635,7 +3635,7 @@ const App = () => {
         {showReadingSettings && (
           <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4">
             <div className={`rounded-3xl shadow-2xl max-w-sm w-full overflow-hidden ${darkMode ? 'bg-gray-800 text-gray-100' : 'bg-white'}`}>
-              <div className={`p-6 text-center ${darkMode ? 'bg-gray-700' : 'bg-gradient-to-br from-orange-500 to-amber-500'} text-white`}>
+              <div className={`p-6 text-center ${darkMode ? 'bg-gray-700' : 'bg-[#0B5A70]'} text-white`}>
                 <div className="text-5xl mb-2">📖</div>
                 <h3 className="text-2xl font-bold">Reading View</h3>
                 <p className="text-sm opacity-90 mt-1">Comfortable lyrics reading</p>
@@ -3654,12 +3654,12 @@ const App = () => {
                     step="1"
                     value={readingSettings.fontSize}
                     onChange={(e) => setReadingSettings(prev => ({ ...prev, fontSize: parseInt(e.target.value) }))}
-                    className="w-full accent-orange-500"
+                    className="w-full accent-[#0B5A70]"
                   />
                 </div>
 
                 {/* Reading Mode toggle - larger font + tighter alignment for focused reading */}
-                <div className={`flex items-center justify-between p-3 rounded-xl ${darkMode ? 'bg-gray-700' : 'bg-orange-50'}`}>
+                <div className={`flex items-center justify-between p-3 rounded-xl ${darkMode ? 'bg-gray-700' : 'bg-[#0B5A70]/5'}`}>
                   <div>
                     <div className="text-sm font-semibold">Reading Mode</div>
                     <div className="text-xs opacity-75">Larger, centered text for focused singing</div>
@@ -3673,7 +3673,7 @@ const App = () => {
                         ? { ...prev, readingMode: true, fontSize: Math.max(prev.fontSize, 24), textAlign: 'center', lineHeight: 2.0 }
                         : { ...prev, readingMode: false };
                     })}
-                    className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ml-3 ${readingSettings.readingMode ? 'bg-orange-500' : 'bg-gray-300'}`}
+                    className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ml-3 ${readingSettings.readingMode ? 'bg-[#0B5A70]/50' : 'bg-gray-300'}`}
                     aria-label="Toggle reading mode"
                   >
                     <span
@@ -3683,7 +3683,7 @@ const App = () => {
                 </div>
 
                 {/* Keep Screen On toggle - uses Wake Lock API */}
-                <div className={`flex items-center justify-between p-3 rounded-xl ${darkMode ? 'bg-gray-700' : 'bg-orange-50'}`}>
+                <div className={`flex items-center justify-between p-3 rounded-xl ${darkMode ? 'bg-gray-700' : 'bg-[#0B5A70]/5'}`}>
                   <div>
                     <div className="text-sm font-semibold">Keep Screen On</div>
                     <div className="text-xs opacity-75">
@@ -3695,7 +3695,7 @@ const App = () => {
                   <button
                     onClick={() => setReadingSettings(prev => ({ ...prev, keepScreenOn: !prev.keepScreenOn }))}
                     disabled={!('wakeLock' in navigator)}
-                    className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ml-3 ${readingSettings.keepScreenOn ? 'bg-orange-500' : 'bg-gray-300'} disabled:opacity-40 disabled:cursor-not-allowed`}
+                    className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ml-3 ${readingSettings.keepScreenOn ? 'bg-[#0B5A70]/50' : 'bg-gray-300'} disabled:opacity-40 disabled:cursor-not-allowed`}
                     aria-label="Toggle keep screen on"
                   >
                     <span
@@ -3706,7 +3706,7 @@ const App = () => {
 
                 <button
                   onClick={() => setShowReadingSettings(false)}
-                  className="w-full bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-bold py-3 rounded-xl shadow-lg"
+                  className="w-full bg-[#0B5A70] hover:bg-[#094a5d] text-white font-bold py-3 rounded-xl shadow-lg"
                 >
                   Done
                 </button>
@@ -3720,18 +3720,18 @@ const App = () => {
             ============================================== */}
         {showInstallPrompt && deferredInstallPrompt && (
           <div className="fixed bottom-4 left-4 right-4 md:left-auto md:max-w-md z-50">
-            <div className="bg-white rounded-2xl shadow-2xl border-2 border-orange-300 p-5">
+            <div className="bg-white rounded-2xl shadow-2xl border-2 border-[#0B5A70]/20 p-5">
               <div className="flex items-start gap-3">
                 <div className="text-4xl">🕉️</div>
                 <div className="flex-1">
-                  <h4 className="font-bold text-amber-900 mb-1">Add Sankirtan to Home Screen</h4>
+                  <h4 className="font-bold text-[#0B5A70] mb-1">Add Sankirtan to Home Screen</h4>
                   <p className="text-sm text-gray-600 mb-3">
                     Install for a native app experience - quick access, offline support, and full-screen mode!
                   </p>
                   <div className="flex gap-2">
                     <button
                       onClick={handleInstallApp}
-                      className="bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-semibold px-4 py-2 rounded-lg text-sm shadow-md flex-1"
+                      className="bg-[#0B5A70] hover:bg-[#094a5d] text-white font-semibold px-4 py-2 rounded-lg text-sm shadow-md flex-1"
                     >
                       📱 Install App
                     </button>
@@ -3753,15 +3753,15 @@ const App = () => {
             ============================================== */}
         {showIOSInstructions && (
           <div className="fixed bottom-4 left-4 right-4 md:left-auto md:max-w-md z-50">
-            <div className="bg-white rounded-2xl shadow-2xl border-2 border-orange-300 p-5">
+            <div className="bg-white rounded-2xl shadow-2xl border-2 border-[#0B5A70]/20 p-5">
               <div className="flex items-start gap-3">
                 <div className="text-4xl">🕉️</div>
                 <div className="flex-1">
-                  <h4 className="font-bold text-amber-900 mb-1">Add Sankirtan to Home Screen</h4>
+                  <h4 className="font-bold text-[#0B5A70] mb-1">Add Sankirtan to Home Screen</h4>
                   <p className="text-sm text-gray-600 mb-3">
                     Get quick access - just like a native app!
                   </p>
-                  <div className="bg-orange-50 rounded-lg p-3 mb-3 text-xs text-amber-900">
+                  <div className="bg-[#0B5A70]/5 rounded-lg p-3 mb-3 text-xs text-[#0B5A70]">
                     <ol className="list-decimal list-inside space-y-1">
                       <li>Tap the <span className="inline-block bg-white border border-gray-300 rounded px-1.5 py-0.5 text-blue-600">Share ⬆️</span> button below</li>
                       <li>Scroll down and tap <strong>"Add to Home Screen"</strong></li>
@@ -3772,7 +3772,7 @@ const App = () => {
                   <div className="flex gap-2">
                     <button
                       onClick={dismissInstallPrompt}
-                      className="bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-semibold px-4 py-2 rounded-lg text-sm flex-1"
+                      className="bg-[#0B5A70] hover:bg-[#094a5d] text-white font-semibold px-4 py-2 rounded-lg text-sm flex-1"
                     >
                       Got it! 👍
                     </button>
@@ -3812,7 +3812,7 @@ const App = () => {
         )}
         
         {/* Header */}
-        <header className="bg-white/80 backdrop-blur-md sticky top-0 z-40 shadow-sm">
+        <header className={`sticky top-0 z-40 border-b ${darkMode ? 'bg-gray-900 border-gray-700' : 'bg-[#FFF8F0]/95 backdrop-blur-md border-[#0B5A70]/10'}`}>
           <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
             <button
               onClick={() => setCurrentView('public-library')}
@@ -3839,11 +3839,11 @@ const App = () => {
                 <img 
                   src={userProfile.photoURL} 
                   alt={userProfile.displayName}
-                  className="w-9 h-9 rounded-full border-2 border-orange-300"
+                  className="w-9 h-9 rounded-full border-2 border-[#0B5A70]/30"
                 />
               )}
               <div className="hidden sm:block">
-                <p className="text-sm font-semibold text-amber-900">{userProfile.displayName}</p>
+                <p className="text-sm font-semibold text-[#0B5A70]">{userProfile.displayName}</p>
                 {userProfile.verified && <span className="text-xs text-blue-600">✓ Verified</span>}
                 {isAdmin && <span className="text-xs text-purple-600 ml-1">👑 Admin</span>}
               </div>
@@ -3867,7 +3867,7 @@ const App = () => {
                   setOnboardingStep(0);
                   setShowOnboarding(true);
                 }}
-                className="text-blue-600 hover:text-blue-800 p-2 rounded-lg hover:bg-blue-50"
+                className="text-[#0B5A70] hover:text-[#0B5A70]/80 p-2 rounded-lg hover:bg-[#0B5A70]/5"
                 title="Show Tour"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -3877,7 +3877,7 @@ const App = () => {
               </button>
               <button
                 onClick={handleLogout}
-                className="text-orange-600 hover:text-orange-800 p-2 rounded-lg hover:bg-orange-50"
+                className="text-[#0B5A70]/60 hover:text-red-600 p-2 rounded-lg hover:bg-red-50"
                 title="Logout"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -3901,15 +3901,15 @@ const App = () => {
               <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
                 <div className="flex items-center gap-3 flex-wrap">
                   {/* Public ↔ Personal library switcher */}
-                  <div className="inline-flex bg-orange-100 rounded-xl p-1 shadow-inner">
+                  <div className={`inline-flex rounded-xl p-1 ${darkMode ? 'bg-gray-700' : 'bg-[#0B5A70]/8'}`}>
                     <button
                       onClick={openPublicLibrary}
-                      className="px-3 py-1.5 rounded-lg text-sm font-semibold text-amber-700 hover:text-amber-900 transition-all"
+                      className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-all ${darkMode ? 'text-gray-400 hover:text-gray-200' : 'text-[#0B5A70]/60 hover:text-[#0B5A70]'}`}
                     >
                       🌐 Public
                     </button>
                     <button
-                      className="px-3 py-1.5 rounded-lg text-sm font-semibold bg-white text-amber-900 shadow-md"
+                      className={`px-3 py-1.5 rounded-lg text-sm font-semibold shadow-sm ${darkMode ? 'bg-gray-600 text-gray-100' : 'bg-white text-[#0B5A70]'}`}
                     >
                       📚 My Library
                     </button>
@@ -3918,14 +3918,14 @@ const App = () => {
                 <div className="flex items-center gap-2 flex-wrap">
                   <button
                     onClick={openPrograms}
-                    className="bg-white border-2 border-orange-300 hover:border-orange-500 text-amber-800 font-semibold px-3 py-2 rounded-xl text-sm flex items-center gap-1"
+                    className={`border-2 font-semibold px-3 py-2 rounded-xl text-sm flex items-center gap-1 ${darkMode ? 'bg-gray-800 border-gray-600 text-gray-200 hover:border-gray-500' : 'bg-[#FFFCF8] border-[#0B5A70]/15 hover:border-[#0B5A70]/40 text-[#0B5A70]'}`}
                     title="View and manage your programs / setlists"
                   >
                     🎵 Programs ({programs.length})
                   </button>
                   <button
                     onClick={openAddBhajan}
-                    className="bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-semibold px-4 py-2 rounded-xl shadow-md flex items-center gap-2 text-sm"
+                    className="bg-[#0B5A70] hover:bg-[#094a5d] text-white font-semibold px-4 py-2 rounded-xl shadow-md flex items-center gap-2 text-sm"
                   >
                     <span className="text-lg">+</span> Add Bhajan
                   </button>
@@ -3934,7 +3934,7 @@ const App = () => {
 
               {/* Tiny count line replaces the "📚 My Library" heading - tab already indicates page.
                   Shown as a small helper text so users still see how many bhajans they have. */}
-              <p className={`text-xs mb-3 ${darkMode ? 'text-gray-400' : 'text-amber-700'}`}>
+              <p className={`text-xs mb-3 ${darkMode ? 'text-gray-400' : 'text-[#0B5A70]/60'}`}>
                 {bhajans.length} bhajan{bhajans.length === 1 ? '' : 's'} in your collection
               </p>
 
@@ -3949,15 +3949,15 @@ const App = () => {
                     className={`w-full px-4 py-3 pr-24 border-2 rounded-xl focus:ring-4 outline-none ${
                       darkMode
                         ? 'bg-gray-800 border-gray-600 text-gray-100 focus:ring-gray-700 focus:border-gray-500'
-                        : 'border-orange-200 focus:ring-orange-200 focus:border-orange-400'
+                        : 'bg-white border-[#0B5A70]/12 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30'
                     }`}
                   />
                   <button
                     onClick={() => setSpeechLang(speechLang === 'en-IN' ? 'hi-IN' : 'en-IN')}
                     className={`absolute right-11 top-1/2 -translate-y-1/2 px-1.5 py-0.5 rounded text-[10px] font-bold border transition-colors ${
                       speechLang === 'hi-IN'
-                        ? 'bg-orange-500 text-white border-orange-500'
-                        : 'bg-white text-gray-600 border-gray-300 hover:border-orange-300'
+                        ? 'bg-[#0B5A70] text-white border-[#0B5A70]'
+                        : 'bg-white text-gray-600 border-gray-300 hover:border-[#0B5A70]/20'
                     }`}
                     title={`Voice input: ${speechLang === 'hi-IN' ? 'Hindi' : 'English'}`}
                   >
@@ -3970,7 +3970,7 @@ const App = () => {
                         ? 'bg-red-500 text-white animate-pulse'
                         : darkMode
                           ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-700'
-                          : 'text-orange-400 hover:text-orange-600 hover:bg-orange-50'
+                          : 'text-[#0B5A70]/40 hover:text-[#0B5A70] hover:bg-[#0B5A70]/5'
                     }`}
                     title={isListening ? 'Listening...' : 'Voice search'}
                   >
@@ -4009,10 +4009,10 @@ const App = () => {
                 <select
                   value={filterDeity}
                   onChange={(e) => setFilterDeity(e.target.value)}
-                  className={`flex-1 min-w-[110px] px-3 py-2 border-2 rounded-lg focus:ring-2 focus:ring-orange-200 focus:border-orange-400 outline-none text-sm bg-white transition-all ${
+                  className={`flex-1 min-w-[110px] px-3 py-2 border-2 rounded-lg focus:ring-2 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none text-sm bg-white transition-all ${
                     filterDeity
-                      ? 'border-amber-500 ring-2 ring-amber-200 font-semibold text-amber-900'
-                      : 'border-orange-200'
+                      ? 'border-[#0B5A70]/50 ring-2 ring-[#0B5A70]/10 font-semibold text-[#0B5A70]'
+                      : 'border-[#0B5A70]/12'
                   }`}
                 >
                   <option value="">All Deities</option>
@@ -4024,10 +4024,10 @@ const App = () => {
                 <select
                   value={filterCategory}
                   onChange={(e) => setFilterCategory(e.target.value)}
-                  className={`flex-1 min-w-[110px] px-3 py-2 border-2 rounded-lg focus:ring-2 focus:ring-orange-200 focus:border-orange-400 outline-none text-sm bg-white transition-all ${
+                  className={`flex-1 min-w-[110px] px-3 py-2 border-2 rounded-lg focus:ring-2 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none text-sm bg-white transition-all ${
                     filterCategory
-                      ? 'border-amber-500 ring-2 ring-amber-200 font-semibold text-amber-900'
-                      : 'border-orange-200'
+                      ? 'border-[#0B5A70]/50 ring-2 ring-[#0B5A70]/10 font-semibold text-[#0B5A70]'
+                      : 'border-[#0B5A70]/12'
                   }`}
                 >
                   <option value="">All Categories</option>
@@ -4039,10 +4039,10 @@ const App = () => {
                 <select
                   value={libraryFilterKeyword}
                   onChange={(e) => setLibraryFilterKeyword(e.target.value)}
-                  className={`flex-1 min-w-[110px] px-3 py-2 border-2 rounded-lg focus:ring-2 focus:ring-orange-200 focus:border-orange-400 outline-none text-sm bg-white transition-all ${
+                  className={`flex-1 min-w-[110px] px-3 py-2 border-2 rounded-lg focus:ring-2 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none text-sm bg-white transition-all ${
                     libraryFilterKeyword
-                      ? 'border-amber-500 ring-2 ring-amber-200 font-semibold text-amber-900'
-                      : 'border-orange-200'
+                      ? 'border-[#0B5A70]/50 ring-2 ring-[#0B5A70]/10 font-semibold text-[#0B5A70]'
+                      : 'border-[#0B5A70]/12'
                   }`}
                 >
                   <option value="">All Keywords</option>
@@ -4061,8 +4061,8 @@ const App = () => {
                     onClick={() => setLibraryFilterKeyword(libraryFilterKeyword === kw ? '' : kw)}
                     className={`px-3 py-1 rounded-full text-xs font-semibold transition-all ${
                       libraryFilterKeyword === kw
-                        ? 'bg-orange-500 text-white shadow-md'
-                        : 'bg-orange-50 text-amber-800 border border-orange-200 hover:bg-orange-100'
+                        ? 'bg-[#0B5A70] text-white shadow-md'
+                        : 'bg-[#0B5A70]/5 text-[#0B5A70] border border-[#0B5A70]/12 hover:bg-[#0B5A70]/10'
                     }`}
                   >
                     {libraryFilterKeyword === kw ? '✓ ' : ''}#{kw}
@@ -4077,22 +4077,22 @@ const App = () => {
                     compactView ? (
                       <div
                         key={i}
-                        className={`rounded-xl p-3 border-2 flex items-center gap-3 animate-pulse ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-orange-100'}`}
+                        className={`rounded-xl p-3 border-2 flex items-center gap-3 animate-pulse ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-[#0B5A70]/10'}`}
                       >
                         <div className="flex-1 min-w-0 space-y-2">
-                          <div className={`h-3 rounded w-3/4 ${darkMode ? 'bg-gray-700' : 'bg-orange-100'}`}></div>
-                          <div className={`h-2 rounded w-1/2 ${darkMode ? 'bg-gray-700' : 'bg-orange-50'}`}></div>
+                          <div className={`h-3 rounded w-3/4 ${darkMode ? 'bg-gray-700' : 'bg-[#0B5A70]/8'}`}></div>
+                          <div className={`h-2 rounded w-1/2 ${darkMode ? 'bg-gray-700' : 'bg-[#0B5A70]/5'}`}></div>
                         </div>
                       </div>
                     ) : (
                       <div
                         key={i}
-                        className={`rounded-2xl shadow-md p-5 border-2 animate-pulse ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-orange-100'}`}
+                        className={`rounded-2xl shadow-md p-5 border animate-pulse ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-[#FFFCF8] border-[#0B5A70]/8'}`}
                       >
-                        <div className={`h-5 rounded w-3/4 mb-3 ${darkMode ? 'bg-gray-700' : 'bg-orange-100'}`}></div>
+                        <div className={`h-5 rounded w-3/4 mb-3 ${darkMode ? 'bg-gray-700' : 'bg-[#0B5A70]/8'}`}></div>
                         <div className="flex gap-2 mb-3">
-                          <div className={`h-5 w-16 rounded-full ${darkMode ? 'bg-gray-700' : 'bg-orange-100'}`}></div>
-                          <div className={`h-5 w-14 rounded-full ${darkMode ? 'bg-gray-700' : 'bg-amber-50'}`}></div>
+                          <div className={`h-5 w-16 rounded-full ${darkMode ? 'bg-gray-700' : 'bg-[#0B5A70]/8'}`}></div>
+                          <div className={`h-5 w-14 rounded-full ${darkMode ? 'bg-gray-700' : 'bg-[#E65100]/5'}`}></div>
                         </div>
                         <div className="space-y-2">
                           <div className={`h-3 rounded ${darkMode ? 'bg-gray-700' : 'bg-gray-100'}`}></div>
@@ -4104,15 +4104,15 @@ const App = () => {
                   ))}
                 </div>
               ) : filteredBhajans.length === 0 ? (
-                <div className={`text-center py-12 rounded-2xl border-2 border-dashed ${darkMode ? 'bg-gray-800 border-gray-600' : 'bg-white border-orange-200'}`}>
+                <div className={`text-center py-12 rounded-2xl border-2 border-dashed ${darkMode ? 'bg-gray-800 border-gray-600' : 'bg-[#FFFCF8] border-[#0B5A70]/15'}`}>
                   {bhajans.length === 0 ? (
                     <>
                       <div className="text-6xl mb-4">📚</div>
-                      <h3 className="text-lg font-bold text-amber-900 mb-2">Your library is empty!</h3>
+                      <h3 className="text-lg font-bold text-[#0B5A70] mb-2">Your library is empty!</h3>
                       <p className="text-sm text-gray-600 mb-4">Start by adding your first bhajan</p>
                       <button
                         onClick={openAddBhajan}
-                        className="bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-semibold px-6 py-3 rounded-xl shadow-md inline-flex items-center gap-2"
+                        className="bg-[#0B5A70] hover:bg-[#094a5d] text-white font-semibold px-6 py-3 rounded-xl shadow-md inline-flex items-center gap-2"
                       >
                         <span className="text-lg">+</span> Add Your First Bhajan
                       </button>
@@ -4120,7 +4120,7 @@ const App = () => {
                   ) : (
                     <>
                       <div className="text-4xl mb-3">🔍</div>
-                      <p className="text-amber-900 font-semibold">No bhajans match your filters</p>
+                      <p className="text-[#0B5A70] font-semibold">No bhajans match your filters</p>
                       <p className="text-sm text-gray-600 mt-1">Try adjusting your search or filters</p>
                     </>
                   )}
@@ -4129,17 +4129,17 @@ const App = () => {
                 <>
                   {/* View density toggle */}
                   <div className="flex justify-end mb-2">
-                    <div className="inline-flex bg-orange-50 rounded-lg p-0.5 border border-orange-200">
+                    <div className="inline-flex bg-[#0B5A70]/5 rounded-lg p-0.5 border border-[#0B5A70]/10">
                       <button
                         onClick={() => setCompactView(false)}
-                        className={`px-2 py-1 rounded text-xs font-semibold transition-colors ${!compactView ? 'bg-white text-amber-900 shadow' : 'text-amber-600 hover:text-amber-800'}`}
+                        className={`px-2 py-1 rounded text-xs font-semibold transition-colors ${!compactView ? 'bg-white text-[#0B5A70] shadow' : 'text-[#0B5A70]/50 hover:text-[#0B5A70]'}`}
                         title="Full card view"
                       >
                         ▤ Full
                       </button>
                       <button
                         onClick={() => setCompactView(true)}
-                        className={`px-2 py-1 rounded text-xs font-semibold transition-colors ${compactView ? 'bg-white text-amber-900 shadow' : 'text-amber-600 hover:text-amber-800'}`}
+                        className={`px-2 py-1 rounded text-xs font-semibold transition-colors ${compactView ? 'bg-white text-[#0B5A70] shadow' : 'text-[#0B5A70]/50 hover:text-[#0B5A70]'}`}
                         title="Compact list view"
                       >
                         ☰ Compact
@@ -4155,10 +4155,10 @@ const App = () => {
                         <button
                           key={bhajan.id}
                           onClick={() => openBhajanDetail(bhajan)}
-                          className={`w-full text-left rounded-xl p-3 border-2 hover:border-orange-400 transition-all flex items-center gap-3 ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-orange-100'}`}
+                          className={`w-full text-left rounded-xl p-3 border transition-all flex items-center gap-3 ${darkMode ? 'bg-gray-800 border-gray-700 hover:border-gray-500' : 'bg-[#FFFCF8] border-[#0B5A70]/8 shadow-[0_1px_4px_rgba(11,90,112,0.04)] hover:border-[#0B5A70]/25 hover:shadow-[0_2px_8px_rgba(11,90,112,0.10)]'}`}
                         >
                           <div className="flex-1 min-w-0">
-                            <h3 className={`text-sm font-bold truncate ${darkMode ? 'text-amber-100' : 'text-amber-900'}`}>
+                            <h3 className={`text-sm font-bold truncate ${darkMode ? 'text-amber-100' : 'text-[#0B5A70]'}`}>
                               {bhajan.title}
                             </h3>
                             <p className={`text-xs truncate ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
@@ -4174,29 +4174,29 @@ const App = () => {
                       <button
                         key={bhajan.id}
                         onClick={() => openBhajanDetail(bhajan)}
-                        className={`rounded-2xl shadow-md p-5 border-2 hover:border-orange-400 hover:shadow-xl transition-all text-left ${darkMode ? 'bg-gray-800 border-gray-700 hover:border-orange-500' : 'bg-white border-orange-100'}`}
+                        className={`rounded-2xl p-5 border transition-all text-left ${darkMode ? 'bg-gray-800 border-gray-700 shadow-md hover:border-gray-500 hover:shadow-xl' : 'bg-[#FFFCF8] border-[#0B5A70]/8 shadow-[0_2px_12px_rgba(11,90,112,0.06)] hover:border-[#0B5A70]/25 hover:shadow-[0_4px_20px_rgba(11,90,112,0.12)]'}`}
                       >
                         <div className="flex items-start justify-between mb-2">
-                          <h3 className="text-lg font-bold text-amber-900 flex-1 line-clamp-2">
+                          <h3 className="text-lg font-bold text-[#0B5A70] flex-1 line-clamp-2">
                             {bhajan.title}
                           </h3>
                         </div>
 
                         {bhajan.dhun && (
-                          <p className="text-xs text-orange-600 mb-2">
+                          <p className="text-xs text-[#E65100] mb-2">
                             <span className="font-semibold">तर्ज़:</span> {bhajan.dhun}
                           </p>
                         )}
 
                         <div className="flex flex-wrap gap-1 mb-2">
-                          <span className="text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded-full">
+                          <span className="text-xs bg-[#0B5A70]/8 text-[#0B5A70] px-2 py-1 rounded-full">
                             {bhajan.deity}
                           </span>
-                          <span className="text-xs bg-amber-100 text-amber-800 px-2 py-1 rounded-full">
+                          <span className="text-xs bg-[#E65100]/8 text-[#E65100] px-2 py-1 rounded-full">
                             {bhajan.category}
                           </span>
                           {bhajan.scale && (
-                            <span className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded-full">
+                            <span className="text-xs bg-purple-50 text-purple-700 px-2 py-1 rounded-full">
                               🎵 {bhajan.scale}
                             </span>
                           )}
@@ -4204,19 +4204,19 @@ const App = () => {
 
                         {/* Same defensive lyrics preview treatment as Public
                             Library - trim + max-height prevents card stretching. */}
-                        <p className="text-sm text-gray-700 line-clamp-3 mb-2 whitespace-pre-line max-h-16 overflow-hidden">
+                        <p className="text-sm text-gray-600 line-clamp-3 mb-2 whitespace-pre-line max-h-16 overflow-hidden">
                           {(bhajan.lyrics || '').trim()}
                         </p>
 
                         {bhajan.keywords && bhajan.keywords.length > 0 && (
                           <div className="flex flex-wrap gap-1">
                             {bhajan.keywords.slice(0, 4).map(kw => (
-                              <span key={kw} className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">
+                              <span key={kw} className="text-xs bg-[#0B5A70]/5 text-[#0B5A70]/70 px-2 py-0.5 rounded-full">
                                 #{kw}
                               </span>
                             ))}
                             {bhajan.keywords.length > 4 && (
-                              <span className="text-xs text-gray-500">+{bhajan.keywords.length - 4}</span>
+                              <span className="text-xs text-gray-400">+{bhajan.keywords.length - 4}</span>
                             )}
                           </div>
                         )}
@@ -4228,8 +4228,8 @@ const App = () => {
                 {/* Load more sentinel */}
                 {libraryVisibleCount < filteredBhajans.length && (
                   <div ref={libraryLoadMoreRef} className="text-center py-6">
-                    <div className="inline-flex items-center gap-2 text-xs text-orange-600">
-                      <div className="w-4 h-4 border-2 border-orange-400 border-t-transparent rounded-full animate-spin"></div>
+                    <div className="inline-flex items-center gap-2 text-xs text-[#0B5A70]/60">
+                      <div className="w-4 h-4 border-2 border-[#0B5A70]/40 border-t-transparent rounded-full animate-spin"></div>
                       Loading more bhajans...
                     </div>
                     <p className="text-xs text-gray-400 mt-1">
@@ -4257,14 +4257,14 @@ const App = () => {
                 {/* Compact action bar: back + pill actions (Edit / Delete / View) */}
                 <button
                   onClick={() => setCurrentView('library')}
-                  className="text-orange-600 hover:text-orange-800 flex items-center gap-1 text-sm"
+                  className="text-[#0B5A70] hover:text-[#0B5A70]/80 flex items-center gap-1 text-sm"
                 >
                   ← Back
                 </button>
                 <div className="flex gap-1.5 flex-wrap">
                   <button
                     onClick={() => setShowReadingSettings(true)}
-                    className={`px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 transition-colors ${darkMode ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-orange-100 text-amber-800 hover:bg-orange-200'}`}
+                    className={`px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 transition-colors ${darkMode ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15'}`}
                     title="Reading view options"
                   >
                     👁️ View
@@ -4285,18 +4285,18 @@ const App = () => {
               </div>
 
               {/* Bhajan Content */}
-              <div className={`rounded-2xl shadow-lg p-6 md:p-8 mb-4 ${darkMode ? 'bg-gray-800 border border-gray-700' : 'bg-white'}`}>
+              <div className={`rounded-2xl shadow-[0_2px_12px_rgba(11,90,112,0.06)] p-6 md:p-8 mb-4 ${darkMode ? 'bg-gray-800 border border-gray-700' : 'bg-[#FFFCF8] border border-[#0B5A70]/8'}`}>
                 {/* Title (smaller, max 2 lines) - View button already in action bar above */}
                 <h1
-                  className={`text-xl md:text-2xl font-bold mb-3 line-clamp-2 ${darkMode ? 'text-amber-100' : 'text-amber-900'}`}
+                  className={`text-xl md:text-2xl font-bold mb-3 line-clamp-2 ${darkMode ? 'text-amber-100' : 'text-[#0B5A70]'}`}
                   title={selectedBhajan.title}
                 >
                   {selectedBhajan.title}
                 </h1>
 
                 {selectedBhajan.dhun && (
-                  <div className={`border-l-4 border-orange-400 p-3 rounded-r-lg mb-4 ${darkMode ? 'bg-gray-700' : 'bg-orange-50'}`}>
-                    <p className={`text-sm ${darkMode ? 'text-orange-200' : 'text-orange-900'}`}>
+                  <div className={`border-l-4 border-[#E65100]/40 p-3 rounded-r-lg mb-4 ${darkMode ? 'bg-gray-700' : 'bg-[#0B5A70]/5'}`}>
+                    <p className={`text-sm ${darkMode ? 'text-orange-200' : 'text-[#E65100]'}`}>
                       <span className="font-semibold">तर्ज़ / धुन:</span> {selectedBhajan.dhun}
                     </p>
                   </div>
@@ -4326,12 +4326,12 @@ const App = () => {
                   )}
                 </div>
 
-                <div className={`border-t pt-4 ${darkMode ? 'border-gray-700' : 'border-orange-100'}`}>
+                <div className={`border-t pt-4 ${darkMode ? 'border-gray-700' : 'border-[#0B5A70]/8'}`}>
                   {/* Quick font size adjust */}
                   <div className="flex items-center justify-end gap-1 mb-2">
                     <button
                       onClick={() => setReadingSettings(prev => ({ ...prev, fontSize: Math.max(14, prev.fontSize - 2) }))}
-                      className={`px-2 py-1 rounded-md text-xs font-semibold transition-colors ${darkMode ? 'bg-gray-700 hover:bg-gray-600 text-gray-200' : 'bg-orange-50 hover:bg-orange-100 text-amber-800 border border-orange-200'}`}
+                      className={`px-2 py-1 rounded-md text-xs font-semibold transition-colors ${darkMode ? 'bg-gray-700 hover:bg-gray-600 text-gray-200' : 'bg-[#0B5A70]/5 hover:bg-[#0B5A70]/10 text-[#0B5A70] border border-[#0B5A70]/12'}`}
                       title="Decrease font size"
                     >
                       Aa−
@@ -4339,7 +4339,7 @@ const App = () => {
                     <span className={`text-xs w-8 text-center ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{readingSettings.fontSize}</span>
                     <button
                       onClick={() => setReadingSettings(prev => ({ ...prev, fontSize: Math.min(40, prev.fontSize + 2) }))}
-                      className={`px-2 py-1 rounded-md text-xs font-semibold transition-colors ${darkMode ? 'bg-gray-700 hover:bg-gray-600 text-gray-200' : 'bg-orange-50 hover:bg-orange-100 text-amber-800 border border-orange-200'}`}
+                      className={`px-2 py-1 rounded-md text-xs font-semibold transition-colors ${darkMode ? 'bg-gray-700 hover:bg-gray-600 text-gray-200' : 'bg-[#0B5A70]/5 hover:bg-[#0B5A70]/10 text-[#0B5A70] border border-[#0B5A70]/12'}`}
                       title="Increase font size"
                     >
                       Aa+
@@ -4359,7 +4359,7 @@ const App = () => {
                 </div>
 
                 {selectedBhajan.keywords && selectedBhajan.keywords.length > 0 && (
-                  <div className="mt-6 pt-4 border-t border-orange-100">
+                  <div className="mt-6 pt-4 border-t border-[#0B5A70]/8">
                     <p className="text-xs text-gray-500 mb-2">Keywords:</p>
                     <div className="flex flex-wrap gap-2">
                       {selectedBhajan.keywords.map(kw => (
@@ -4372,7 +4372,7 @@ const App = () => {
                 )}
 
                 {selectedBhajan.source && (
-                  <div className="mt-4 pt-4 border-t border-orange-100">
+                  <div className="mt-4 pt-4 border-t border-[#0B5A70]/8">
                     <a
                       href={selectedBhajan.source}
                       target="_blank"
@@ -4401,20 +4401,20 @@ const App = () => {
                       setCurrentView('library');
                     }
                   }}
-                  className="text-orange-600 hover:text-orange-800 flex items-center gap-1 text-sm"
+                  className="text-[#0B5A70] hover:text-[#0B5A70]/80 flex items-center gap-1 text-sm"
                 >
                   ← Cancel
                 </button>
               </div>
 
               <div className="bg-white rounded-2xl shadow-lg p-6 md:p-8">
-                <h2 className="text-2xl font-bold text-amber-900 mb-6">
+                <h2 className="text-2xl font-bold text-[#0B5A70] mb-6">
                   {currentView === 'edit-bhajan' ? '✏️ Edit Bhajan' : '➕ Add New Bhajan'}
                 </h2>
 
                 {/* Title */}
                 <div className="mb-4">
-                  <label className="block text-sm font-semibold text-amber-900 mb-1">
+                  <label className="block text-sm font-semibold text-[#0B5A70] mb-1">
                     Title <span className="text-red-500">*</span>
                   </label>
                   <div className="relative">
@@ -4426,11 +4426,11 @@ const App = () => {
                       onKeyDown={(e) => handleHindiKeyDown(e, 'title')}
                       onBlur={() => setTimeout(() => setShowSuggestions(false), 300)}
                       onFocus={() => setActiveTypingField('title')}
-                      className="w-full px-4 py-3 border-2 border-orange-200 rounded-xl focus:ring-4 focus:ring-orange-200 focus:border-orange-400 outline-none text-lg"
+                      className="w-full px-4 py-3 border-2 border-[#0B5A70]/12 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none text-lg"
                       placeholder={hindiTypingEnabled ? "Type: om jai jagdish hare" : "e.g., ॐ जय जगदीश हरे"}
                     />
                     {hindiTypingEnabled && showSuggestions && activeTypingField === 'title' && transliterationSuggestions.length > 0 && (
-                      <div className="absolute bottom-full left-0 right-0 mb-2 bg-white border-2 border-orange-300 rounded-lg shadow-2xl p-2 flex flex-wrap gap-2 items-center z-30">
+                      <div className="absolute bottom-full left-0 right-0 mb-2 bg-white border-2 border-[#0B5A70]/20 rounded-lg shadow-2xl p-2 flex flex-wrap gap-2 items-center z-30">
                         <span className="text-xs text-gray-500 mr-1">
                           <strong>"{currentWord}"</strong> →
                         </span>
@@ -4448,8 +4448,8 @@ const App = () => {
                             }}
                             className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
                               idx === 0
-                                ? 'bg-orange-500 text-white hover:bg-orange-600 shadow-md'
-                                : 'bg-orange-100 text-amber-800 hover:bg-orange-200'
+                                ? 'bg-[#0B5A70] text-white hover:bg-[#094a5d] shadow-md'
+                                : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15'
                             }`}
                           >
                             {idx === 0 && '⭐ '}{suggestion}
@@ -4482,13 +4482,13 @@ const App = () => {
                 {/* Deity and Category */}
                 <div className="grid grid-cols-2 gap-3 mb-4">
                   <div>
-                    <label className="block text-sm font-semibold text-amber-900 mb-1">
+                    <label className="block text-sm font-semibold text-[#0B5A70] mb-1">
                       Deity
                     </label>
                     <select
                       value={bhajanForm.deity}
                       onChange={(e) => setBhajanForm({...bhajanForm, deity: e.target.value})}
-                      className="w-full px-4 py-3 border-2 border-orange-200 rounded-xl focus:ring-4 focus:ring-orange-200 focus:border-orange-400 outline-none bg-white"
+                      className="w-full px-4 py-3 border-2 border-[#0B5A70]/12 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none bg-white"
                     >
                       {allDeityOptions.map(d => (
                         <option key={d.value} value={d.value}>{d.value}</option>
@@ -4497,13 +4497,13 @@ const App = () => {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-semibold text-amber-900 mb-1">
+                    <label className="block text-sm font-semibold text-[#0B5A70] mb-1">
                       Category
                     </label>
                     <select
                       value={bhajanForm.category}
                       onChange={(e) => setBhajanForm({...bhajanForm, category: e.target.value})}
-                      className="w-full px-4 py-3 border-2 border-orange-200 rounded-xl focus:ring-4 focus:ring-orange-200 focus:border-orange-400 outline-none bg-white"
+                      className="w-full px-4 py-3 border-2 border-[#0B5A70]/12 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none bg-white"
                     >
                       {allCategoryOptions.map(c => (
                         <option key={c} value={c}>{c}</option>
@@ -4514,7 +4514,7 @@ const App = () => {
 
                 {/* Dhun / Tarz */}
                 <div className="mb-4">
-                  <label className="block text-sm font-semibold text-amber-900 mb-1">
+                  <label className="block text-sm font-semibold text-[#0B5A70] mb-1">
                     तर्ज़ / धुन (Tune)
                   </label>
                   <div className="relative">
@@ -4526,11 +4526,11 @@ const App = () => {
                       onKeyDown={(e) => handleHindiKeyDown(e, 'dhun')}
                       onBlur={() => setTimeout(() => setShowSuggestions(false), 300)}
                       onFocus={() => setActiveTypingField('dhun')}
-                      className="w-full px-4 py-3 border-2 border-orange-200 rounded-xl focus:ring-4 focus:ring-orange-200 focus:border-orange-400 outline-none"
+                      className="w-full px-4 py-3 border-2 border-[#0B5A70]/12 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none"
                       placeholder={hindiTypingEnabled ? "Type in English, press space" : "e.g., तर्ज़: तुझे देखा तो..."}
                     />
                     {hindiTypingEnabled && showSuggestions && activeTypingField === 'dhun' && transliterationSuggestions.length > 0 && (
-                      <div className="absolute bottom-full left-0 right-0 mb-2 bg-white border-2 border-orange-300 rounded-lg shadow-2xl p-2 flex flex-wrap gap-2 items-center z-30">
+                      <div className="absolute bottom-full left-0 right-0 mb-2 bg-white border-2 border-[#0B5A70]/20 rounded-lg shadow-2xl p-2 flex flex-wrap gap-2 items-center z-30">
                         <span className="text-xs text-gray-500 mr-1">
                           <strong>"{currentWord}"</strong> →
                         </span>
@@ -4548,8 +4548,8 @@ const App = () => {
                             }}
                             className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
                               idx === 0
-                                ? 'bg-orange-500 text-white hover:bg-orange-600 shadow-md'
-                                : 'bg-orange-100 text-amber-800 hover:bg-orange-200'
+                                ? 'bg-[#0B5A70] text-white hover:bg-[#094a5d] shadow-md'
+                                : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15'
                             }`}
                           >
                             {idx === 0 && '⭐ '}{suggestion}
@@ -4581,14 +4581,14 @@ const App = () => {
 
                 {/* Scale */}
                 <div className="mb-4">
-                  <label className="block text-sm font-semibold text-amber-900 mb-1">
+                  <label className="block text-sm font-semibold text-[#0B5A70] mb-1">
                     Scale / Raag
                   </label>
                   <input
                     type="text"
                     value={bhajanForm.scale}
                     onChange={(e) => setBhajanForm({...bhajanForm, scale: e.target.value})}
-                    className="w-full px-4 py-3 border-2 border-orange-200 rounded-xl focus:ring-4 focus:ring-orange-200 focus:border-orange-400 outline-none"
+                    className="w-full px-4 py-3 border-2 border-[#0B5A70]/12 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none"
                     placeholder="e.g., Raag Yaman, C# Scale"
                   />
                 </div>
@@ -4596,7 +4596,7 @@ const App = () => {
                 {/* Lyrics with Hindi Typing */}
                 <div className="mb-4">
                   <div className="flex items-center justify-between mb-1">
-                    <label className="block text-sm font-semibold text-amber-900">
+                    <label className="block text-sm font-semibold text-[#0B5A70]">
                       Lyrics <span className="text-red-500">*</span>
                     </label>
                     <button
@@ -4604,7 +4604,7 @@ const App = () => {
                       onClick={() => setHindiTypingEnabled(!hindiTypingEnabled)}
                       className={`text-xs font-semibold px-3 py-1 rounded-full transition-all ${
                         hindiTypingEnabled
-                          ? 'bg-orange-500 text-white shadow-md'
+                          ? 'bg-[#0B5A70] text-white shadow-md'
                           : 'bg-gray-100 text-gray-600 border border-gray-300'
                       }`}
                       title={hindiTypingEnabled ? 'Turn off Hindi typing' : 'Turn on Hindi typing'}
@@ -4621,7 +4621,7 @@ const App = () => {
 
                     {/* First-time warning about OCR engine download */}
                     {!localStorage.getItem('sankirtan-tesseract-langs-cached') && !ocrProcessing && (
-                      <div className="mb-2 p-2 bg-amber-50 border border-amber-300 rounded-lg text-xs text-amber-900">
+                      <div className="mb-2 p-2 bg-[#E65100]/5 border border-[#E65100]/20 rounded-lg text-xs text-[#0B5A70]">
                         ⚠️ <strong>First-time use:</strong> The OCR engine (~15 MB) will download once and be cached. Please use WiFi if possible.
                       </div>
                     )}
@@ -4714,11 +4714,11 @@ const App = () => {
                   </div>
 
                   {hindiTypingEnabled && (
-                    <div className="mb-2 p-2 bg-orange-50 border border-orange-200 rounded-lg">
-                      <p className="text-xs text-orange-800">
+                    <div className="mb-2 p-2 bg-[#0B5A70]/5 border border-[#0B5A70]/12 rounded-lg">
+                      <p className="text-xs text-[#E65100]">
                         ✨ Type in English, press <kbd className="bg-white px-1.5 py-0.5 rounded border text-xs">space</kbd> to auto-convert to Hindi
                       </p>
-                      <p className="text-xs text-orange-600 mt-1">
+                      <p className="text-xs text-[#0B5A70]/60 mt-1">
                         Example: <code className="bg-white px-1 rounded">jai shri babosa</code> → जय श्री बाबोसा
                       </p>
                     </div>
@@ -4733,14 +4733,14 @@ const App = () => {
                       onBlur={() => setTimeout(() => setShowSuggestions(false), 300)}
                       onFocus={() => setActiveTypingField('lyrics')}
                       rows={10}
-                      className="w-full px-4 py-3 border-2 border-orange-200 rounded-xl focus:ring-4 focus:ring-orange-200 focus:border-orange-400 outline-none font-mono text-base"
+                      className="w-full px-4 py-3 border-2 border-[#0B5A70]/12 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none font-mono text-base"
                       placeholder={hindiTypingEnabled ? "Type: jai shri babosa (press space to convert)" : "भजन के बोल यहाँ लिखें..."}
                       style={{ lineHeight: '1.8' }}
                     />
                     
                     {/* Hindi Suggestions Popup - positioned above textarea */}
                     {hindiTypingEnabled && showSuggestions && activeTypingField === 'lyrics' && transliterationSuggestions.length > 0 && (
-                      <div className="absolute bottom-full left-0 right-0 mb-2 bg-white border-2 border-orange-400 rounded-xl shadow-2xl p-2 flex flex-wrap gap-2 items-center z-30">
+                      <div className="absolute bottom-full left-0 right-0 mb-2 bg-white border-2 border-[#0B5A70]/20 rounded-xl shadow-2xl p-2 flex flex-wrap gap-2 items-center z-30">
                         <span className="text-xs text-gray-500 mr-1">
                           <strong>"{currentWord}"</strong> →
                         </span>
@@ -4758,8 +4758,8 @@ const App = () => {
                             }}
                             className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
                               idx === 0
-                                ? 'bg-orange-500 text-white hover:bg-orange-600 shadow-md'
-                                : 'bg-orange-100 text-amber-800 hover:bg-orange-200'
+                                ? 'bg-[#0B5A70] text-white hover:bg-[#094a5d] shadow-md'
+                                : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15'
                             }`}
                             title={idx === 0 ? 'Default (press space)' : `Alternative ${idx + 1}`}
                           >
@@ -4792,7 +4792,7 @@ const App = () => {
 
                 {/* Keywords */}
                 <div className="mb-4">
-                  <label className="block text-sm font-semibold text-amber-900 mb-2">
+                  <label className="block text-sm font-semibold text-[#0B5A70] mb-2">
                     Keywords (tap to select)
                   </label>
                   <div className="flex flex-wrap gap-2">
@@ -4803,8 +4803,8 @@ const App = () => {
                         onClick={() => toggleKeyword(kw)}
                         className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
                           bhajanForm.keywords.includes(kw)
-                            ? 'bg-orange-500 text-white shadow-md'
-                            : 'bg-orange-50 text-amber-800 border border-orange-200 hover:bg-orange-100'
+                            ? 'bg-[#0B5A70] text-white shadow-md'
+                            : 'bg-[#0B5A70]/5 text-[#0B5A70] border border-[#0B5A70]/12 hover:bg-[#0B5A70]/10'
                         }`}
                       >
                         {bhajanForm.keywords.includes(kw) ? '✓ ' : ''}#{kw}
@@ -4812,7 +4812,7 @@ const App = () => {
                     ))}
                   </div>
                   {bhajanForm.keywords.length > 0 && (
-                    <p className="text-xs text-orange-600 mt-2">
+                    <p className="text-xs text-[#0B5A70]/60 mt-2">
                       {bhajanForm.keywords.length} selected
                     </p>
                   )}
@@ -4820,14 +4820,14 @@ const App = () => {
 
                 {/* Source URL */}
                 <div className="mb-6">
-                  <label className="block text-sm font-semibold text-amber-900 mb-1">
+                  <label className="block text-sm font-semibold text-[#0B5A70] mb-1">
                     Source URL (optional)
                   </label>
                   <input
                     type="url"
                     value={bhajanForm.source}
                     onChange={(e) => setBhajanForm({...bhajanForm, source: e.target.value})}
-                    className="w-full px-4 py-3 border-2 border-orange-200 rounded-xl focus:ring-4 focus:ring-orange-200 focus:border-orange-400 outline-none"
+                    className="w-full px-4 py-3 border-2 border-[#0B5A70]/12 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none"
                     placeholder="https://youtube.com/... or reference URL"
                   />
                 </div>
@@ -4844,7 +4844,7 @@ const App = () => {
                   <button
                     onClick={saveBhajan}
                     disabled={bhajanFormSaving || !bhajanForm.title.trim() || !bhajanForm.lyrics.trim()}
-                    className="flex-1 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-bold py-3 rounded-xl shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="flex-1 bg-[#0B5A70] hover:bg-[#094a5d] text-white font-bold py-3 rounded-xl shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {bhajanFormSaving ? 'Saving...' : (currentView === 'edit-bhajan' ? '💾 Save Changes' : '➕ Add Bhajan')}
                   </button>
@@ -4873,21 +4873,21 @@ const App = () => {
               <div className="flex items-center justify-between mb-4">
                 <button
                   onClick={() => setCurrentView('public-library')}
-                  className="text-orange-600 hover:text-orange-800 flex items-center gap-1 text-sm"
+                  className="text-[#0B5A70] hover:text-[#0B5A70]/80 flex items-center gap-1 text-sm"
                 >
                   ← Dashboard
                 </button>
                 <button
                   onClick={openCreateProgram}
-                  className="bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-semibold px-4 py-2 rounded-xl shadow-md flex items-center gap-2 text-sm"
+                  className="bg-[#0B5A70] hover:bg-[#094a5d] text-white font-semibold px-4 py-2 rounded-xl shadow-md flex items-center gap-2 text-sm"
                 >
                   <span className="text-lg">+</span> Create Program
                 </button>
               </div>
 
               <div className="mb-4">
-                <h2 className="text-2xl font-bold text-amber-900">🎵 Programs & Setlists</h2>
-                <p className="text-sm text-amber-700">Your live performance programs ({programs.length} programs)</p>
+                <h2 className="text-2xl font-bold text-[#0B5A70]">🎵 Programs & Setlists</h2>
+                <p className="text-sm text-[#0B5A70]/70">Your live performance programs ({programs.length} programs)</p>
               </div>
 
               {/* Search Bar */}
@@ -4897,26 +4897,26 @@ const App = () => {
                   value={programSearchQuery}
                   onChange={(e) => setProgramSearchQuery(e.target.value)}
                   placeholder="🔍 Search programs by name or venue..."
-                  className="w-full px-4 py-3 border-2 border-orange-200 rounded-xl focus:ring-4 focus:ring-orange-200 focus:border-orange-400 outline-none"
+                  className="w-full px-4 py-3 border-2 border-[#0B5A70]/12 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none"
                 />
               </div>
 
               {/* Programs List */}
               {programsLoading ? (
                 <div className="text-center py-12">
-                  <div className="animate-spin rounded-full h-10 w-10 border-4 border-orange-400 border-t-transparent mx-auto mb-3"></div>
-                  <p className="text-orange-700">Loading programs...</p>
+                  <div className="animate-spin rounded-full h-10 w-10 border-4 border-[#0B5A70]/40 border-t-transparent mx-auto mb-3"></div>
+                  <p className="text-[#0B5A70]/70">Loading programs...</p>
                 </div>
               ) : filteredPrograms.length === 0 ? (
-                <div className="text-center py-12 bg-white rounded-2xl border-2 border-dashed border-orange-200">
+                <div className="text-center py-12 bg-white rounded-2xl border-2 border-dashed border-[#0B5A70]/12">
                   {programs.length === 0 ? (
                     <>
                       <div className="text-6xl mb-4">🎵</div>
-                      <h3 className="text-lg font-bold text-amber-900 mb-2">No programs yet!</h3>
+                      <h3 className="text-lg font-bold text-[#0B5A70] mb-2">No programs yet!</h3>
                       <p className="text-sm text-gray-600 mb-4">Create your first program for a live performance</p>
                       <button
                         onClick={openCreateProgram}
-                        className="bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-semibold px-6 py-3 rounded-xl shadow-md inline-flex items-center gap-2"
+                        className="bg-[#0B5A70] hover:bg-[#094a5d] text-white font-semibold px-6 py-3 rounded-xl shadow-md inline-flex items-center gap-2"
                       >
                         <span className="text-lg">+</span> Create Your First Program
                       </button>
@@ -4924,7 +4924,7 @@ const App = () => {
                   ) : (
                     <>
                       <div className="text-4xl mb-3">🔍</div>
-                      <p className="text-amber-900 font-semibold">No programs match your search</p>
+                      <p className="text-[#0B5A70] font-semibold">No programs match your search</p>
                     </>
                   )}
                 </div>
@@ -4934,24 +4934,24 @@ const App = () => {
                     <button
                       key={program.id}
                       onClick={() => openProgramDetail(program)}
-                      className="bg-white rounded-2xl shadow-md p-5 border-2 border-orange-100 hover:border-orange-400 hover:shadow-xl transition-all text-left"
+                      className="bg-[#FFFCF8] rounded-2xl shadow-[0_2px_12px_rgba(11,90,112,0.06)] p-5 border border-[#0B5A70]/8 hover:border-[#0B5A70]/25 hover:shadow-[0_4px_20px_rgba(11,90,112,0.12)] transition-all text-left"
                     >
                       <div className="flex items-start justify-between mb-2">
                         <div className="text-3xl">🎵</div>
-                        <span className="text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded-full font-semibold">
+                        <span className="text-xs bg-[#0B5A70]/8 text-[#0B5A70] px-2 py-1 rounded-full font-semibold">
                           {program.bhajanCount || 0} bhajans
                         </span>
                       </div>
-                      <h3 className="text-lg font-bold text-amber-900 mb-1">
+                      <h3 className="text-lg font-bold text-[#0B5A70] mb-1">
                         {program.name}
                       </h3>
                       {program.date && (
-                        <p className="text-sm text-orange-600 mb-1">📅 {program.date}</p>
+                        <p className="text-sm text-[#E65100] mb-1">📅 {program.date}</p>
                       )}
                       {program.venue && (
                         <p className="text-sm text-gray-600 mb-2">📍 {program.venue}</p>
                       )}
-                      <p className="text-xs text-orange-500 mt-3">View Program →</p>
+                      <p className="text-xs text-[#0B5A70]/50 mt-3">View Program →</p>
                     </button>
                   ))}
                 </div>
@@ -4967,7 +4967,7 @@ const App = () => {
               <div className="flex items-center justify-between mb-4">
                 <button
                   onClick={() => setCurrentView('programs')}
-                  className="text-orange-600 hover:text-orange-800 flex items-center gap-1 text-sm"
+                  className="text-[#0B5A70] hover:text-[#0B5A70]/80 flex items-center gap-1 text-sm"
                 >
                   ← Back to Programs
                 </button>
@@ -4989,17 +4989,17 @@ const App = () => {
 
               <div className="bg-white rounded-2xl shadow-lg p-6 md:p-8 mb-4">
                 <div className="text-4xl mb-2">🎵</div>
-                <h1 className="text-3xl md:text-4xl font-bold text-amber-900 mb-3">
+                <h1 className="text-3xl md:text-4xl font-bold text-[#0B5A70] mb-3">
                   {selectedProgram.name}
                 </h1>
                 {selectedProgram.date && (
-                  <p className="text-lg text-orange-600 mb-1">📅 {selectedProgram.date}</p>
+                  <p className="text-lg text-[#E65100] mb-1">📅 {selectedProgram.date}</p>
                 )}
                 {selectedProgram.venue && (
                   <p className="text-lg text-gray-600 mb-3">📍 {selectedProgram.venue}</p>
                 )}
                 <div className="flex items-center gap-2 mt-4">
-                  <span className="bg-orange-100 text-orange-800 px-3 py-1 rounded-full text-sm font-semibold">
+                  <span className="bg-[#0B5A70]/8 text-[#0B5A70] px-3 py-1 rounded-full text-sm font-semibold">
                     {selectedProgram.bhajanIds?.length || 0} bhajans
                   </span>
                 </div>
@@ -5008,7 +5008,7 @@ const App = () => {
                 {selectedProgram.bhajanIds && selectedProgram.bhajanIds.length > 0 && (
                   <button
                     onClick={() => startLiveProgram(selectedProgram)}
-                    className="w-full mt-6 bg-gradient-to-r from-red-500 to-orange-500 hover:from-red-600 hover:to-orange-600 text-white font-bold py-4 rounded-xl shadow-lg text-lg flex items-center justify-center gap-2"
+                    className="w-full mt-6 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-bold py-4 rounded-xl shadow-lg text-lg flex items-center justify-center gap-2"
                   >
                     🎤 START LIVE PERFORMANCE
                   </button>
@@ -5017,13 +5017,13 @@ const App = () => {
 
               {/* Bhajans in Program */}
               <div className="mb-4">
-                <h3 className="text-lg font-bold text-amber-900 mb-3">Bhajans in this Program:</h3>
+                <h3 className="text-lg font-bold text-[#0B5A70] mb-3">Bhajans in this Program:</h3>
                 {(!selectedProgram.bhajanIds || selectedProgram.bhajanIds.length === 0) ? (
-                  <div className="bg-white rounded-2xl p-6 text-center border-2 border-dashed border-orange-200">
-                    <p className="text-amber-900 mb-2">No bhajans in this program yet</p>
+                  <div className="bg-white rounded-2xl p-6 text-center border-2 border-dashed border-[#0B5A70]/12">
+                    <p className="text-[#0B5A70] mb-2">No bhajans in this program yet</p>
                     <button
                       onClick={() => openEditProgram(selectedProgram)}
-                      className="text-orange-600 hover:text-orange-800 font-semibold text-sm"
+                      className="text-[#0B5A70] hover:text-[#0B5A70]/80 font-semibold text-sm"
                     >
                       + Add bhajans
                     </button>
@@ -5041,18 +5041,18 @@ const App = () => {
                         <button
                           key={bhajanId}
                           onClick={() => openBhajanDetail(bhajan)}
-                          className="w-full bg-white rounded-xl p-4 border-2 border-orange-100 hover:border-orange-400 transition-all text-left flex items-center gap-3"
+                          className="w-full bg-white rounded-xl p-4 border-2 border-[#0B5A70]/10 hover:border-[#0B5A70]/25 transition-all text-left flex items-center gap-3"
                         >
-                          <div className="text-2xl font-bold text-orange-500 min-w-[40px] text-center">
+                          <div className="text-2xl font-bold text-[#E65100] min-w-[40px] text-center">
                             {index + 1}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="font-semibold text-amber-900 truncate">{bhajan.title}</p>
+                            <p className="font-semibold text-[#0B5A70] truncate">{bhajan.title}</p>
                             {bhajan.dhun && (
-                              <p className="text-xs text-orange-600 truncate">तर्ज़: {bhajan.dhun}</p>
+                              <p className="text-xs text-[#0B5A70]/60 truncate">तर्ज़: {bhajan.dhun}</p>
                             )}
                             <div className="flex gap-1 mt-1">
-                              <span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full">
+                              <span className="text-xs bg-[#0B5A70]/8 text-[#0B5A70] px-2 py-0.5 rounded-full">
                                 {bhajan.deity}
                               </span>
                             </div>
@@ -5080,27 +5080,27 @@ const App = () => {
                       setCurrentView('programs');
                     }
                   }}
-                  className="text-orange-600 hover:text-orange-800 flex items-center gap-1 text-sm"
+                  className="text-[#0B5A70] hover:text-[#0B5A70]/80 flex items-center gap-1 text-sm"
                 >
                   ← Cancel
                 </button>
               </div>
 
               <div className="bg-white rounded-2xl shadow-lg p-6 md:p-8">
-                <h2 className="text-2xl font-bold text-amber-900 mb-6">
+                <h2 className="text-2xl font-bold text-[#0B5A70] mb-6">
                   {currentView === 'edit-program' ? '✏️ Edit Program' : '➕ Create New Program'}
                 </h2>
 
                 {/* Name */}
                 <div className="mb-4">
-                  <label className="block text-sm font-semibold text-amber-900 mb-1">
+                  <label className="block text-sm font-semibold text-[#0B5A70] mb-1">
                     Program Name <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
                     value={programForm.name}
                     onChange={(e) => setProgramForm({...programForm, name: e.target.value})}
-                    className="w-full px-4 py-3 border-2 border-orange-200 rounded-xl focus:ring-4 focus:ring-orange-200 focus:border-orange-400 outline-none text-lg"
+                    className="w-full px-4 py-3 border-2 border-[#0B5A70]/12 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none text-lg"
                     placeholder="e.g., Diwali Jagran 2026"
                   />
                 </div>
@@ -5108,35 +5108,35 @@ const App = () => {
                 {/* Date and Venue */}
                 <div className="grid grid-cols-2 gap-3 mb-4">
                   <div>
-                    <label className="block text-sm font-semibold text-amber-900 mb-1">
+                    <label className="block text-sm font-semibold text-[#0B5A70] mb-1">
                       Date (optional)
                     </label>
                     <input
                       type="text"
                       value={programForm.date}
                       onChange={(e) => setProgramForm({...programForm, date: e.target.value})}
-                      className="w-full px-4 py-3 border-2 border-orange-200 rounded-xl focus:ring-4 focus:ring-orange-200 focus:border-orange-400 outline-none"
+                      className="w-full px-4 py-3 border-2 border-[#0B5A70]/12 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none"
                       placeholder="e.g., 25 Oct 2026"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-semibold text-amber-900 mb-1">
+                    <label className="block text-sm font-semibold text-[#0B5A70] mb-1">
                       Venue (optional)
                     </label>
                     <input
                       type="text"
                       value={programForm.venue}
                       onChange={(e) => setProgramForm({...programForm, venue: e.target.value})}
-                      className="w-full px-4 py-3 border-2 border-orange-200 rounded-xl focus:ring-4 focus:ring-orange-200 focus:border-orange-400 outline-none"
+                      className="w-full px-4 py-3 border-2 border-[#0B5A70]/12 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none"
                       placeholder="e.g., Delhi Temple"
                     />
                   </div>
                 </div>
 
                 {/* Bhajans Section */}
-                <div className="mb-4 pt-4 border-t border-orange-100">
+                <div className="mb-4 pt-4 border-t border-[#0B5A70]/8">
                   <div className="flex items-center justify-between mb-3">
-                    <label className="block text-sm font-semibold text-amber-900">
+                    <label className="block text-sm font-semibold text-[#0B5A70]">
                       Bhajans in Program ({programForm.bhajanIds.length})
                     </label>
                     <button
@@ -5145,15 +5145,15 @@ const App = () => {
                         setShowBhajanPicker(true);
                         setBhajanPickerSearch('');
                       }}
-                      className="bg-orange-100 hover:bg-orange-200 text-orange-800 font-semibold px-3 py-1.5 rounded-lg text-sm"
+                      className="bg-[#0B5A70]/8 hover:bg-[#0B5A70]/15 text-[#0B5A70] font-semibold px-3 py-1.5 rounded-lg text-sm"
                     >
                       + Add Bhajan
                     </button>
                   </div>
 
                   {programForm.bhajanIds.length === 0 ? (
-                    <div className="text-center py-6 bg-orange-50 rounded-xl border-2 border-dashed border-orange-200">
-                      <p className="text-sm text-amber-700">No bhajans added yet</p>
+                    <div className="text-center py-6 bg-[#0B5A70]/5 rounded-xl border-2 border-dashed border-[#0B5A70]/12">
+                      <p className="text-sm text-[#0B5A70]/70">No bhajans added yet</p>
                       <p className="text-xs text-gray-500 mt-1">Tap "+ Add Bhajan" to add from your library</p>
                     </div>
                   ) : (
@@ -5172,12 +5172,12 @@ const App = () => {
                           </div>
                         );
                         return (
-                          <div key={bhajanId} className="bg-white border-2 border-orange-200 rounded-xl p-3 flex items-center gap-2">
-                            <div className="text-xl font-bold text-orange-500 min-w-[30px] text-center">
+                          <div key={bhajanId} className="bg-white border-2 border-[#0B5A70]/12 rounded-xl p-3 flex items-center gap-2">
+                            <div className="text-xl font-bold text-[#E65100] min-w-[30px] text-center">
                               {index + 1}
                             </div>
                             <div className="flex-1 min-w-0">
-                              <p className="font-semibold text-amber-900 truncate text-sm">{bhajan.title}</p>
+                              <p className="font-semibold text-[#0B5A70] truncate text-sm">{bhajan.title}</p>
                               <p className="text-xs text-gray-600 truncate">
                                 {bhajan.deity} • {bhajan.category}
                               </p>
@@ -5187,7 +5187,7 @@ const App = () => {
                                 type="button"
                                 onClick={() => moveBhajanUp(index)}
                                 disabled={index === 0}
-                                className="w-8 h-8 rounded-lg bg-orange-100 hover:bg-orange-200 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center"
+                                className="w-8 h-8 rounded-lg bg-[#0B5A70]/8 hover:bg-[#0B5A70]/15 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center"
                                 title="Move up"
                               >
                                 ↑
@@ -5196,7 +5196,7 @@ const App = () => {
                                 type="button"
                                 onClick={() => moveBhajanDown(index)}
                                 disabled={index === programForm.bhajanIds.length - 1}
-                                className="w-8 h-8 rounded-lg bg-orange-100 hover:bg-orange-200 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center"
+                                className="w-8 h-8 rounded-lg bg-[#0B5A70]/8 hover:bg-[#0B5A70]/15 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center"
                                 title="Move down"
                               >
                                 ↓
@@ -5229,7 +5229,7 @@ const App = () => {
                   <button
                     onClick={saveProgram}
                     disabled={programFormSaving || !programForm.name.trim()}
-                    className="flex-1 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-bold py-3 rounded-xl shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="flex-1 bg-[#0B5A70] hover:bg-[#094a5d] text-white font-bold py-3 rounded-xl shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {programFormSaving ? 'Saving...' : (currentView === 'edit-program' ? '💾 Save Changes' : '➕ Create Program')}
                   </button>
@@ -5252,8 +5252,8 @@ const App = () => {
               {showBhajanPicker && (
                 <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
                   <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[80vh] flex flex-col">
-                    <div className="p-4 border-b border-orange-100 flex items-center justify-between">
-                      <h3 className="text-lg font-bold text-amber-900">Add Bhajan to Program</h3>
+                    <div className="p-4 border-b border-[#0B5A70]/10 flex items-center justify-between">
+                      <h3 className="text-lg font-bold text-[#0B5A70]">Add Bhajan to Program</h3>
                       <button
                         onClick={() => setShowBhajanPicker(false)}
                         className="text-gray-500 hover:text-gray-700 text-2xl leading-none"
@@ -5261,20 +5261,20 @@ const App = () => {
                         ×
                       </button>
                     </div>
-                    <div className="p-4 border-b border-orange-100">
+                    <div className="p-4 border-b border-[#0B5A70]/10">
                       <input
                         type="text"
                         value={bhajanPickerSearch}
                         onChange={(e) => setBhajanPickerSearch(e.target.value)}
                         placeholder="🔍 Search your library..."
-                        className="w-full px-3 py-2 border-2 border-orange-200 rounded-lg focus:ring-2 focus:ring-orange-200 focus:border-orange-400 outline-none text-sm"
+                        className="w-full px-3 py-2 border-2 border-[#0B5A70]/12 rounded-lg focus:ring-2 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none text-sm"
                         autoFocus
                       />
                     </div>
                     <div className="flex-1 overflow-y-auto p-4">
                       {bhajans.length === 0 ? (
                         <div className="text-center py-8">
-                          <p className="text-amber-900 font-semibold">Your library is empty</p>
+                          <p className="text-[#0B5A70] font-semibold">Your library is empty</p>
                           <p className="text-sm text-gray-600 mt-1">Add bhajans to your library first</p>
                         </div>
                       ) : (
@@ -5293,12 +5293,12 @@ const App = () => {
                                   className={`w-full text-left p-3 rounded-xl border-2 transition-all ${
                                     isAdded 
                                       ? 'bg-green-50 border-green-200 opacity-60 cursor-not-allowed'
-                                      : 'bg-white border-orange-100 hover:border-orange-400'
+                                      : 'bg-white border-[#0B5A70]/10 hover:border-[#0B5A70]/25'
                                   }`}
                                 >
                                   <div className="flex items-center justify-between">
                                     <div className="flex-1 min-w-0">
-                                      <p className="font-semibold text-amber-900 truncate">{bhajan.title}</p>
+                                      <p className="font-semibold text-[#0B5A70] truncate">{bhajan.title}</p>
                                       <p className="text-xs text-gray-600 truncate">
                                         {bhajan.deity} • {bhajan.category}
                                       </p>
@@ -5326,15 +5326,15 @@ const App = () => {
               <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
                 <div className="flex items-center gap-3 flex-wrap">
                   {/* Public ↔ Personal library switcher */}
-                  <div className="inline-flex bg-orange-100 rounded-xl p-1 shadow-inner">
+                  <div className={`inline-flex rounded-xl p-1 ${darkMode ? 'bg-gray-700' : 'bg-[#0B5A70]/8'}`}>
                     <button
-                      className="px-3 py-1.5 rounded-lg text-sm font-semibold bg-white text-amber-900 shadow-md"
+                      className={`px-3 py-1.5 rounded-lg text-sm font-semibold shadow-sm ${darkMode ? 'bg-gray-600 text-gray-100' : 'bg-white text-[#0B5A70]'}`}
                     >
                       🌐 Public
                     </button>
                     <button
                       onClick={() => setCurrentView('library')}
-                      className="px-3 py-1.5 rounded-lg text-sm font-semibold text-amber-700 hover:text-amber-900 transition-all"
+                      className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-all ${darkMode ? 'text-gray-400 hover:text-gray-200' : 'text-[#0B5A70]/60 hover:text-[#0B5A70]'}`}
                     >
                       📚 My Library
                     </button>
@@ -5363,7 +5363,7 @@ const App = () => {
                     className={`w-full px-4 py-3 pr-24 border-2 rounded-xl focus:ring-4 outline-none ${
                       darkMode
                         ? 'bg-gray-800 border-gray-600 text-gray-100 focus:ring-gray-700 focus:border-gray-500'
-                        : 'border-orange-200 focus:ring-orange-200 focus:border-orange-400'
+                        : 'bg-white border-[#0B5A70]/12 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30'
                     }`}
                   />
                   {/* Voice language toggle (compact, sits inline next to mic) */}
@@ -5371,8 +5371,8 @@ const App = () => {
                     onClick={() => setSpeechLang(speechLang === 'en-IN' ? 'hi-IN' : 'en-IN')}
                     className={`absolute right-11 top-1/2 -translate-y-1/2 px-1.5 py-0.5 rounded text-[10px] font-bold border transition-colors ${
                       speechLang === 'hi-IN'
-                        ? 'bg-orange-500 text-white border-orange-500'
-                        : 'bg-white text-gray-600 border-gray-300 hover:border-orange-300'
+                        ? 'bg-[#0B5A70] text-white border-[#0B5A70]'
+                        : 'bg-white text-gray-600 border-gray-300 hover:border-[#0B5A70]/20'
                     }`}
                     title={`Voice input: ${speechLang === 'hi-IN' ? 'Hindi' : 'English'}`}
                   >
@@ -5385,7 +5385,7 @@ const App = () => {
                         ? 'bg-red-500 text-white animate-pulse'
                         : darkMode
                           ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-700'
-                          : 'text-orange-400 hover:text-orange-600 hover:bg-orange-50'
+                          : 'text-[#0B5A70]/40 hover:text-[#0B5A70] hover:bg-[#0B5A70]/5'
                     }`}
                     title={isListening ? 'Listening...' : 'Voice search'}
                   >
@@ -5426,10 +5426,10 @@ const App = () => {
                 <select
                   value={publicFilterDeity}
                   onChange={(e) => setPublicFilterDeity(e.target.value)}
-                  className={`flex-1 min-w-[110px] px-3 py-2 border-2 rounded-lg focus:ring-2 focus:ring-orange-200 focus:border-orange-400 outline-none text-sm bg-white transition-all ${
+                  className={`flex-1 min-w-[110px] px-3 py-2 border-2 rounded-lg focus:ring-2 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none text-sm bg-white transition-all ${
                     publicFilterDeity
-                      ? 'border-amber-500 ring-2 ring-amber-200 font-semibold text-amber-900'
-                      : 'border-orange-200'
+                      ? 'border-[#0B5A70]/50 ring-2 ring-[#0B5A70]/10 font-semibold text-[#0B5A70]'
+                      : 'border-[#0B5A70]/12'
                   }`}
                 >
                   <option value="">All Deities</option>
@@ -5441,10 +5441,10 @@ const App = () => {
                 <select
                   value={publicFilterCategory}
                   onChange={(e) => setPublicFilterCategory(e.target.value)}
-                  className={`flex-1 min-w-[110px] px-3 py-2 border-2 rounded-lg focus:ring-2 focus:ring-orange-200 focus:border-orange-400 outline-none text-sm bg-white transition-all ${
+                  className={`flex-1 min-w-[110px] px-3 py-2 border-2 rounded-lg focus:ring-2 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none text-sm bg-white transition-all ${
                     publicFilterCategory
-                      ? 'border-amber-500 ring-2 ring-amber-200 font-semibold text-amber-900'
-                      : 'border-orange-200'
+                      ? 'border-[#0B5A70]/50 ring-2 ring-[#0B5A70]/10 font-semibold text-[#0B5A70]'
+                      : 'border-[#0B5A70]/12'
                   }`}
                 >
                   <option value="">All Categories</option>
@@ -5456,10 +5456,10 @@ const App = () => {
                 <select
                   value={publicFilterKeyword}
                   onChange={(e) => setPublicFilterKeyword(e.target.value)}
-                  className={`flex-1 min-w-[110px] px-3 py-2 border-2 rounded-lg focus:ring-2 focus:ring-orange-200 focus:border-orange-400 outline-none text-sm bg-white transition-all ${
+                  className={`flex-1 min-w-[110px] px-3 py-2 border-2 rounded-lg focus:ring-2 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none text-sm bg-white transition-all ${
                     publicFilterKeyword
-                      ? 'border-amber-500 ring-2 ring-amber-200 font-semibold text-amber-900'
-                      : 'border-orange-200'
+                      ? 'border-[#0B5A70]/50 ring-2 ring-[#0B5A70]/10 font-semibold text-[#0B5A70]'
+                      : 'border-[#0B5A70]/12'
                   }`}
                 >
                   <option value="">All Keywords</option>
@@ -5478,8 +5478,8 @@ const App = () => {
                     onClick={() => setPublicFilterKeyword(publicFilterKeyword === kw ? '' : kw)}
                     className={`px-3 py-1 rounded-full text-xs font-semibold transition-all ${
                       publicFilterKeyword === kw
-                        ? 'bg-orange-500 text-white shadow-md'
-                        : 'bg-orange-50 text-amber-800 border border-orange-200 hover:bg-orange-100'
+                        ? 'bg-[#0B5A70] text-white shadow-md'
+                        : 'bg-[#0B5A70]/5 text-[#0B5A70] border border-[#0B5A70]/12 hover:bg-[#0B5A70]/10'
                     }`}
                   >
                     {publicFilterKeyword === kw ? '✓ ' : ''}#{kw}
@@ -5496,25 +5496,25 @@ const App = () => {
                     compactView ? (
                       <div
                         key={i}
-                        className={`rounded-xl p-3 border-2 flex items-center gap-3 animate-pulse ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-orange-100'}`}
+                        className={`rounded-xl p-3 border-2 flex items-center gap-3 animate-pulse ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-[#0B5A70]/10'}`}
                       >
                         <div className="flex-1 min-w-0 space-y-2">
-                          <div className={`h-3 rounded w-3/4 ${darkMode ? 'bg-gray-700' : 'bg-orange-100'}`}></div>
-                          <div className={`h-2 rounded w-1/2 ${darkMode ? 'bg-gray-700' : 'bg-orange-50'}`}></div>
+                          <div className={`h-3 rounded w-3/4 ${darkMode ? 'bg-gray-700' : 'bg-[#0B5A70]/8'}`}></div>
+                          <div className={`h-2 rounded w-1/2 ${darkMode ? 'bg-gray-700' : 'bg-[#0B5A70]/5'}`}></div>
                         </div>
-                        <div className={`h-6 w-10 rounded-full flex-shrink-0 ${darkMode ? 'bg-gray-700' : 'bg-orange-100'}`}></div>
+                        <div className={`h-6 w-10 rounded-full flex-shrink-0 ${darkMode ? 'bg-gray-700' : 'bg-[#0B5A70]/8'}`}></div>
                       </div>
                     ) : (
                       <div
                         key={i}
-                        className={`rounded-2xl shadow-md p-5 border-2 animate-pulse ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-orange-100'}`}
+                        className={`rounded-2xl shadow-md p-5 border animate-pulse ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-[#FFFCF8] border-[#0B5A70]/8'}`}
                       >
                         {/* Title placeholder */}
-                        <div className={`h-5 rounded w-3/4 mb-3 ${darkMode ? 'bg-gray-700' : 'bg-orange-100'}`}></div>
+                        <div className={`h-5 rounded w-3/4 mb-3 ${darkMode ? 'bg-gray-700' : 'bg-[#0B5A70]/8'}`}></div>
                         {/* Tags row placeholder */}
                         <div className="flex gap-2 mb-3">
-                          <div className={`h-5 w-16 rounded-full ${darkMode ? 'bg-gray-700' : 'bg-orange-100'}`}></div>
-                          <div className={`h-5 w-14 rounded-full ${darkMode ? 'bg-gray-700' : 'bg-amber-50'}`}></div>
+                          <div className={`h-5 w-16 rounded-full ${darkMode ? 'bg-gray-700' : 'bg-[#0B5A70]/8'}`}></div>
+                          <div className={`h-5 w-14 rounded-full ${darkMode ? 'bg-gray-700' : 'bg-[#E65100]/5'}`}></div>
                         </div>
                         {/* Lyrics placeholder - 3 lines */}
                         <div className="space-y-2 mb-3">
@@ -5523,17 +5523,17 @@ const App = () => {
                           <div className={`h-3 rounded w-4/6 ${darkMode ? 'bg-gray-700' : 'bg-gray-100'}`}></div>
                         </div>
                         {/* Bottom action placeholder */}
-                        <div className={`h-9 rounded-lg mt-3 ${darkMode ? 'bg-gray-700' : 'bg-orange-50'}`}></div>
+                        <div className={`h-9 rounded-lg mt-3 ${darkMode ? 'bg-gray-700' : 'bg-[#0B5A70]/5'}`}></div>
                       </div>
                     )
                   ))}
                 </div>
               ) : filteredPublicBhajans.length === 0 ? (
-                <div className={`text-center py-12 rounded-2xl border-2 border-dashed ${darkMode ? 'bg-gray-800 border-gray-600' : 'bg-white border-orange-200'}`}>
+                <div className={`text-center py-12 rounded-2xl border-2 border-dashed ${darkMode ? 'bg-gray-800 border-gray-600' : 'bg-[#FFFCF8] border-[#0B5A70]/15'}`}>
                   {publicBhajans.length === 0 ? (
                     <>
                       <div className="text-6xl mb-4">🌐</div>
-                      <h3 className="text-lg font-bold text-amber-900 mb-2">Public library is empty</h3>
+                      <h3 className="text-lg font-bold text-[#0B5A70] mb-2">Public library is empty</h3>
                       <p className="text-sm text-gray-600 mb-4">
                         {isAdmin ? 'Add bhajans via Admin Panel to get started!' : 'Bhajans will be added soon by the admin.'}
                       </p>
@@ -5549,7 +5549,7 @@ const App = () => {
                   ) : (
                     <>
                       <div className="text-4xl mb-3">🔍</div>
-                      <p className="text-amber-900 font-semibold">No bhajans match your filters</p>
+                      <p className="text-[#0B5A70] font-semibold">No bhajans match your filters</p>
                     </>
                   )}
                 </div>
@@ -5559,17 +5559,17 @@ const App = () => {
                       Compact = title + first line of lyrics only (fits 4-6 cards per screen).
                       Full = title + tags + 3 lines lyrics + keywords (default). */}
                   <div className="flex justify-end mb-2">
-                    <div className="inline-flex bg-orange-50 rounded-lg p-0.5 border border-orange-200">
+                    <div className="inline-flex bg-[#0B5A70]/5 rounded-lg p-0.5 border border-[#0B5A70]/10">
                       <button
                         onClick={() => setCompactView(false)}
-                        className={`px-2 py-1 rounded text-xs font-semibold transition-colors ${!compactView ? 'bg-white text-amber-900 shadow' : 'text-amber-600 hover:text-amber-800'}`}
+                        className={`px-2 py-1 rounded text-xs font-semibold transition-colors ${!compactView ? 'bg-white text-[#0B5A70] shadow' : 'text-[#0B5A70]/50 hover:text-[#0B5A70]'}`}
                         title="Full card view"
                       >
                         ▤ Full
                       </button>
                       <button
                         onClick={() => setCompactView(true)}
-                        className={`px-2 py-1 rounded text-xs font-semibold transition-colors ${compactView ? 'bg-white text-amber-900 shadow' : 'text-amber-600 hover:text-amber-800'}`}
+                        className={`px-2 py-1 rounded text-xs font-semibold transition-colors ${compactView ? 'bg-white text-[#0B5A70] shadow' : 'text-[#0B5A70]/50 hover:text-[#0B5A70]'}`}
                         title="Compact list view"
                       >
                         ☰ Compact
@@ -5588,10 +5588,10 @@ const App = () => {
                         <button
                           key={bhajan.id}
                           onClick={() => openPublicBhajanDetail(bhajan)}
-                          className={`w-full text-left rounded-xl p-3 border-2 hover:border-orange-400 transition-all flex items-center gap-3 ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-orange-100'}`}
+                          className={`w-full text-left rounded-xl p-3 border transition-all flex items-center gap-3 ${darkMode ? 'bg-gray-800 border-gray-700 hover:border-gray-500' : 'bg-[#FFFCF8] border-[#0B5A70]/8 shadow-[0_1px_4px_rgba(11,90,112,0.04)] hover:border-[#0B5A70]/25 hover:shadow-[0_2px_8px_rgba(11,90,112,0.10)]'}`}
                         >
                           <div className="flex-1 min-w-0">
-                            <h3 className={`text-sm font-bold truncate ${darkMode ? 'text-amber-100' : 'text-amber-900'}`}>
+                            <h3 className={`text-sm font-bold truncate ${darkMode ? 'text-amber-100' : 'text-[#0B5A70]'}`}>
                               {bhajan.title}
                             </h3>
                             <p className={`text-xs truncate ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
@@ -5605,7 +5605,7 @@ const App = () => {
                           ) : (
                             <span
                               onClick={(e) => { e.stopPropagation(); saveToMyLibrary(bhajan); }}
-                              className="bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white text-xs font-semibold px-2 py-1 rounded-full flex-shrink-0 cursor-pointer"
+                              className="bg-[#0B5A70] hover:bg-[#094a5d] text-white text-xs font-semibold px-2 py-1 rounded-full flex-shrink-0 cursor-pointer"
                             >
                               + Save
                             </span>
@@ -5618,29 +5618,29 @@ const App = () => {
                     return (
                       <div
                         key={bhajan.id}
-                        className={`rounded-2xl shadow-md p-5 border-2 hover:border-orange-400 hover:shadow-xl transition-all ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-orange-100'}`}
+                        className={`rounded-2xl p-5 border transition-all ${darkMode ? 'bg-gray-800 border-gray-700 shadow-md hover:border-gray-500 hover:shadow-xl' : 'bg-[#FFFCF8] border-[#0B5A70]/8 shadow-[0_2px_12px_rgba(11,90,112,0.06)] hover:border-[#0B5A70]/25 hover:shadow-[0_4px_20px_rgba(11,90,112,0.12)]'}`}
                       >
                         <button
                           onClick={() => openPublicBhajanDetail(bhajan)}
                           className="w-full text-left"
                         >
                           <div className="flex items-start justify-between mb-2">
-                            <h3 className="text-lg font-bold text-amber-900 flex-1 line-clamp-2">
+                            <h3 className="text-lg font-bold text-[#0B5A70] flex-1 line-clamp-2">
                               {bhajan.title}
                             </h3>
                           </div>
 
                           {bhajan.dhun && (
-                            <p className="text-xs text-orange-600 mb-2">
+                            <p className="text-xs text-[#E65100] mb-2">
                               <span className="font-semibold">तर्ज़:</span> {bhajan.dhun}
                             </p>
                           )}
 
                           <div className="flex flex-wrap gap-1 mb-2">
-                            <span className="text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded-full">
+                            <span className="text-xs bg-[#0B5A70]/8 text-[#0B5A70] px-2 py-1 rounded-full">
                               {bhajan.deity}
                             </span>
-                            <span className="text-xs bg-amber-100 text-amber-800 px-2 py-1 rounded-full">
+                            <span className="text-xs bg-[#E65100]/8 text-[#E65100] px-2 py-1 rounded-full">
                               {bhajan.category}
                             </span>
                           </div>
@@ -5649,14 +5649,14 @@ const App = () => {
                               rendering bug where line-clamp + whitespace-pre-line
                               can leak height on iOS Safari when lyrics have many
                               trailing newlines or whitespace-only lines. */}
-                          <p className="text-sm text-gray-700 line-clamp-3 mb-2 whitespace-pre-line max-h-16 overflow-hidden">
+                          <p className="text-sm text-gray-600 line-clamp-3 mb-2 whitespace-pre-line max-h-16 overflow-hidden">
                             {(bhajan.lyrics || '').trim()}
                           </p>
 
                           {bhajan.keywords && bhajan.keywords.length > 0 && (
                             <div className="flex flex-wrap gap-1 mb-3">
                               {bhajan.keywords.slice(0, 4).map(kw => (
-                                <span key={kw} className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">
+                                <span key={kw} className="text-xs bg-[#0B5A70]/5 text-[#0B5A70]/70 px-2 py-0.5 rounded-full">
                                   #{kw}
                                 </span>
                               ))}
@@ -5666,16 +5666,16 @@ const App = () => {
 
                         {/* Action row - only Save/In Library. "Read" removed since
                             clicking the card body above already opens the bhajan. */}
-                        <div className="flex gap-2 mt-3 pt-3 border-t border-orange-100">
+                        <div className={`flex gap-2 mt-3 pt-3 border-t ${darkMode ? 'border-gray-700' : 'border-[#0B5A70]/8'}`}>
                           {isSaved ? (
-                            <span className="flex-1 bg-green-100 text-green-700 font-semibold py-2 rounded-lg text-sm text-center">
+                            <span className="flex-1 bg-green-50 text-green-700 font-semibold py-2 rounded-lg text-sm text-center">
                               ✓ In Your Library
                             </span>
                           ) : (
                             <button
                               onClick={() => saveToMyLibrary(bhajan)}
                               disabled={savingToLibrary}
-                              className="flex-1 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-semibold py-2 rounded-lg text-sm disabled:opacity-50"
+                              className="flex-1 bg-[#0B5A70] hover:bg-[#094a5d] text-white font-semibold py-2 rounded-lg text-sm disabled:opacity-50"
                             >
                               ➕ Add to Personal
                             </button>
@@ -5683,7 +5683,7 @@ const App = () => {
                         </div>
 
                         {(bhajan.saveCount > 0) && (
-                          <p className="text-xs text-gray-500 mt-2 text-center">
+                          <p className="text-xs text-[#0B5A70]/40 mt-2 text-center">
                             ✨ Added by {bhajan.saveCount} {bhajan.saveCount === 1 ? 'person' : 'people'}
                           </p>
                         )}
@@ -5697,8 +5697,8 @@ const App = () => {
                     shows a subtle "loading more" indicator + a count summary. */}
                 {publicVisibleCount < filteredPublicBhajans.length && (
                   <div ref={publicLoadMoreRef} className="text-center py-6">
-                    <div className="inline-flex items-center gap-2 text-xs text-orange-600">
-                      <div className="w-4 h-4 border-2 border-orange-400 border-t-transparent rounded-full animate-spin"></div>
+                    <div className="inline-flex items-center gap-2 text-xs text-[#0B5A70]/60">
+                      <div className="w-4 h-4 border-2 border-[#0B5A70]/40 border-t-transparent rounded-full animate-spin"></div>
                       Loading more bhajans...
                     </div>
                     <p className="text-xs text-gray-400 mt-1">
@@ -5714,7 +5714,7 @@ const App = () => {
                 </>
               )}
               <div className="text-center mt-12 mb-4">
-                <p className={`text-xs mb-2 ${darkMode ? 'text-gray-500' : 'text-amber-700'}`}>
+                <p className={`text-xs mb-2 ${darkMode ? 'text-gray-500' : 'text-[#0B5A70]/60'}`}>
                   Founded for the Bhajan Community 🙏 by Grace of <strong>Babosa Bhagwan</strong> 🕉️
                 </p>
                 <button
@@ -5742,7 +5742,7 @@ const App = () => {
               <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
                 <button
                   onClick={() => setCurrentView('public-library')}
-                  className="text-orange-600 hover:text-orange-800 flex items-center gap-1 text-sm"
+                  className="text-[#0B5A70] hover:text-[#0B5A70]/80 flex items-center gap-1 text-sm"
                 >
                   ← Back
                 </button>
@@ -5768,7 +5768,7 @@ const App = () => {
                   {/* View settings pill (was up in title row before) */}
                   <button
                     onClick={() => setShowReadingSettings(true)}
-                    className={`px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 transition-colors ${darkMode ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-orange-100 text-amber-800 hover:bg-orange-200'}`}
+                    className={`px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 transition-colors ${darkMode ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15'}`}
                     title="Reading view options"
                   >
                     👁️ View
@@ -5793,30 +5793,30 @@ const App = () => {
                 </div>
               </div>
 
-              <div className={`rounded-2xl shadow-lg p-6 md:p-8 mb-4 ${darkMode ? 'bg-gray-800 border border-gray-700' : 'bg-white'}`}>
+              <div className={`rounded-2xl shadow-[0_2px_12px_rgba(11,90,112,0.06)] p-6 md:p-8 mb-4 ${darkMode ? 'bg-gray-800 border border-gray-700' : 'bg-[#FFFCF8] border border-[#0B5A70]/8'}`}>
                 {/* Title (smaller, max 2 lines - was xl 3xl before) */}
                 <h1
-                  className={`text-xl md:text-2xl font-bold mb-3 line-clamp-2 ${darkMode ? 'text-amber-100' : 'text-amber-900'}`}
+                  className={`text-xl md:text-2xl font-bold mb-3 line-clamp-2 ${darkMode ? 'text-amber-100' : 'text-[#0B5A70]'}`}
                   title={selectedPublicBhajan.title}
                 >
                   {selectedPublicBhajan.title}
                 </h1>
 
                 {selectedPublicBhajan.dhun && (
-                  <div className={`border-l-4 border-orange-400 p-3 rounded-r-lg mb-4 ${darkMode ? 'bg-gray-700' : 'bg-orange-50'}`}>
-                    <p className={`text-sm ${darkMode ? 'text-orange-200' : 'text-orange-900'}`}>
+                  <div className={`border-l-4 border-[#E65100]/40 p-3 rounded-r-lg mb-4 ${darkMode ? 'bg-gray-700' : 'bg-[#0B5A70]/5'}`}>
+                    <p className={`text-sm ${darkMode ? 'text-orange-200' : 'text-[#E65100]'}`}>
                       <span className="font-semibold">तर्ज़ / धुन:</span> {selectedPublicBhajan.dhun}
                     </p>
                   </div>
                 )}
 
-                <div className={`border-t pt-4 ${darkMode ? 'border-gray-700' : 'border-orange-100'}`}>
+                <div className={`border-t pt-4 ${darkMode ? 'border-gray-700' : 'border-[#0B5A70]/8'}`}>
                   {/* Quick font size adjust - no need to open Reading View modal for
                       common tweaks. Range clamped to 14-40px to match the modal slider. */}
                   <div className="flex items-center justify-end gap-1 mb-2">
                     <button
                       onClick={() => setReadingSettings(prev => ({ ...prev, fontSize: Math.max(14, prev.fontSize - 2) }))}
-                      className={`px-2 py-1 rounded-md text-xs font-semibold transition-colors ${darkMode ? 'bg-gray-700 hover:bg-gray-600 text-gray-200' : 'bg-orange-50 hover:bg-orange-100 text-amber-800 border border-orange-200'}`}
+                      className={`px-2 py-1 rounded-md text-xs font-semibold transition-colors ${darkMode ? 'bg-gray-700 hover:bg-gray-600 text-gray-200' : 'bg-[#0B5A70]/5 hover:bg-[#0B5A70]/10 text-[#0B5A70] border border-[#0B5A70]/12'}`}
                       title="Decrease font size"
                     >
                       Aa−
@@ -5824,7 +5824,7 @@ const App = () => {
                     <span className={`text-xs w-8 text-center ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{readingSettings.fontSize}</span>
                     <button
                       onClick={() => setReadingSettings(prev => ({ ...prev, fontSize: Math.min(40, prev.fontSize + 2) }))}
-                      className={`px-2 py-1 rounded-md text-xs font-semibold transition-colors ${darkMode ? 'bg-gray-700 hover:bg-gray-600 text-gray-200' : 'bg-orange-50 hover:bg-orange-100 text-amber-800 border border-orange-200'}`}
+                      className={`px-2 py-1 rounded-md text-xs font-semibold transition-colors ${darkMode ? 'bg-gray-700 hover:bg-gray-600 text-gray-200' : 'bg-[#0B5A70]/5 hover:bg-[#0B5A70]/10 text-[#0B5A70] border border-[#0B5A70]/12'}`}
                       title="Increase font size"
                     >
                       Aa+
@@ -5844,7 +5844,7 @@ const App = () => {
                 </div>
 
                 {selectedPublicBhajan.keywords && selectedPublicBhajan.keywords.length > 0 && (
-                  <div className="mt-6 pt-4 border-t border-orange-100">
+                  <div className="mt-6 pt-4 border-t border-[#0B5A70]/8">
                     <p className="text-xs text-gray-500 mb-2">Keywords:</p>
                     <div className="flex flex-wrap gap-2">
                       {selectedPublicBhajan.keywords.map(kw => (
@@ -5857,7 +5857,7 @@ const App = () => {
                 )}
 
                 {selectedPublicBhajan.source && (
-                  <div className="mt-4 pt-4 border-t border-orange-100">
+                  <div className="mt-4 pt-4 border-t border-[#0B5A70]/8">
                     <a
                       href={selectedPublicBhajan.source}
                       target="_blank"
@@ -5880,7 +5880,7 @@ const App = () => {
               <div className="flex items-center justify-between mb-4">
                 <button
                   onClick={() => setCurrentView('public-library')}
-                  className="text-orange-600 hover:text-orange-800 flex items-center gap-1 text-sm"
+                  className="text-[#0B5A70] hover:text-[#0B5A70]/80 flex items-center gap-1 text-sm"
                 >
                   ← Dashboard
                 </button>
@@ -5890,8 +5890,8 @@ const App = () => {
               </div>
 
               <div className="mb-6">
-                <h2 className="text-2xl font-bold text-amber-900">🔧 Admin Panel</h2>
-                <p className="text-sm text-amber-700">Manage the Public Library</p>
+                <h2 className="text-2xl font-bold text-[#0B5A70]">🔧 Admin Panel</h2>
+                <p className="text-sm text-[#0B5A70]/70">Manage the Public Library</p>
               </div>
 
               {/* Stats Card */}
@@ -5919,7 +5919,7 @@ const App = () => {
 
               {/* Manual Add Bhajan Card */}
               <div className="bg-white rounded-2xl shadow-lg p-6 mb-6 border-2 border-green-200">
-                <h3 className="text-lg font-bold text-amber-900 mb-3">➕ Add Bhajan Manually</h3>
+                <h3 className="text-lg font-bold text-[#0B5A70] mb-3">➕ Add Bhajan Manually</h3>
                 <p className="text-sm text-gray-600 mb-4">
                   Add a single bhajan to the Public Library using a form.
                 </p>
@@ -5933,7 +5933,7 @@ const App = () => {
               
               {/* MANAGE LISTS (Deities, Categories, Keywords) */}
               <div className="bg-white rounded-2xl shadow-lg p-6 mb-6 border-2 border-indigo-200">
-                <h3 className="text-lg font-bold text-amber-900 mb-2">📋 Manage Lists</h3>
+                <h3 className="text-lg font-bold text-[#0B5A70] mb-2">📋 Manage Lists</h3>
                 <p className="text-sm text-gray-600 mb-4">
                   Add, rename, or delete deities, categories, and keywords. Changes apply to all users.
                 </p>
@@ -5946,7 +5946,7 @@ const App = () => {
                 
                 {/* Deities */}
                 <div className="mb-6">
-                  <h4 className="font-semibold text-amber-900 mb-2">🕉️ Deities ({customDeities.length || DEITY_OPTIONS.length})</h4>
+                  <h4 className="font-semibold text-[#0B5A70] mb-2">🕉️ Deities ({customDeities.length || DEITY_OPTIONS.length})</h4>
                   <div className="flex flex-wrap gap-2 mb-3">
                     {(customDeities.length > 0 ? customDeities : DEITY_OPTIONS.map(d => d.value)).map(name => (
                       editingItem?.type === 'deity' && editingItem?.value === name ? (
@@ -6000,7 +6000,7 @@ const App = () => {
                       onChange={(e) => setNewItemInput({...newItemInput, deity: e.target.value})}
                       onKeyDown={(e) => e.key === 'Enter' && addConfigItem('deity', newItemInput.deity)}
                       placeholder="Add new deity (e.g., Radha Rani)"
-                      className="flex-1 px-3 py-2 border-2 border-orange-200 rounded-lg text-sm outline-none focus:border-orange-400"
+                      className="flex-1 px-3 py-2 border-2 border-[#0B5A70]/12 rounded-lg text-sm outline-none focus:border-[#0B5A70]/30"
                     />
                     <button
                       onClick={() => addConfigItem('deity', newItemInput.deity)}
@@ -6014,7 +6014,7 @@ const App = () => {
                 
                 {/* Categories */}
                 <div className="mb-6">
-                  <h4 className="font-semibold text-amber-900 mb-2">📖 Categories ({customCategories.length || CATEGORY_OPTIONS.length})</h4>
+                  <h4 className="font-semibold text-[#0B5A70] mb-2">📖 Categories ({customCategories.length || CATEGORY_OPTIONS.length})</h4>
                   <div className="flex flex-wrap gap-2 mb-3">
                     {(customCategories.length > 0 ? customCategories : CATEGORY_OPTIONS).map(name => (
                       editingItem?.type === 'category' && editingItem?.value === name ? (
@@ -6066,7 +6066,7 @@ const App = () => {
                       onChange={(e) => setNewItemInput({...newItemInput, category: e.target.value})}
                       onKeyDown={(e) => e.key === 'Enter' && addConfigItem('category', newItemInput.category)}
                       placeholder="Add new category (e.g., Kirtan)"
-                      className="flex-1 px-3 py-2 border-2 border-orange-200 rounded-lg text-sm outline-none focus:border-orange-400"
+                      className="flex-1 px-3 py-2 border-2 border-[#0B5A70]/12 rounded-lg text-sm outline-none focus:border-[#0B5A70]/30"
                     />
                     <button
                       onClick={() => addConfigItem('category', newItemInput.category)}
@@ -6080,7 +6080,7 @@ const App = () => {
                 
                 {/* Keywords */}
                 <div>
-                  <h4 className="font-semibold text-amber-900 mb-2">🏷️ Keywords ({customKeywords.length || DEFAULT_KEYWORDS.length})</h4>
+                  <h4 className="font-semibold text-[#0B5A70] mb-2">🏷️ Keywords ({customKeywords.length || DEFAULT_KEYWORDS.length})</h4>
                   <div className="flex flex-wrap gap-2 mb-3">
                     {(customKeywords.length > 0 ? customKeywords : DEFAULT_KEYWORDS).map(name => (
                       editingItem?.type === 'keyword' && editingItem?.value === name ? (
@@ -6132,7 +6132,7 @@ const App = () => {
                       onChange={(e) => setNewItemInput({...newItemInput, keyword: e.target.value.toLowerCase().replace(/\s+/g, '')})}
                       onKeyDown={(e) => e.key === 'Enter' && addConfigItem('keyword', newItemInput.keyword)}
                       placeholder="Add new keyword (e.g., aarti)"
-                      className="flex-1 px-3 py-2 border-2 border-orange-200 rounded-lg text-sm outline-none focus:border-orange-400"
+                      className="flex-1 px-3 py-2 border-2 border-[#0B5A70]/12 rounded-lg text-sm outline-none focus:border-[#0B5A70]/30"
                     />
                     <button
                       onClick={() => addConfigItem('keyword', newItemInput.keyword)}
@@ -6153,7 +6153,7 @@ const App = () => {
               {/* USER FEEDBACK CARD */}
               <div className="bg-white rounded-2xl shadow-lg p-6 mb-6 border-2 border-blue-200">
                 <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-lg font-bold text-amber-900">💬 User Feedback</h3>
+                  <h3 className="text-lg font-bold text-[#0B5A70]">💬 User Feedback</h3>
                   <button
                     onClick={loadFeedbackList}
                     disabled={feedbackListLoading}
@@ -6183,7 +6183,7 @@ const App = () => {
                         <div key={fb.id} className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                           <div className="flex items-start justify-between mb-2">
                             <div className="flex-1">
-                              <p className="font-semibold text-amber-900 text-sm">
+                              <p className="font-semibold text-[#0B5A70] text-sm">
                                 {fb.userName || 'Anonymous'}
                               </p>
                               {fb.userEmail && (
@@ -6230,7 +6230,7 @@ const App = () => {
 
               {/* JSON Import Section */}
               <div className="bg-white rounded-2xl shadow-lg p-6 mb-6 border-2 border-purple-200">
-                <h3 className="text-lg font-bold text-amber-900 mb-3">📥 Import Bhajans from JSON</h3>
+                <h3 className="text-lg font-bold text-[#0B5A70] mb-3">📥 Import Bhajans from JSON</h3>
                 <p className="text-sm text-gray-600 mb-4">
                   Paste JSON exported from your personal Babosa Sankirtan app. Bhajans will be added to the Public Library.
                 </p>
@@ -6289,7 +6289,7 @@ const App = () => {
                       <p className="text-xs text-gray-500 mb-2">Preview (first 10):</p>
                       {importPreview.bhajans.slice(0, 10).map((b, idx) => (
                         <div key={idx} className="mb-2 p-2 bg-white rounded-lg text-sm border border-gray-200">
-                          <p className="font-semibold text-amber-900 truncate">{b.title}</p>
+                          <p className="font-semibold text-[#0B5A70] truncate">{b.title}</p>
                           <p className="text-xs text-gray-600">
                             {b.deity} • {b.category}
                           </p>
@@ -6363,8 +6363,8 @@ const App = () => {
         {showPublicBhajanForm && isAdmin && (
           <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 overflow-y-auto">
             <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full my-8 max-h-[90vh] overflow-y-auto">
-              <div className="p-4 border-b border-orange-100 flex items-center justify-between sticky top-0 bg-white rounded-t-2xl z-10">
-                <h3 className="text-lg font-bold text-amber-900">
+              <div className="p-4 border-b border-[#0B5A70]/10 flex items-center justify-between sticky top-0 bg-white rounded-t-2xl z-10">
+                <h3 className="text-lg font-bold text-[#0B5A70]">
                   {editingPublicBhajan ? '✏️ Edit Public Bhajan' : '➕ Add Public Bhajan'}
                 </h3>
                 <button
@@ -6381,7 +6381,7 @@ const App = () => {
               <div className="p-6 space-y-4">
                 {/* Title */}
                 <div>
-                  <label className="block text-sm font-semibold text-amber-900 mb-1">
+                  <label className="block text-sm font-semibold text-[#0B5A70] mb-1">
                     Title <span className="text-red-500">*</span>
                   </label>
                   <div className="relative">
@@ -6393,11 +6393,11 @@ const App = () => {
                       onKeyDown={(e) => handlePublicHindiKeyDown(e, 'title')}
                       onBlur={() => setTimeout(() => setShowSuggestions(false), 300)}
                       onFocus={() => setActiveTypingField('title')}
-                      className="w-full px-4 py-3 border-2 border-orange-200 rounded-xl focus:ring-4 focus:ring-orange-200 focus:border-orange-400 outline-none text-lg"
+                      className="w-full px-4 py-3 border-2 border-[#0B5A70]/12 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none text-lg"
                       placeholder={hindiTypingEnabled ? "Type: om jai jagdish hare" : "e.g., ॐ जय जगदीश हरे"}
                     />
                     {hindiTypingEnabled && showSuggestions && activeTypingField === 'title' && transliterationSuggestions.length > 0 && (
-                      <div className="absolute bottom-full left-0 right-0 mb-2 bg-white border-2 border-orange-300 rounded-lg shadow-2xl p-2 flex flex-wrap gap-2 items-center z-30">
+                      <div className="absolute bottom-full left-0 right-0 mb-2 bg-white border-2 border-[#0B5A70]/20 rounded-lg shadow-2xl p-2 flex flex-wrap gap-2 items-center z-30">
                         <span className="text-xs text-gray-500 mr-1">
                           <strong>"{currentWord}"</strong> →
                         </span>
@@ -6415,8 +6415,8 @@ const App = () => {
                             }}
                             className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
                               idx === 0
-                                ? 'bg-orange-500 text-white hover:bg-orange-600 shadow-md'
-                                : 'bg-orange-100 text-amber-800 hover:bg-orange-200'
+                                ? 'bg-[#0B5A70] text-white hover:bg-[#094a5d] shadow-md'
+                                : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15'
                             }`}
                           >
                             {idx === 0 && '⭐ '}{suggestion}
@@ -6449,11 +6449,11 @@ const App = () => {
                 {/* Deity and Category */}
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-sm font-semibold text-amber-900 mb-1">Deity</label>
+                    <label className="block text-sm font-semibold text-[#0B5A70] mb-1">Deity</label>
                     <select
                       value={publicBhajanForm.deity}
                       onChange={(e) => setPublicBhajanForm({...publicBhajanForm, deity: e.target.value})}
-                      className="w-full px-4 py-3 border-2 border-orange-200 rounded-xl outline-none bg-white"
+                      className="w-full px-4 py-3 border-2 border-[#0B5A70]/12 rounded-xl outline-none bg-white"
                     >
                       {allDeityOptions.map(d => (
                         <option key={d.value} value={d.value}>{d.value}</option>
@@ -6461,11 +6461,11 @@ const App = () => {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-semibold text-amber-900 mb-1">Category</label>
+                    <label className="block text-sm font-semibold text-[#0B5A70] mb-1">Category</label>
                     <select
                       value={publicBhajanForm.category}
                       onChange={(e) => setPublicBhajanForm({...publicBhajanForm, category: e.target.value})}
-                      className="w-full px-4 py-3 border-2 border-orange-200 rounded-xl outline-none bg-white"
+                      className="w-full px-4 py-3 border-2 border-[#0B5A70]/12 rounded-xl outline-none bg-white"
                     >
                       {allCategoryOptions.map(c => (
                         <option key={c} value={c}>{c}</option>
@@ -6476,7 +6476,7 @@ const App = () => {
 
                 {/* Dhun */}
                 <div>
-                  <label className="block text-sm font-semibold text-amber-900 mb-1">
+                  <label className="block text-sm font-semibold text-[#0B5A70] mb-1">
                     तर्ज़ / धुन (Tune)
                   </label>
                   <div className="relative">
@@ -6488,11 +6488,11 @@ const App = () => {
                       onKeyDown={(e) => handlePublicHindiKeyDown(e, 'dhun')}
                       onBlur={() => setTimeout(() => setShowSuggestions(false), 300)}
                       onFocus={() => setActiveTypingField('dhun')}
-                      className="w-full px-4 py-3 border-2 border-orange-200 rounded-xl outline-none"
+                      className="w-full px-4 py-3 border-2 border-[#0B5A70]/12 rounded-xl outline-none"
                       placeholder={hindiTypingEnabled ? "Type in English, press space" : "e.g., तर्ज़: तुझे देखा तो..."}
                     />
                     {hindiTypingEnabled && showSuggestions && activeTypingField === 'dhun' && transliterationSuggestions.length > 0 && (
-                      <div className="absolute bottom-full left-0 right-0 mb-2 bg-white border-2 border-orange-300 rounded-lg shadow-2xl p-2 flex flex-wrap gap-2 items-center z-30">
+                      <div className="absolute bottom-full left-0 right-0 mb-2 bg-white border-2 border-[#0B5A70]/20 rounded-lg shadow-2xl p-2 flex flex-wrap gap-2 items-center z-30">
                         <span className="text-xs text-gray-500 mr-1">
                           <strong>"{currentWord}"</strong> →
                         </span>
@@ -6510,8 +6510,8 @@ const App = () => {
                             }}
                             className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
                               idx === 0
-                                ? 'bg-orange-500 text-white hover:bg-orange-600 shadow-md'
-                                : 'bg-orange-100 text-amber-800 hover:bg-orange-200'
+                                ? 'bg-[#0B5A70] text-white hover:bg-[#094a5d] shadow-md'
+                                : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15'
                             }`}
                           >
                             {idx === 0 && '⭐ '}{suggestion}
@@ -6543,12 +6543,12 @@ const App = () => {
 
                 {/* Scale */}
                 <div>
-                  <label className="block text-sm font-semibold text-amber-900 mb-1">Scale / Raag</label>
+                  <label className="block text-sm font-semibold text-[#0B5A70] mb-1">Scale / Raag</label>
                   <input
                     type="text"
                     value={publicBhajanForm.scale}
                     onChange={(e) => setPublicBhajanForm({...publicBhajanForm, scale: e.target.value})}
-                    className="w-full px-4 py-3 border-2 border-orange-200 rounded-xl outline-none"
+                    className="w-full px-4 py-3 border-2 border-[#0B5A70]/12 rounded-xl outline-none"
                     placeholder="e.g., Raag Yaman, C# Scale"
                   />
                 </div>
@@ -6561,7 +6561,7 @@ const App = () => {
 
                   {/* First-time warning about OCR engine download */}
                   {!localStorage.getItem('sankirtan-tesseract-langs-cached') && !ocrProcessing && (
-                    <div className="mb-2 p-2 bg-amber-50 border border-amber-300 rounded-lg text-xs text-amber-900">
+                    <div className="mb-2 p-2 bg-[#E65100]/5 border border-[#E65100]/20 rounded-lg text-xs text-[#0B5A70]">
                       ⚠️ <strong>First-time use:</strong> The OCR engine (~15 MB) will download once and be cached. Please use WiFi if possible.
                     </div>
                   )}
@@ -6656,7 +6656,7 @@ const App = () => {
                 {/* Lyrics */}
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="block text-sm font-semibold text-amber-900">
+                    <label className="block text-sm font-semibold text-[#0B5A70]">
                       Lyrics <span className="text-red-500">*</span>
                     </label>
                     <button
@@ -6664,7 +6664,7 @@ const App = () => {
                       onClick={() => setHindiTypingEnabled(!hindiTypingEnabled)}
                       className={`text-xs font-semibold px-3 py-1 rounded-full transition-all ${
                         hindiTypingEnabled
-                          ? 'bg-orange-500 text-white shadow-md'
+                          ? 'bg-[#0B5A70] text-white shadow-md'
                           : 'bg-gray-100 text-gray-600 border border-gray-300'
                       }`}
                       title={hindiTypingEnabled ? 'Turn off Hindi typing' : 'Turn on Hindi typing'}
@@ -6673,11 +6673,11 @@ const App = () => {
                     </button>
                   </div>
                   {hindiTypingEnabled && (
-                    <div className="mb-2 p-2 bg-orange-50 border border-orange-200 rounded-lg">
-                      <p className="text-xs text-orange-800">
+                    <div className="mb-2 p-2 bg-[#0B5A70]/5 border border-[#0B5A70]/12 rounded-lg">
+                      <p className="text-xs text-[#E65100]">
                         ✨ Type in English, press <kbd className="bg-white px-1.5 py-0.5 rounded border text-xs">space</kbd> to auto-convert to Hindi
                       </p>
-                      <p className="text-xs text-orange-600 mt-1">
+                      <p className="text-xs text-[#0B5A70]/60 mt-1">
                         Example: <code className="bg-white px-1 rounded">jai shri babosa</code> → जय श्री बाबोसा
                       </p>
                     </div>
@@ -6691,12 +6691,12 @@ const App = () => {
                       onBlur={() => setTimeout(() => setShowSuggestions(false), 300)}
                       onFocus={() => setActiveTypingField('lyrics')}
                       rows={10}
-                      className="w-full px-4 py-3 border-2 border-orange-200 rounded-xl outline-none font-mono text-base"
+                      className="w-full px-4 py-3 border-2 border-[#0B5A70]/12 rounded-xl outline-none font-mono text-base"
                       placeholder={hindiTypingEnabled ? "Type: jai shri babosa (press space to convert)" : "भजन के बोल यहाँ लिखें..."}
                       style={{ lineHeight: '1.8' }}
                     />
                     {hindiTypingEnabled && showSuggestions && activeTypingField === 'lyrics' && transliterationSuggestions.length > 0 && (
-                      <div className="absolute bottom-full left-0 right-0 mb-2 bg-white border-2 border-orange-400 rounded-xl shadow-2xl p-2 flex flex-wrap gap-2 items-center z-30">
+                      <div className="absolute bottom-full left-0 right-0 mb-2 bg-white border-2 border-[#0B5A70]/20 rounded-xl shadow-2xl p-2 flex flex-wrap gap-2 items-center z-30">
                         <span className="text-xs text-gray-500 mr-1">
                           <strong>"{currentWord}"</strong> →
                         </span>
@@ -6714,8 +6714,8 @@ const App = () => {
                             }}
                             className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
                               idx === 0
-                                ? 'bg-orange-500 text-white hover:bg-orange-600 shadow-md'
-                                : 'bg-orange-100 text-amber-800 hover:bg-orange-200'
+                                ? 'bg-[#0B5A70] text-white hover:bg-[#094a5d] shadow-md'
+                                : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15'
                             }`}
                             title={idx === 0 ? 'Default (press space)' : `Alternative ${idx + 1}`}
                           >
@@ -6748,7 +6748,7 @@ const App = () => {
 
                 {/* Keywords */}
                 <div>
-                  <label className="block text-sm font-semibold text-amber-900 mb-2">Keywords</label>
+                  <label className="block text-sm font-semibold text-[#0B5A70] mb-2">Keywords</label>
                   <div className="flex flex-wrap gap-2">
                     {allKeywordOptions.map(kw => (
                       <button
@@ -6757,8 +6757,8 @@ const App = () => {
                         onClick={() => togglePublicBhajanKeyword(kw)}
                         className={`px-3 py-1.5 rounded-full text-sm font-medium ${
                           publicBhajanForm.keywords.includes(kw)
-                            ? 'bg-orange-500 text-white shadow-md'
-                            : 'bg-orange-50 text-amber-800 border border-orange-200 hover:bg-orange-100'
+                            ? 'bg-[#0B5A70] text-white shadow-md'
+                            : 'bg-[#0B5A70]/5 text-[#0B5A70] border border-[#0B5A70]/12 hover:bg-[#0B5A70]/10'
                         }`}
                       >
                         {publicBhajanForm.keywords.includes(kw) ? '✓ ' : ''}#{kw}
@@ -6769,12 +6769,12 @@ const App = () => {
 
                 {/* Source */}
                 <div>
-                  <label className="block text-sm font-semibold text-amber-900 mb-1">Source URL (optional)</label>
+                  <label className="block text-sm font-semibold text-[#0B5A70] mb-1">Source URL (optional)</label>
                   <input
                     type="url"
                     value={publicBhajanForm.source}
                     onChange={(e) => setPublicBhajanForm({...publicBhajanForm, source: e.target.value})}
-                    className="w-full px-4 py-3 border-2 border-orange-200 rounded-xl outline-none"
+                    className="w-full px-4 py-3 border-2 border-[#0B5A70]/12 rounded-xl outline-none"
                     placeholder="https://youtube.com/... or reference URL"
                   />
                 </div>
@@ -6821,13 +6821,13 @@ const App = () => {
     
     if (!currentBhajan) {
       return (
-        <div className="min-h-screen bg-gradient-to-br from-orange-50 to-amber-50 p-4 flex items-center justify-center">
+        <div className="min-h-screen bg-[#FFF8F0] p-4 flex items-center justify-center">
           <div className="text-center">
-            <p className="text-lg text-amber-900 mb-4">⚠️ This bhajan is not available</p>
+            <p className="text-lg text-[#0B5A70] mb-4">⚠️ This bhajan is not available</p>
             <p className="text-sm text-gray-600 mb-4">It may have been deleted from your library</p>
             <button
               onClick={exitLiveProgram}
-              className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-xl"
+              className="bg-[#0B5A70] hover:bg-[#094a5d] text-white px-4 py-2 rounded-xl"
             >
               Exit Live Mode
             </button>
@@ -6837,9 +6837,9 @@ const App = () => {
     }
     
     return (
-      <div className="min-h-screen bg-gradient-to-br from-orange-50 to-amber-50">
+      <div className="min-h-screen bg-[#FFF8F0]">
         {/* Live Header */}
-        <div className="bg-white/95 backdrop-blur-md sticky top-0 z-40 shadow-md border-b-2 border-orange-200">
+        <div className="bg-white/95 backdrop-blur-md sticky top-0 z-40 shadow-md border-b-2 border-[#0B5A70]/12">
           <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
             <button
               onClick={exitLiveProgram}
@@ -6848,12 +6848,12 @@ const App = () => {
               ✕ Exit Live
             </button>
             <div className="text-center flex-1 mx-4">
-              <p className="text-xs text-orange-600 font-semibold">🎤 LIVE PROGRAM</p>
-              <p className="text-sm font-bold text-amber-900 truncate">{selectedProgram.name}</p>
+              <p className="text-xs text-[#0B5A70]/60 font-semibold">🎤 LIVE PROGRAM</p>
+              <p className="text-sm font-bold text-[#0B5A70] truncate">{selectedProgram.name}</p>
             </div>
             <div className="text-right">
               <p className="text-xs text-gray-500">Bhajan</p>
-              <p className="text-lg font-bold text-orange-600">{liveProgramIndex + 1} / {totalBhajans}</p>
+              <p className="text-lg font-bold text-[#E65100]">{liveProgramIndex + 1} / {totalBhajans}</p>
             </div>
           </div>
           
@@ -6861,7 +6861,7 @@ const App = () => {
           <div className="max-w-4xl mx-auto px-4 pb-2 flex items-center justify-center gap-2">
             <button
               onClick={() => setLiveFontSize(Math.max(14, liveFontSize - 2))}
-              className="w-8 h-8 rounded-lg bg-orange-100 hover:bg-orange-200 text-amber-800 font-bold"
+              className="w-8 h-8 rounded-lg bg-[#0B5A70]/8 hover:bg-[#0B5A70]/15 text-[#0B5A70] font-bold"
               title="Decrease font"
             >
               A−
@@ -6869,7 +6869,7 @@ const App = () => {
             <span className="text-xs text-gray-500 min-w-[40px] text-center">{liveFontSize}px</span>
             <button
               onClick={() => setLiveFontSize(Math.min(40, liveFontSize + 2))}
-              className="w-8 h-8 rounded-lg bg-orange-100 hover:bg-orange-200 text-amber-800 font-bold"
+              className="w-8 h-8 rounded-lg bg-[#0B5A70]/8 hover:bg-[#0B5A70]/15 text-[#0B5A70] font-bold"
               title="Increase font"
             >
               A+
@@ -6884,20 +6884,20 @@ const App = () => {
         
         {/* Bhajan Content */}
         <div className="max-w-4xl mx-auto px-4 py-6 pb-24">
-          <h1 className="text-3xl md:text-4xl font-bold text-amber-900 mb-3">
+          <h1 className="text-3xl md:text-4xl font-bold text-[#0B5A70] mb-3">
             {currentBhajan.title}
           </h1>
           
           {currentBhajan.dhun && (
-            <div className="bg-orange-50 border-l-4 border-orange-400 p-3 rounded-r-lg mb-4">
-              <p className="text-sm text-orange-900">
+            <div className="bg-[#0B5A70]/5 border-l-4 border-[#E65100]/40 p-3 rounded-r-lg mb-4">
+              <p className="text-sm text-[#E65100]">
                 <span className="font-semibold">तर्ज़ / धुन:</span> {currentBhajan.dhun}
               </p>
             </div>
           )}
           
           <div className="flex flex-wrap gap-2 mb-6">
-            <span className="bg-orange-100 text-orange-800 px-3 py-1 rounded-full text-sm font-semibold">
+            <span className="bg-[#0B5A70]/8 text-[#0B5A70] px-3 py-1 rounded-full text-sm font-semibold">
               {currentBhajan.deity}
             </span>
             {currentBhajan.scale && (
@@ -6907,11 +6907,11 @@ const App = () => {
             )}
           </div>
           
-          <div className={`rounded-2xl shadow-lg p-6 md:p-8 ${darkMode ? 'bg-gray-800 border border-gray-700' : 'bg-white'}`}>
+          <div className={`rounded-2xl shadow-[0_2px_12px_rgba(11,90,112,0.06)] p-6 md:p-8 ${darkMode ? 'bg-gray-800 border border-gray-700' : 'bg-[#FFFCF8] border border-[#0B5A70]/8'}`}>
             <div className="flex justify-end mb-2">
               <button
                 onClick={() => setShowReadingSettings(true)}
-                className={`p-2 rounded-lg text-sm font-semibold flex items-center gap-1 transition-colors ${darkMode ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-orange-100 text-amber-800 hover:bg-orange-200'}`}
+                className={`p-2 rounded-lg text-sm font-semibold flex items-center gap-1 transition-colors ${darkMode ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15'}`}
                 title="Reading view options"
               >
                 ⚙️ View
@@ -6932,23 +6932,23 @@ const App = () => {
         </div>
         
         {/* Bottom Navigation Bar */}
-        <div className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t-2 border-orange-200 shadow-2xl z-40">
+        <div className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t-2 border-[#0B5A70]/12 shadow-2xl z-40">
           <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
             <button
               onClick={livePrev}
               disabled={liveProgramIndex === 0}
-              className="flex-1 bg-orange-100 hover:bg-orange-200 disabled:opacity-30 disabled:cursor-not-allowed text-amber-900 font-bold py-3 rounded-xl flex items-center justify-center gap-2"
+              className="flex-1 bg-[#0B5A70]/8 hover:bg-[#0B5A70]/15 disabled:opacity-30 disabled:cursor-not-allowed text-[#0B5A70] font-bold py-3 rounded-xl flex items-center justify-center gap-2"
             >
               ← Previous
             </button>
             <div className="text-center min-w-[80px]">
               <p className="text-xs text-gray-500">Bhajan</p>
-              <p className="text-lg font-bold text-orange-600">{liveProgramIndex + 1} / {totalBhajans}</p>
+              <p className="text-lg font-bold text-[#E65100]">{liveProgramIndex + 1} / {totalBhajans}</p>
             </div>
             <button
               onClick={liveNext}
               disabled={liveProgramIndex >= totalBhajans - 1}
-              className="flex-1 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 disabled:opacity-30 disabled:cursor-not-allowed text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2"
+              className="flex-1 bg-[#0B5A70] hover:bg-[#094a5d] disabled:opacity-30 disabled:cursor-not-allowed text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2"
             >
               Next →
             </button>
@@ -7084,24 +7084,24 @@ const App = () => {
                         setShowPhoneLogin(false);
                         setAuthError('');
                       }}
-                      className="text-orange-600 text-sm mb-2 flex items-center gap-1"
+                      className="text-[#E65100] text-sm mb-2 flex items-center gap-1"
                     >
                       ← Back
                     </button>
 
-                    <h3 className="text-lg font-bold text-amber-900 text-center">
+                    <h3 className="text-lg font-bold text-[#0B5A70] text-center">
                       📱 Sign in with Phone
                     </h3>
 
                     <div>
-                      <label className="block text-sm font-semibold text-amber-900 mb-1">
+                      <label className="block text-sm font-semibold text-[#0B5A70] mb-1">
                         Phone Number
                       </label>
                       <input
                         type="tel"
                         value={phoneNumber}
                         onChange={(e) => setPhoneNumber(e.target.value)}
-                        className="w-full px-4 py-3 border-2 border-orange-200 rounded-xl focus:ring-4 focus:ring-orange-200 focus:border-orange-400 outline-none"
+                        className="w-full px-4 py-3 border-2 border-[#0B5A70]/12 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none"
                         placeholder="+91 98765 43210"
                         autoFocus
                       />
@@ -7119,7 +7119,7 @@ const App = () => {
                     <button
                       onClick={handleSendOtp}
                       disabled={authLoading || !phoneNumber}
-                      className="w-full bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-semibold py-3 rounded-xl disabled:opacity-50"
+                      className="w-full bg-[#0B5A70] hover:bg-[#094a5d] text-white font-semibold py-3 rounded-xl disabled:opacity-50"
                     >
                       {authLoading ? 'Sending...' : 'Send OTP'}
                     </button>
@@ -7134,12 +7134,12 @@ const App = () => {
                         setOtpCode('');
                         setAuthError('');
                       }}
-                      className="text-orange-600 text-sm mb-2 flex items-center gap-1"
+                      className="text-[#E65100] text-sm mb-2 flex items-center gap-1"
                     >
                       ← Change number
                     </button>
 
-                    <h3 className="text-lg font-bold text-amber-900 text-center">
+                    <h3 className="text-lg font-bold text-[#0B5A70] text-center">
                       🔐 Enter OTP
                     </h3>
                     <p className="text-center text-sm text-gray-600">
@@ -7153,7 +7153,7 @@ const App = () => {
                         maxLength={6}
                         value={otpCode}
                         onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
-                        className="w-full px-4 py-3 border-2 border-orange-200 rounded-xl focus:ring-4 focus:ring-orange-200 focus:border-orange-400 outline-none text-center text-2xl tracking-widest"
+                        className="w-full px-4 py-3 border-2 border-[#0B5A70]/12 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none text-center text-2xl tracking-widest"
                         placeholder="123456"
                         autoFocus
                       />
@@ -7168,7 +7168,7 @@ const App = () => {
                     <button
                       onClick={handleVerifyOtp}
                       disabled={authLoading || otpCode.length !== 6}
-                      className="w-full bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-semibold py-3 rounded-xl disabled:opacity-50"
+                      className="w-full bg-[#0B5A70] hover:bg-[#094a5d] text-white font-semibold py-3 rounded-xl disabled:opacity-50"
                     >
                       {authLoading ? 'Verifying...' : 'Verify OTP'}
                     </button>
@@ -7241,10 +7241,10 @@ class ErrorBoundary extends React.Component {
         : 'Unknown error';
 
       return (
-        <div className="min-h-screen bg-gradient-to-br from-orange-50 via-amber-50 to-yellow-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-8 text-center border-2 border-orange-200">
+        <div className="min-h-screen bg-[#FFF8F0] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-8 text-center border-2 border-[#0B5A70]/12">
             <div className="text-6xl mb-4">🙏</div>
-            <h1 className="text-2xl font-bold text-amber-900 mb-2">
+            <h1 className="text-2xl font-bold text-[#0B5A70] mb-2">
               Something went wrong
             </h1>
             <p className="text-sm text-gray-600 mb-4">
@@ -7262,7 +7262,7 @@ class ErrorBoundary extends React.Component {
             <div className="space-y-2">
               <button
                 onClick={this.handleReset}
-                className="w-full bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-semibold py-3 rounded-xl shadow-md"
+                className="w-full bg-[#0B5A70] hover:bg-[#094a5d] text-white font-semibold py-3 rounded-xl shadow-md"
               >
                 🔄 Try Again
               </button>
@@ -7278,7 +7278,7 @@ class ErrorBoundary extends React.Component {
               If this keeps happening, please share feedback so we can fix it.
             </p>
 
-            <p className="text-xs text-amber-700 mt-4">
+            <p className="text-xs text-[#0B5A70]/60 mt-4">
               🕉️ बाबोसा जी की कृपा से यह जल्दी ठीक होगा
             </p>
           </div>
