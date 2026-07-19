@@ -442,7 +442,7 @@ const App = () => {
       if (observer) observer.disconnect();
       if (retryTimer) clearTimeout(retryTimer);
     };
-  }, [currentView, publicVisibleCount, filteredPublicBhajans.length]);
+  }, [currentView, publicVisibleCount, publicBhajans.length]);
 
   useEffect(() => {
     if (currentView !== 'library') return;
@@ -477,7 +477,7 @@ const App = () => {
       if (observer) observer.disconnect();
       if (retryTimer) clearTimeout(retryTimer);
     };
-  }, [currentView, libraryVisibleCount, filteredBhajans.length]);
+  }, [currentView, libraryVisibleCount, bhajans.length]);
 
   // Dark mode
   const [darkMode, setDarkMode] = useState(() => {
