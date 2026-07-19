@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="brandGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#E65100"/>
+      <stop offset="100%" stop-color="#0B5A70"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Full-bleed gradient background (safe for maskable) -->
+  <rect width="512" height="512" fill="url(#brandGrad)"/>
+
+  <!-- The "s" from Poppins Bold, filled white -->
+  <!-- Path is drawn upside-down in SVG coords (SVG Y grows down, path Y grows up in font)
+       so we scale(1,-1) to flip. Position it centered. -->
+  <!-- Path bbox: x[32-515], y[-8 to 566]. Width=483, Height=574 -->
+  <!-- Target: fill ~65% of 512 = ~333 tile height. Scale = 333/574 ≈ 0.58 -->
+  <!-- Translate: center X (256 - 483*0.58/2 - 32*0.58) = 256 - 158 = 98 -->
+  <!-- Translate Y for center: 256 + 574*0.58/2 = 256 + 166 = 422 -->
+  <g transform="translate(98 422) scale(0.58 -0.58)" fill="#FFFFFF">
+    <path d="M32 183H201Q204 154 228 136Q252 118 287 118Q319 118 336.5 130.5Q354 143 354 163Q354 187 329 198.5Q304 210 248 224Q188 238 148 253.5Q108 269 79 302.5Q50 336 50 393Q50 441 76.5 480.5Q103 520 154.5 543Q206 566 277 566Q382 566 442.5 514Q503 462 512 376H354Q350 405 328.5 422Q307 439 272 439Q242 439 226 427.5Q210 416 210 396Q210 372 235.5 360Q261 348 315 336Q377 320 416 304.5Q455 289 484.5 254.5Q514 220 515 162Q515 113 487.5 74.5Q460 36 408.5 14Q357 -8 289 -8Q216 -8 159 17Q102 42 69 85.5Q36 129 32 183Z"/>
+  </g>
+</svg>
