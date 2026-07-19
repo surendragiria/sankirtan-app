@@ -3313,7 +3313,7 @@ const App = () => {
     return (
       <div className="min-h-screen bg-[#FFF8F0] py-8 px-4">
         <div className="max-w-md mx-auto">
-          <div className="bg-[#FFFCF8] rounded-2xl shadow-2xl overflow-hidden">
+          <div className="bg-[#FFFCF8] rounded-2xl shadow-[0_8px_40px_rgba(11,90,112,0.15)] overflow-hidden">
             <div className="bg-[#0B5A70] p-6 text-white text-center">
               <div className="text-5xl mb-2">🙏</div>
               <h2 className="text-2xl font-bold">Welcome to Sankirtan!</h2>
@@ -3329,7 +3329,7 @@ const App = () => {
                   type="text"
                   value={profileForm.displayName}
                   onChange={(e) => setProfileForm({...profileForm, displayName: e.target.value})}
-                  className="w-full px-4 py-3 border-2 border-[#0B5A70]/12 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none"
+                  className="w-full px-4 py-3 border border-[#0B5A70]/15 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none"
                   placeholder="Enter your full name"
                   autoFocus
                 />
@@ -3342,7 +3342,7 @@ const App = () => {
                 <textarea
                   value={profileForm.bio}
                   onChange={(e) => setProfileForm({...profileForm, bio: e.target.value})}
-                  className="w-full px-4 py-2 border-2 border-[#0B5A70]/12 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none"
+                  className="w-full px-4 py-2 border border-[#0B5A70]/15 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none"
                   placeholder="e.g., Bhajan singer, Kirtan lover"
                   rows={2}
                 />
@@ -3356,7 +3356,7 @@ const App = () => {
                   type="text"
                   value={profileForm.location}
                   onChange={(e) => setProfileForm({...profileForm, location: e.target.value})}
-                  className="w-full px-4 py-3 border-2 border-[#0B5A70]/12 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none"
+                  className="w-full px-4 py-3 border border-[#0B5A70]/15 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none"
                   placeholder="e.g., Delhi, India"
                 />
               </div>
@@ -3369,21 +3369,21 @@ const App = () => {
                     type="text"
                     value={profileForm.whatsapp}
                     onChange={(e) => setProfileForm({...profileForm, whatsapp: e.target.value})}
-                    className="w-full px-3 py-2 border-2 border-[#0B5A70]/10 rounded-lg focus:ring-2 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none text-sm"
+                    className="w-full px-3 py-2 border border-[#0B5A70]/15 rounded-lg focus:ring-2 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none text-sm"
                     placeholder="WhatsApp number"
                   />
                   <input
                     type="text"
                     value={profileForm.youtube}
                     onChange={(e) => setProfileForm({...profileForm, youtube: e.target.value})}
-                    className="w-full px-3 py-2 border-2 border-[#0B5A70]/10 rounded-lg focus:ring-2 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none text-sm"
+                    className="w-full px-3 py-2 border border-[#0B5A70]/15 rounded-lg focus:ring-2 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none text-sm"
                     placeholder="YouTube channel URL"
                   />
                   <input
                     type="text"
                     value={profileForm.instagram}
                     onChange={(e) => setProfileForm({...profileForm, instagram: e.target.value})}
-                    className="w-full px-3 py-2 border-2 border-[#0B5A70]/10 rounded-lg focus:ring-2 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none text-sm"
+                    className="w-full px-3 py-2 border border-[#0B5A70]/15 rounded-lg focus:ring-2 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none text-sm"
                     placeholder="Instagram handle"
                   />
                 </div>
@@ -3429,7 +3429,7 @@ const App = () => {
             ============================================== */}
         {showOnboarding && currentStep && (
           <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 ">
-            <div className="bg-[#FFFCF8] rounded-3xl shadow-2xl max-w-md w-full overflow-hidden">
+            <div className="bg-[#FFFCF8] rounded-3xl shadow-[0_8px_40px_rgba(11,90,112,0.15)] max-w-md w-full overflow-hidden">
               {/* Header with gradient */}
               <div className="bg-[#0B5A70] p-6 text-white text-center relative">
                 {/* Skip button */}
@@ -3512,7 +3512,7 @@ const App = () => {
             ============================================== */}
         {showUpdatePrompt && (
           <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4">
-            <div className="bg-[#FFFCF8] rounded-3xl shadow-2xl max-w-md w-full overflow-hidden">
+            <div className="bg-[#FFFCF8] rounded-3xl shadow-[0_8px_40px_rgba(11,90,112,0.15)] max-w-md w-full overflow-hidden">
               <div className="bg-[#0B5A70] p-6 text-white text-center">
                 <div className="text-5xl mb-2">🎉</div>
                 <h3 className="text-2xl font-bold">App Updated!</h3>
@@ -3548,7 +3548,7 @@ const App = () => {
             ============================================== */}
         {showFeedbackModal && (
           <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4">
-            <div className="bg-[#FFFCF8] rounded-3xl shadow-2xl max-w-md w-full overflow-hidden">
+            <div className="bg-[#FFFCF8] rounded-3xl shadow-[0_8px_40px_rgba(11,90,112,0.15)] max-w-md w-full overflow-hidden">
               {/* Header */}
               <div className="bg-[#0B5A70] p-6 text-white text-center relative">
                 <button
@@ -3590,7 +3590,7 @@ const App = () => {
                       }}
                       rows={6}
                       maxLength={1000}
-                      className="w-full px-4 py-3 border-2 border-[#0B5A70]/12 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none resize-none text-base"
+                      className="w-full px-4 py-3 border border-[#0B5A70]/15 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none resize-none text-base"
                       placeholder="What do you love? What could be better? Any bugs? Ideas for new features? We're listening... 🙏"
                     />
                     <div className="text-right text-xs text-gray-500 mt-1">
@@ -3634,7 +3634,7 @@ const App = () => {
             ============================================== */}
         {showReadingSettings && (
           <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4">
-            <div className={`rounded-3xl shadow-2xl max-w-sm w-full overflow-hidden ${darkMode ? 'bg-[#162226] text-gray-100' : 'bg-[#FFFCF8]'}`}>
+            <div className={`rounded-3xl shadow-[0_8px_40px_rgba(11,90,112,0.15)] max-w-sm w-full overflow-hidden ${darkMode ? 'bg-[#162226] text-gray-100' : 'bg-[#FFFCF8]'}`}>
               <div className={`p-6 text-center ${darkMode ? 'bg-[#1e2e33]' : 'bg-[#0B5A70]'} text-white`}>
                 <div className="text-5xl mb-2">📖</div>
                 <h3 className="text-2xl font-bold">Reading View</h3>
@@ -3720,7 +3720,7 @@ const App = () => {
             ============================================== */}
         {showInstallPrompt && deferredInstallPrompt && (
           <div className="fixed bottom-4 left-4 right-4 md:left-auto md:max-w-md z-50">
-            <div className="bg-[#FFFCF8] rounded-2xl shadow-2xl border border-[#0B5A70]/15 p-5">
+            <div className="bg-[#FFFCF8] rounded-2xl shadow-[0_8px_40px_rgba(11,90,112,0.15)] border border-[#0B5A70]/15 p-5">
               <div className="flex items-start gap-3">
                 <div className="text-4xl">🕉️</div>
                 <div className="flex-1">
@@ -3753,7 +3753,7 @@ const App = () => {
             ============================================== */}
         {showIOSInstructions && (
           <div className="fixed bottom-4 left-4 right-4 md:left-auto md:max-w-md z-50">
-            <div className="bg-[#FFFCF8] rounded-2xl shadow-2xl border border-[#0B5A70]/15 p-5">
+            <div className="bg-[#FFFCF8] rounded-2xl shadow-[0_8px_40px_rgba(11,90,112,0.15)] border border-[#0B5A70]/15 p-5">
               <div className="flex items-start gap-3">
                 <div className="text-4xl">🕉️</div>
                 <div className="flex-1">
@@ -3918,7 +3918,7 @@ const App = () => {
                 <div className="flex items-center gap-2 flex-wrap">
                   <button
                     onClick={openPrograms}
-                    className={`border-2 font-semibold px-3 py-2 rounded-xl text-sm flex items-center gap-1 ${darkMode ? 'bg-[#162226] border-[#0B5A70]/15 text-gray-200 hover:border-[#0B5A70]/30' : 'bg-[#FFFCF8] border-[#0B5A70]/15 hover:border-[#0B5A70]/40 text-[#0B5A70]'}`}
+                    className={`border font-semibold px-3 py-2 rounded-xl text-sm flex items-center gap-1 ${darkMode ? 'bg-[#162226] border-[#0B5A70]/15 text-gray-200 hover:border-[#0B5A70]/30' : 'bg-[#FFFCF8] border-[#0B5A70]/15 hover:border-[#0B5A70]/40 text-[#0B5A70]'}`}
                     title="View and manage your programs / setlists"
                   >
                     🎵 Programs ({programs.length})
@@ -3946,7 +3946,7 @@ const App = () => {
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="🔍 Search bhajans (title, lyrics, keywords)..."
-                    className={`w-full px-4 py-3 pr-24 border-2 rounded-xl focus:ring-4 outline-none ${
+                    className={`w-full px-4 py-3 pr-24 border rounded-xl focus:ring-4 outline-none ${
                       darkMode
                         ? 'bg-[#162226] border-[#0B5A70]/15 text-gray-100 focus:ring-[#0B5A70]/20 focus:border-[#0B5A70]/30'
                         : 'bg-white border-[#0B5A70]/12 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30'
@@ -4009,7 +4009,7 @@ const App = () => {
                 <select
                   value={filterDeity}
                   onChange={(e) => setFilterDeity(e.target.value)}
-                  className={`flex-1 min-w-[110px] px-3 py-2 border-2 rounded-lg focus:ring-2 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none text-sm bg-white transition-all ${
+                  className={`flex-1 min-w-[110px] px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none text-sm bg-[#FFFCF8] transition-all ${
                     filterDeity
                       ? 'border-[#0B5A70]/50 ring-2 ring-[#0B5A70]/10 font-semibold text-[#0B5A70]'
                       : 'border-[#0B5A70]/12'
@@ -4024,7 +4024,7 @@ const App = () => {
                 <select
                   value={filterCategory}
                   onChange={(e) => setFilterCategory(e.target.value)}
-                  className={`flex-1 min-w-[110px] px-3 py-2 border-2 rounded-lg focus:ring-2 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none text-sm bg-white transition-all ${
+                  className={`flex-1 min-w-[110px] px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none text-sm bg-[#FFFCF8] transition-all ${
                     filterCategory
                       ? 'border-[#0B5A70]/50 ring-2 ring-[#0B5A70]/10 font-semibold text-[#0B5A70]'
                       : 'border-[#0B5A70]/12'
@@ -4039,7 +4039,7 @@ const App = () => {
                 <select
                   value={libraryFilterKeyword}
                   onChange={(e) => setLibraryFilterKeyword(e.target.value)}
-                  className={`flex-1 min-w-[110px] px-3 py-2 border-2 rounded-lg focus:ring-2 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none text-sm bg-white transition-all ${
+                  className={`flex-1 min-w-[110px] px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none text-sm bg-[#FFFCF8] transition-all ${
                     libraryFilterKeyword
                       ? 'border-[#0B5A70]/50 ring-2 ring-[#0B5A70]/10 font-semibold text-[#0B5A70]'
                       : 'border-[#0B5A70]/12'
@@ -4077,7 +4077,7 @@ const App = () => {
                     compactView ? (
                       <div
                         key={i}
-                        className={`rounded-xl p-3 border-2 flex items-center gap-3 animate-pulse ${darkMode ? 'bg-[#162226] border-[#0B5A70]/15' : 'bg-white border-[#0B5A70]/10'}`}
+                        className={`rounded-xl p-3 border flex items-center gap-3 animate-pulse ${darkMode ? 'bg-[#162226] border-[#0B5A70]/15' : 'bg-[#FFFCF8] border-[#0B5A70]/8'}`}
                       >
                         <div className="flex-1 min-w-0 space-y-2">
                           <div className={`h-3 rounded w-3/4 ${darkMode ? 'bg-[#1e2e33]' : 'bg-[#0B5A70]/8'}`}></div>
@@ -4087,7 +4087,7 @@ const App = () => {
                     ) : (
                       <div
                         key={i}
-                        className={`rounded-2xl shadow-md p-5 border animate-pulse ${darkMode ? 'bg-[#162226] border-[#0B5A70]/15' : 'bg-[#FFFCF8] border-[#0B5A70]/8'}`}
+                        className={`rounded-2xl shadow-[0_2px_12px_rgba(11,90,112,0.06)] p-5 border animate-pulse ${darkMode ? 'bg-[#162226] border-[#0B5A70]/15' : 'bg-[#FFFCF8] border-[#0B5A70]/8'}`}
                       >
                         <div className={`h-5 rounded w-3/4 mb-3 ${darkMode ? 'bg-[#1e2e33]' : 'bg-[#0B5A70]/8'}`}></div>
                         <div className="flex gap-2 mb-3">
@@ -4174,7 +4174,7 @@ const App = () => {
                       <button
                         key={bhajan.id}
                         onClick={() => openBhajanDetail(bhajan)}
-                        className={`rounded-2xl p-5 border transition-all text-left ${darkMode ? 'bg-[#162226] border-[#0B5A70]/15 shadow-md hover:border-[#0B5A70]/30 hover:shadow-xl' : 'bg-[#FFFCF8] border-[#0B5A70]/8 shadow-[0_2px_12px_rgba(11,90,112,0.06)] hover:border-[#0B5A70]/25 hover:shadow-[0_4px_20px_rgba(11,90,112,0.12)]'}`}
+                        className={`rounded-2xl p-5 border transition-all text-left ${darkMode ? 'bg-[#162226] border-[#0B5A70]/15 shadow-[0_2px_12px_rgba(11,90,112,0.15)] hover:border-[#0B5A70]/30 hover:shadow-[0_4px_20px_rgba(11,90,112,0.25)]' : 'bg-[#FFFCF8] border-[#0B5A70]/8 shadow-[0_2px_12px_rgba(11,90,112,0.06)] hover:border-[#0B5A70]/25 hover:shadow-[0_4px_20px_rgba(11,90,112,0.12)]'}`}
                       >
                         <div className="flex items-start justify-between mb-2">
                           <h3 className="text-lg font-bold text-[#0B5A70] flex-1 line-clamp-2">
@@ -4426,11 +4426,11 @@ const App = () => {
                       onKeyDown={(e) => handleHindiKeyDown(e, 'title')}
                       onBlur={() => setTimeout(() => setShowSuggestions(false), 300)}
                       onFocus={() => setActiveTypingField('title')}
-                      className="w-full px-4 py-3 border-2 border-[#0B5A70]/12 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none text-lg"
+                      className="w-full px-4 py-3 border border-[#0B5A70]/15 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none text-lg"
                       placeholder={hindiTypingEnabled ? "Type: om jai jagdish hare" : "e.g., ॐ जय जगदीश हरे"}
                     />
                     {hindiTypingEnabled && showSuggestions && activeTypingField === 'title' && transliterationSuggestions.length > 0 && (
-                      <div className="absolute bottom-full left-0 right-0 mb-2 bg-white border-2 border-[#0B5A70]/20 rounded-lg shadow-2xl p-2 flex flex-wrap gap-2 items-center z-30">
+                      <div className="absolute bottom-full left-0 right-0 mb-2 bg-[#FFFCF8] border border-[#0B5A70]/15 rounded-lg shadow-[0_8px_30px_rgba(11,90,112,0.18)] p-2 flex flex-wrap gap-2 items-center z-30">
                         <span className="text-xs text-gray-500 mr-1">
                           <strong>"{currentWord}"</strong> →
                         </span>
@@ -4488,7 +4488,7 @@ const App = () => {
                     <select
                       value={bhajanForm.deity}
                       onChange={(e) => setBhajanForm({...bhajanForm, deity: e.target.value})}
-                      className="w-full px-4 py-3 border-2 border-[#0B5A70]/12 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none bg-white"
+                      className="w-full px-4 py-3 border border-[#0B5A70]/15 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none bg-[#FFFCF8]"
                     >
                       {allDeityOptions.map(d => (
                         <option key={d.value} value={d.value}>{d.value}</option>
@@ -4503,7 +4503,7 @@ const App = () => {
                     <select
                       value={bhajanForm.category}
                       onChange={(e) => setBhajanForm({...bhajanForm, category: e.target.value})}
-                      className="w-full px-4 py-3 border-2 border-[#0B5A70]/12 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none bg-white"
+                      className="w-full px-4 py-3 border border-[#0B5A70]/15 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none bg-[#FFFCF8]"
                     >
                       {allCategoryOptions.map(c => (
                         <option key={c} value={c}>{c}</option>
@@ -4526,11 +4526,11 @@ const App = () => {
                       onKeyDown={(e) => handleHindiKeyDown(e, 'dhun')}
                       onBlur={() => setTimeout(() => setShowSuggestions(false), 300)}
                       onFocus={() => setActiveTypingField('dhun')}
-                      className="w-full px-4 py-3 border-2 border-[#0B5A70]/12 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none"
+                      className="w-full px-4 py-3 border border-[#0B5A70]/15 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none"
                       placeholder={hindiTypingEnabled ? "Type in English, press space" : "e.g., तर्ज़: तुझे देखा तो..."}
                     />
                     {hindiTypingEnabled && showSuggestions && activeTypingField === 'dhun' && transliterationSuggestions.length > 0 && (
-                      <div className="absolute bottom-full left-0 right-0 mb-2 bg-white border-2 border-[#0B5A70]/20 rounded-lg shadow-2xl p-2 flex flex-wrap gap-2 items-center z-30">
+                      <div className="absolute bottom-full left-0 right-0 mb-2 bg-[#FFFCF8] border border-[#0B5A70]/15 rounded-lg shadow-[0_8px_30px_rgba(11,90,112,0.18)] p-2 flex flex-wrap gap-2 items-center z-30">
                         <span className="text-xs text-gray-500 mr-1">
                           <strong>"{currentWord}"</strong> →
                         </span>
@@ -4588,7 +4588,7 @@ const App = () => {
                     type="text"
                     value={bhajanForm.scale}
                     onChange={(e) => setBhajanForm({...bhajanForm, scale: e.target.value})}
-                    className="w-full px-4 py-3 border-2 border-[#0B5A70]/12 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none"
+                    className="w-full px-4 py-3 border border-[#0B5A70]/15 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none"
                     placeholder="e.g., Raag Yaman, C# Scale"
                   />
                 </div>
@@ -4614,7 +4614,7 @@ const App = () => {
                   </div>
                   
                   {/* Add lyrics from Image / PDF / Camera (on-device OCR - no files uploaded) */}
-                  <div className="mb-3 p-3 bg-[#0B5A70]/5 border-2 border-[#0B5A70]/15 rounded-xl">
+                  <div className="mb-3 p-3 bg-[#0B5A70]/5 border border-[#0B5A70]/12 rounded-xl">
                     <p className="text-xs font-semibold text-[#0B5A70] mb-2">
                       📥 Auto-fill lyrics from a photo, PDF, or camera — text is read on your device, nothing is uploaded or stored as a file
                     </p>
@@ -4690,7 +4690,7 @@ const App = () => {
                     />
 
                     {ocrProcessing && (
-                      <div className="mt-3 p-3 bg-white border-2 border-[#0B5A70]/20 rounded-lg">
+                      <div className="mt-3 p-3 bg-[#FFFCF8] border border-[#0B5A70]/15 rounded-lg">
                         <div className="w-full bg-[#0B5A70]/10 rounded-full h-3 mb-2">
                           <div
                             className="bg-[#0B5A70] h-3 rounded-full transition-all"
@@ -4733,14 +4733,14 @@ const App = () => {
                       onBlur={() => setTimeout(() => setShowSuggestions(false), 300)}
                       onFocus={() => setActiveTypingField('lyrics')}
                       rows={10}
-                      className="w-full px-4 py-3 border-2 border-[#0B5A70]/12 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none font-mono text-base"
+                      className="w-full px-4 py-3 border border-[#0B5A70]/15 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none font-mono text-base"
                       placeholder={hindiTypingEnabled ? "Type: jai shri babosa (press space to convert)" : "भजन के बोल यहाँ लिखें..."}
                       style={{ lineHeight: '1.8' }}
                     />
                     
                     {/* Hindi Suggestions Popup - positioned above textarea */}
                     {hindiTypingEnabled && showSuggestions && activeTypingField === 'lyrics' && transliterationSuggestions.length > 0 && (
-                      <div className="absolute bottom-full left-0 right-0 mb-2 bg-white border-2 border-[#0B5A70]/20 rounded-xl shadow-2xl p-2 flex flex-wrap gap-2 items-center z-30">
+                      <div className="absolute bottom-full left-0 right-0 mb-2 bg-[#FFFCF8] border border-[#0B5A70]/15 rounded-xl shadow-[0_8px_30px_rgba(11,90,112,0.18)] p-2 flex flex-wrap gap-2 items-center z-30">
                         <span className="text-xs text-gray-500 mr-1">
                           <strong>"{currentWord}"</strong> →
                         </span>
@@ -4827,7 +4827,7 @@ const App = () => {
                     type="url"
                     value={bhajanForm.source}
                     onChange={(e) => setBhajanForm({...bhajanForm, source: e.target.value})}
-                    className="w-full px-4 py-3 border-2 border-[#0B5A70]/12 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none"
+                    className="w-full px-4 py-3 border border-[#0B5A70]/15 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none"
                     placeholder="https://youtube.com/... or reference URL"
                   />
                 </div>
@@ -4897,7 +4897,7 @@ const App = () => {
                   value={programSearchQuery}
                   onChange={(e) => setProgramSearchQuery(e.target.value)}
                   placeholder="🔍 Search programs by name or venue..."
-                  className="w-full px-4 py-3 border-2 border-[#0B5A70]/12 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none"
+                  className="w-full px-4 py-3 border border-[#0B5A70]/15 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none"
                 />
               </div>
 
@@ -5100,7 +5100,7 @@ const App = () => {
                     type="text"
                     value={programForm.name}
                     onChange={(e) => setProgramForm({...programForm, name: e.target.value})}
-                    className="w-full px-4 py-3 border-2 border-[#0B5A70]/12 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none text-lg"
+                    className="w-full px-4 py-3 border border-[#0B5A70]/15 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none text-lg"
                     placeholder="e.g., Diwali Jagran 2026"
                   />
                 </div>
@@ -5115,7 +5115,7 @@ const App = () => {
                       type="text"
                       value={programForm.date}
                       onChange={(e) => setProgramForm({...programForm, date: e.target.value})}
-                      className="w-full px-4 py-3 border-2 border-[#0B5A70]/12 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none"
+                      className="w-full px-4 py-3 border border-[#0B5A70]/15 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none"
                       placeholder="e.g., 25 Oct 2026"
                     />
                   </div>
@@ -5127,7 +5127,7 @@ const App = () => {
                       type="text"
                       value={programForm.venue}
                       onChange={(e) => setProgramForm({...programForm, venue: e.target.value})}
-                      className="w-full px-4 py-3 border-2 border-[#0B5A70]/12 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none"
+                      className="w-full px-4 py-3 border border-[#0B5A70]/15 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none"
                       placeholder="e.g., Delhi Temple"
                     />
                   </div>
@@ -5172,7 +5172,7 @@ const App = () => {
                           </div>
                         );
                         return (
-                          <div key={bhajanId} className="bg-white border-2 border-[#0B5A70]/12 rounded-xl p-3 flex items-center gap-2">
+                          <div key={bhajanId} className="bg-white border border-[#0B5A70]/15 rounded-xl p-3 flex items-center gap-2">
                             <div className="text-xl font-bold text-[#E65100] min-w-[30px] text-center">
                               {index + 1}
                             </div>
@@ -5251,7 +5251,7 @@ const App = () => {
               {/* Bhajan Picker Modal */}
               {showBhajanPicker && (
                 <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-                  <div className="bg-[#FFFCF8] rounded-2xl shadow-2xl max-w-lg w-full max-h-[80vh] flex flex-col">
+                  <div className="bg-[#FFFCF8] rounded-2xl shadow-[0_8px_40px_rgba(11,90,112,0.15)] max-w-lg w-full max-h-[80vh] flex flex-col">
                     <div className="p-4 border-b border-[#0B5A70]/10 flex items-center justify-between">
                       <h3 className="text-lg font-bold text-[#0B5A70]">Add Bhajan to Program</h3>
                       <button
@@ -5267,7 +5267,7 @@ const App = () => {
                         value={bhajanPickerSearch}
                         onChange={(e) => setBhajanPickerSearch(e.target.value)}
                         placeholder="🔍 Search your library..."
-                        className="w-full px-3 py-2 border-2 border-[#0B5A70]/12 rounded-lg focus:ring-2 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none text-sm"
+                        className="w-full px-3 py-2 border border-[#0B5A70]/15 rounded-lg focus:ring-2 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none text-sm"
                         autoFocus
                       />
                     </div>
@@ -5290,7 +5290,7 @@ const App = () => {
                                   key={bhajan.id}
                                   onClick={() => !isAdded && addBhajanToProgram(bhajan.id)}
                                   disabled={isAdded}
-                                  className={`w-full text-left p-3 rounded-xl border-2 transition-all ${
+                                  className={`w-full text-left p-3 rounded-xl border transition-all ${
                                     isAdded 
                                       ? 'bg-green-50 border-green-200 opacity-60 cursor-not-allowed'
                                       : 'bg-white border-[#0B5A70]/10 hover:border-[#0B5A70]/25'
@@ -5360,7 +5360,7 @@ const App = () => {
                     value={publicSearchQuery}
                     onChange={(e) => setPublicSearchQuery(e.target.value)}
                     placeholder="🔍 Search public bhajans..."
-                    className={`w-full px-4 py-3 pr-24 border-2 rounded-xl focus:ring-4 outline-none ${
+                    className={`w-full px-4 py-3 pr-24 border rounded-xl focus:ring-4 outline-none ${
                       darkMode
                         ? 'bg-[#162226] border-[#0B5A70]/15 text-gray-100 focus:ring-[#0B5A70]/20 focus:border-[#0B5A70]/30'
                         : 'bg-white border-[#0B5A70]/12 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30'
@@ -5426,7 +5426,7 @@ const App = () => {
                 <select
                   value={publicFilterDeity}
                   onChange={(e) => setPublicFilterDeity(e.target.value)}
-                  className={`flex-1 min-w-[110px] px-3 py-2 border-2 rounded-lg focus:ring-2 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none text-sm bg-white transition-all ${
+                  className={`flex-1 min-w-[110px] px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none text-sm bg-[#FFFCF8] transition-all ${
                     publicFilterDeity
                       ? 'border-[#0B5A70]/50 ring-2 ring-[#0B5A70]/10 font-semibold text-[#0B5A70]'
                       : 'border-[#0B5A70]/12'
@@ -5441,7 +5441,7 @@ const App = () => {
                 <select
                   value={publicFilterCategory}
                   onChange={(e) => setPublicFilterCategory(e.target.value)}
-                  className={`flex-1 min-w-[110px] px-3 py-2 border-2 rounded-lg focus:ring-2 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none text-sm bg-white transition-all ${
+                  className={`flex-1 min-w-[110px] px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none text-sm bg-[#FFFCF8] transition-all ${
                     publicFilterCategory
                       ? 'border-[#0B5A70]/50 ring-2 ring-[#0B5A70]/10 font-semibold text-[#0B5A70]'
                       : 'border-[#0B5A70]/12'
@@ -5456,7 +5456,7 @@ const App = () => {
                 <select
                   value={publicFilterKeyword}
                   onChange={(e) => setPublicFilterKeyword(e.target.value)}
-                  className={`flex-1 min-w-[110px] px-3 py-2 border-2 rounded-lg focus:ring-2 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none text-sm bg-white transition-all ${
+                  className={`flex-1 min-w-[110px] px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none text-sm bg-[#FFFCF8] transition-all ${
                     publicFilterKeyword
                       ? 'border-[#0B5A70]/50 ring-2 ring-[#0B5A70]/10 font-semibold text-[#0B5A70]'
                       : 'border-[#0B5A70]/12'
@@ -5496,7 +5496,7 @@ const App = () => {
                     compactView ? (
                       <div
                         key={i}
-                        className={`rounded-xl p-3 border-2 flex items-center gap-3 animate-pulse ${darkMode ? 'bg-[#162226] border-[#0B5A70]/15' : 'bg-white border-[#0B5A70]/10'}`}
+                        className={`rounded-xl p-3 border flex items-center gap-3 animate-pulse ${darkMode ? 'bg-[#162226] border-[#0B5A70]/15' : 'bg-[#FFFCF8] border-[#0B5A70]/8'}`}
                       >
                         <div className="flex-1 min-w-0 space-y-2">
                           <div className={`h-3 rounded w-3/4 ${darkMode ? 'bg-[#1e2e33]' : 'bg-[#0B5A70]/8'}`}></div>
@@ -5507,7 +5507,7 @@ const App = () => {
                     ) : (
                       <div
                         key={i}
-                        className={`rounded-2xl shadow-md p-5 border animate-pulse ${darkMode ? 'bg-[#162226] border-[#0B5A70]/15' : 'bg-[#FFFCF8] border-[#0B5A70]/8'}`}
+                        className={`rounded-2xl shadow-[0_2px_12px_rgba(11,90,112,0.06)] p-5 border animate-pulse ${darkMode ? 'bg-[#162226] border-[#0B5A70]/15' : 'bg-[#FFFCF8] border-[#0B5A70]/8'}`}
                       >
                         {/* Title placeholder */}
                         <div className={`h-5 rounded w-3/4 mb-3 ${darkMode ? 'bg-[#1e2e33]' : 'bg-[#0B5A70]/8'}`}></div>
@@ -5599,7 +5599,7 @@ const App = () => {
                             </p>
                           </div>
                           {isSaved ? (
-                            <span className="bg-green-100 text-green-700 text-xs font-semibold px-2 py-1 rounded-full flex-shrink-0">
+                            <span className="bg-green-50 text-green-700 text-xs font-semibold px-2 py-1 rounded-full flex-shrink-0">
                               ✓
                             </span>
                           ) : (
@@ -5618,7 +5618,7 @@ const App = () => {
                     return (
                       <div
                         key={bhajan.id}
-                        className={`rounded-2xl p-5 border transition-all ${darkMode ? 'bg-[#162226] border-[#0B5A70]/15 shadow-md hover:border-[#0B5A70]/30 hover:shadow-xl' : 'bg-[#FFFCF8] border-[#0B5A70]/8 shadow-[0_2px_12px_rgba(11,90,112,0.06)] hover:border-[#0B5A70]/25 hover:shadow-[0_4px_20px_rgba(11,90,112,0.12)]'}`}
+                        className={`rounded-2xl p-5 border transition-all ${darkMode ? 'bg-[#162226] border-[#0B5A70]/15 shadow-[0_2px_12px_rgba(11,90,112,0.15)] hover:border-[#0B5A70]/30 hover:shadow-[0_4px_20px_rgba(11,90,112,0.25)]' : 'bg-[#FFFCF8] border-[#0B5A70]/8 shadow-[0_2px_12px_rgba(11,90,112,0.06)] hover:border-[#0B5A70]/25 hover:shadow-[0_4px_20px_rgba(11,90,112,0.12)]'}`}
                       >
                         <button
                           onClick={() => openPublicBhajanDetail(bhajan)}
@@ -5750,7 +5750,7 @@ const App = () => {
                   {/* Add to Personal (small pill instead of big banner button) */}
                   {savedBhajanIds.has(selectedPublicBhajan.id) ? (
                     <span
-                      className="bg-green-100 text-green-700 font-semibold px-2.5 py-1 rounded-full text-xs flex items-center gap-1"
+                      className="bg-green-50 text-green-700 font-semibold px-2.5 py-1 rounded-full text-xs flex items-center gap-1"
                       title="Already in your library"
                     >
                       ✓ In Library
@@ -5950,7 +5950,7 @@ const App = () => {
                   <div className="flex flex-wrap gap-2 mb-3">
                     {(customDeities.length > 0 ? customDeities : DEITY_OPTIONS.map(d => d.value)).map(name => (
                       editingItem?.type === 'deity' && editingItem?.value === name ? (
-                        <div key={name} className="inline-flex items-center gap-1 bg-yellow-50 border-2 border-yellow-400 rounded-full px-2 py-0.5">
+                        <div key={name} className="inline-flex items-center gap-1 bg-[#E65100]/8 border border-[#E65100]/25 rounded-full px-2 py-0.5">
                           <input
                             type="text"
                             value={editingValue}
@@ -6000,7 +6000,7 @@ const App = () => {
                       onChange={(e) => setNewItemInput({...newItemInput, deity: e.target.value})}
                       onKeyDown={(e) => e.key === 'Enter' && addConfigItem('deity', newItemInput.deity)}
                       placeholder="Add new deity (e.g., Radha Rani)"
-                      className="flex-1 px-3 py-2 border-2 border-[#0B5A70]/12 rounded-lg text-sm outline-none focus:border-[#0B5A70]/30"
+                      className="flex-1 px-3 py-2 border border-[#0B5A70]/15 rounded-lg text-sm outline-none focus:border-[#0B5A70]/30"
                     />
                     <button
                       onClick={() => addConfigItem('deity', newItemInput.deity)}
@@ -6018,7 +6018,7 @@ const App = () => {
                   <div className="flex flex-wrap gap-2 mb-3">
                     {(customCategories.length > 0 ? customCategories : CATEGORY_OPTIONS).map(name => (
                       editingItem?.type === 'category' && editingItem?.value === name ? (
-                        <div key={name} className="inline-flex items-center gap-1 bg-yellow-50 border-2 border-yellow-400 rounded-full px-2 py-0.5">
+                        <div key={name} className="inline-flex items-center gap-1 bg-[#E65100]/8 border border-[#E65100]/25 rounded-full px-2 py-0.5">
                           <input
                             type="text"
                             value={editingValue}
@@ -6066,7 +6066,7 @@ const App = () => {
                       onChange={(e) => setNewItemInput({...newItemInput, category: e.target.value})}
                       onKeyDown={(e) => e.key === 'Enter' && addConfigItem('category', newItemInput.category)}
                       placeholder="Add new category (e.g., Kirtan)"
-                      className="flex-1 px-3 py-2 border-2 border-[#0B5A70]/12 rounded-lg text-sm outline-none focus:border-[#0B5A70]/30"
+                      className="flex-1 px-3 py-2 border border-[#0B5A70]/15 rounded-lg text-sm outline-none focus:border-[#0B5A70]/30"
                     />
                     <button
                       onClick={() => addConfigItem('category', newItemInput.category)}
@@ -6084,7 +6084,7 @@ const App = () => {
                   <div className="flex flex-wrap gap-2 mb-3">
                     {(customKeywords.length > 0 ? customKeywords : DEFAULT_KEYWORDS).map(name => (
                       editingItem?.type === 'keyword' && editingItem?.value === name ? (
-                        <div key={name} className="inline-flex items-center gap-1 bg-yellow-50 border-2 border-yellow-400 rounded-full px-2 py-0.5">
+                        <div key={name} className="inline-flex items-center gap-1 bg-[#E65100]/8 border border-[#E65100]/25 rounded-full px-2 py-0.5">
                           <input
                             type="text"
                             value={editingValue}
@@ -6132,7 +6132,7 @@ const App = () => {
                       onChange={(e) => setNewItemInput({...newItemInput, keyword: e.target.value.toLowerCase().replace(/\s+/g, '')})}
                       onKeyDown={(e) => e.key === 'Enter' && addConfigItem('keyword', newItemInput.keyword)}
                       placeholder="Add new keyword (e.g., aarti)"
-                      className="flex-1 px-3 py-2 border-2 border-[#0B5A70]/12 rounded-lg text-sm outline-none focus:border-[#0B5A70]/30"
+                      className="flex-1 px-3 py-2 border border-[#0B5A70]/15 rounded-lg text-sm outline-none focus:border-[#0B5A70]/30"
                     />
                     <button
                       onClick={() => addConfigItem('keyword', newItemInput.keyword)}
@@ -6240,7 +6240,7 @@ const App = () => {
                     <textarea
                       value={importJsonText}
                       onChange={(e) => setImportJsonText(e.target.value)}
-                      className="w-full h-40 px-4 py-3 border-2 border-purple-200/60 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none font-mono text-sm"
+                      className="w-full h-40 px-4 py-3 border border-purple-200/40 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none font-mono text-sm"
                       placeholder='Paste JSON here... e.g., [{"title": "...", "lyrics": "..."}, ...]'
                     />
                     
@@ -6343,7 +6343,7 @@ const App = () => {
               </div>
 
               {/* Quick Info */}
-              <div className="bg-[#0B5A70]/5 border-2 border-[#0B5A70]/15 rounded-xl p-4">
+              <div className="bg-[#0B5A70]/5 border border-[#0B5A70]/12 rounded-xl p-4">
                 <h4 className="font-bold text-[#0B5A70] mb-2">💡 JSON Format Support:</h4>
                 <p className="text-xs text-[#0B5A70]/80 mb-2">The importer accepts:</p>
                 <ul className="text-xs text-[#0B5A70]/80 space-y-1 ml-4">
@@ -6362,7 +6362,7 @@ const App = () => {
             ============================================== */}
         {showPublicBhajanForm && isAdmin && (
           <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 overflow-y-auto">
-            <div className="bg-[#FFFCF8] rounded-2xl shadow-2xl max-w-2xl w-full my-8 max-h-[90vh] overflow-y-auto">
+            <div className="bg-[#FFFCF8] rounded-2xl shadow-[0_8px_40px_rgba(11,90,112,0.15)] max-w-2xl w-full my-8 max-h-[90vh] overflow-y-auto">
               <div className="p-4 border-b border-[#0B5A70]/10 flex items-center justify-between sticky top-0 bg-white rounded-t-2xl z-10">
                 <h3 className="text-lg font-bold text-[#0B5A70]">
                   {editingPublicBhajan ? '✏️ Edit Public Bhajan' : '➕ Add Public Bhajan'}
@@ -6393,11 +6393,11 @@ const App = () => {
                       onKeyDown={(e) => handlePublicHindiKeyDown(e, 'title')}
                       onBlur={() => setTimeout(() => setShowSuggestions(false), 300)}
                       onFocus={() => setActiveTypingField('title')}
-                      className="w-full px-4 py-3 border-2 border-[#0B5A70]/12 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none text-lg"
+                      className="w-full px-4 py-3 border border-[#0B5A70]/15 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none text-lg"
                       placeholder={hindiTypingEnabled ? "Type: om jai jagdish hare" : "e.g., ॐ जय जगदीश हरे"}
                     />
                     {hindiTypingEnabled && showSuggestions && activeTypingField === 'title' && transliterationSuggestions.length > 0 && (
-                      <div className="absolute bottom-full left-0 right-0 mb-2 bg-white border-2 border-[#0B5A70]/20 rounded-lg shadow-2xl p-2 flex flex-wrap gap-2 items-center z-30">
+                      <div className="absolute bottom-full left-0 right-0 mb-2 bg-[#FFFCF8] border border-[#0B5A70]/15 rounded-lg shadow-[0_8px_30px_rgba(11,90,112,0.18)] p-2 flex flex-wrap gap-2 items-center z-30">
                         <span className="text-xs text-gray-500 mr-1">
                           <strong>"{currentWord}"</strong> →
                         </span>
@@ -6453,7 +6453,7 @@ const App = () => {
                     <select
                       value={publicBhajanForm.deity}
                       onChange={(e) => setPublicBhajanForm({...publicBhajanForm, deity: e.target.value})}
-                      className="w-full px-4 py-3 border-2 border-[#0B5A70]/12 rounded-xl outline-none bg-white"
+                      className="w-full px-4 py-3 border border-[#0B5A70]/15 rounded-xl outline-none bg-[#FFFCF8]"
                     >
                       {allDeityOptions.map(d => (
                         <option key={d.value} value={d.value}>{d.value}</option>
@@ -6465,7 +6465,7 @@ const App = () => {
                     <select
                       value={publicBhajanForm.category}
                       onChange={(e) => setPublicBhajanForm({...publicBhajanForm, category: e.target.value})}
-                      className="w-full px-4 py-3 border-2 border-[#0B5A70]/12 rounded-xl outline-none bg-white"
+                      className="w-full px-4 py-3 border border-[#0B5A70]/15 rounded-xl outline-none bg-[#FFFCF8]"
                     >
                       {allCategoryOptions.map(c => (
                         <option key={c} value={c}>{c}</option>
@@ -6488,11 +6488,11 @@ const App = () => {
                       onKeyDown={(e) => handlePublicHindiKeyDown(e, 'dhun')}
                       onBlur={() => setTimeout(() => setShowSuggestions(false), 300)}
                       onFocus={() => setActiveTypingField('dhun')}
-                      className="w-full px-4 py-3 border-2 border-[#0B5A70]/12 rounded-xl outline-none"
+                      className="w-full px-4 py-3 border border-[#0B5A70]/15 rounded-xl outline-none"
                       placeholder={hindiTypingEnabled ? "Type in English, press space" : "e.g., तर्ज़: तुझे देखा तो..."}
                     />
                     {hindiTypingEnabled && showSuggestions && activeTypingField === 'dhun' && transliterationSuggestions.length > 0 && (
-                      <div className="absolute bottom-full left-0 right-0 mb-2 bg-white border-2 border-[#0B5A70]/20 rounded-lg shadow-2xl p-2 flex flex-wrap gap-2 items-center z-30">
+                      <div className="absolute bottom-full left-0 right-0 mb-2 bg-[#FFFCF8] border border-[#0B5A70]/15 rounded-lg shadow-[0_8px_30px_rgba(11,90,112,0.18)] p-2 flex flex-wrap gap-2 items-center z-30">
                         <span className="text-xs text-gray-500 mr-1">
                           <strong>"{currentWord}"</strong> →
                         </span>
@@ -6548,13 +6548,13 @@ const App = () => {
                     type="text"
                     value={publicBhajanForm.scale}
                     onChange={(e) => setPublicBhajanForm({...publicBhajanForm, scale: e.target.value})}
-                    className="w-full px-4 py-3 border-2 border-[#0B5A70]/12 rounded-xl outline-none"
+                    className="w-full px-4 py-3 border border-[#0B5A70]/15 rounded-xl outline-none"
                     placeholder="e.g., Raag Yaman, C# Scale"
                   />
                 </div>
 
                 {/* NEW: Add lyrics from Image / PDF / Camera (on-device OCR) */}
-                <div className="mb-3 p-3 bg-[#0B5A70]/5 border-2 border-[#0B5A70]/15 rounded-xl">
+                <div className="mb-3 p-3 bg-[#0B5A70]/5 border border-[#0B5A70]/12 rounded-xl">
                   <p className="text-xs font-semibold text-[#0B5A70] mb-2">
                     📥 Auto-fill lyrics from a photo, PDF, or camera — text is read on your device, nothing is uploaded or stored as a file
                   </p>
@@ -6630,7 +6630,7 @@ const App = () => {
                   />
 
                   {ocrProcessing && (
-                    <div className="mt-3 p-3 bg-white border-2 border-[#0B5A70]/20 rounded-lg">
+                    <div className="mt-3 p-3 bg-[#FFFCF8] border border-[#0B5A70]/15 rounded-lg">
                       <div className="w-full bg-[#0B5A70]/10 rounded-full h-3 mb-2">
                         <div
                           className="bg-[#0B5A70] h-3 rounded-full transition-all"
@@ -6691,12 +6691,12 @@ const App = () => {
                       onBlur={() => setTimeout(() => setShowSuggestions(false), 300)}
                       onFocus={() => setActiveTypingField('lyrics')}
                       rows={10}
-                      className="w-full px-4 py-3 border-2 border-[#0B5A70]/12 rounded-xl outline-none font-mono text-base"
+                      className="w-full px-4 py-3 border border-[#0B5A70]/15 rounded-xl outline-none font-mono text-base"
                       placeholder={hindiTypingEnabled ? "Type: jai shri babosa (press space to convert)" : "भजन के बोल यहाँ लिखें..."}
                       style={{ lineHeight: '1.8' }}
                     />
                     {hindiTypingEnabled && showSuggestions && activeTypingField === 'lyrics' && transliterationSuggestions.length > 0 && (
-                      <div className="absolute bottom-full left-0 right-0 mb-2 bg-white border-2 border-[#0B5A70]/20 rounded-xl shadow-2xl p-2 flex flex-wrap gap-2 items-center z-30">
+                      <div className="absolute bottom-full left-0 right-0 mb-2 bg-[#FFFCF8] border border-[#0B5A70]/15 rounded-xl shadow-[0_8px_30px_rgba(11,90,112,0.18)] p-2 flex flex-wrap gap-2 items-center z-30">
                         <span className="text-xs text-gray-500 mr-1">
                           <strong>"{currentWord}"</strong> →
                         </span>
@@ -6774,7 +6774,7 @@ const App = () => {
                     type="url"
                     value={publicBhajanForm.source}
                     onChange={(e) => setPublicBhajanForm({...publicBhajanForm, source: e.target.value})}
-                    className="w-full px-4 py-3 border-2 border-[#0B5A70]/12 rounded-xl outline-none"
+                    className="w-full px-4 py-3 border border-[#0B5A70]/15 rounded-xl outline-none"
                     placeholder="https://youtube.com/... or reference URL"
                   />
                 </div>
@@ -6875,7 +6875,7 @@ const App = () => {
               A+
             </button>
             {liveWakeLock && (
-              <span className="ml-2 text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">
+              <span className="ml-2 text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded-full">
                 🔦 Screen On
               </span>
             )}
@@ -6975,7 +6975,7 @@ const App = () => {
       {/* App Update Prompt */}
       {showUpdatePrompt && (
         <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4">
-          <div className="bg-[#FFFCF8] rounded-3xl shadow-2xl max-w-md w-full overflow-hidden">
+          <div className="bg-[#FFFCF8] rounded-3xl shadow-[0_8px_40px_rgba(11,90,112,0.15)] max-w-md w-full overflow-hidden">
             <div className="bg-[#0B5A70] p-6 text-white text-center">
               <div className="text-5xl mb-2">🎉</div>
               <h3 className="text-2xl font-bold">App Updated!</h3>
@@ -7007,7 +7007,7 @@ const App = () => {
       )}
 
             <div className="max-w-md w-full">
-        <div className="bg-[#FFFCF8] rounded-3xl shadow-xl overflow-hidden border border-[#0B5A70]/10">
+        <div className="bg-[#FFFCF8] rounded-3xl shadow-[0_8px_40px_rgba(11,90,112,0.12)] overflow-hidden border border-[#0B5A70]/8">
           {/* Cream hero with wordmark - matches new brand aesthetic.
               Wordmark component reused from header (single source of truth). */}
           <div className="bg-[#FFF8F0] p-8 text-center border-b border-[#0B5A70]/10">
@@ -7101,7 +7101,7 @@ const App = () => {
                         type="tel"
                         value={phoneNumber}
                         onChange={(e) => setPhoneNumber(e.target.value)}
-                        className="w-full px-4 py-3 border-2 border-[#0B5A70]/12 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none"
+                        className="w-full px-4 py-3 border border-[#0B5A70]/15 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none"
                         placeholder="+91 98765 43210"
                         autoFocus
                       />
@@ -7153,7 +7153,7 @@ const App = () => {
                         maxLength={6}
                         value={otpCode}
                         onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
-                        className="w-full px-4 py-3 border-2 border-[#0B5A70]/12 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none text-center text-2xl tracking-widest"
+                        className="w-full px-4 py-3 border border-[#0B5A70]/15 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none text-center text-2xl tracking-widest"
                         placeholder="123456"
                         autoFocus
                       />
@@ -7242,7 +7242,7 @@ class ErrorBoundary extends React.Component {
 
       return (
         <div className="min-h-screen bg-[#FFF8F0] flex items-center justify-center p-4">
-          <div className="bg-[#FFFCF8] rounded-3xl shadow-2xl max-w-md w-full p-8 text-center border border-[#0B5A70]/10">
+          <div className="bg-[#FFFCF8] rounded-3xl shadow-[0_8px_40px_rgba(11,90,112,0.15)] max-w-md w-full p-8 text-center border border-[#0B5A70]/10">
             <div className="text-6xl mb-4">🙏</div>
             <h1 className="text-2xl font-bold text-[#0B5A70] mb-2">
               Something went wrong
