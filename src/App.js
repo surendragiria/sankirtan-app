@@ -390,26 +390,40 @@ const App = () => {
   // Keeps initial DOM small (~20 nodes instead of 175) which speeds up
   // first paint significantly, especially on lower-end phones.
   const PAGE_SIZE = 20;
+  const [publicVisibleCount, setPublicVisibleCount] = useState(PAGE_SIZE);
   const [libraryVisibleCount, setLibraryVisibleCount] = useState(PAGE_SIZE);
+  const publicLoadMoreRef = useRef(null);
   const libraryLoadMoreRef = useRef(null);
 
-  // Pagination state for Public Library (cursor-based Firestore pagination)
-  const publicLastDocRef = useRef(null);
-  const [hasMorePublic, setHasMorePublic] = useState(true);
-  const [publicLoadingMore, setPublicLoadingMore] = useState(false);
-
-  // Debounced search values for performance
-  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
-  const [debouncedPublicSearchQuery, setDebouncedPublicSearchQuery] = useState('');
-  const [debouncedProgramSearchQuery, setDebouncedProgramSearchQuery] = useState('');
-  const [debouncedBhajanPickerSearch, setDebouncedBhajanPickerSearch] = useState('');
-
-  // Reset visible count when filters change (My Library only — Public uses Firestore pagination)
+  // Reset visible count when filters change - so filtering doesn't require
+  // scrolling back down through invisible-but-loaded chunks.
+  useEffect(() => {
+    setPublicVisibleCount(PAGE_SIZE);
+  }, [publicSearchQuery, publicFilterDeity, publicFilterCategory, publicFilterKeyword]);
   useEffect(() => {
     setLibraryVisibleCount(PAGE_SIZE);
   }, [searchQuery, filterDeity, filterCategory, libraryFilterKeyword]);
 
-
+  // Set up IntersectionObserver for Public Library "load more" sentinel.
+  // When user scrolls the sentinel into view, bump visible count by PAGE_SIZE.
+  // Non-fatal if IntersectionObserver isn't supported - all bhajans still
+  // render, they just come in one chunk instead of progressively.
+  useEffect(() => {
+    if (currentView !== 'public-library') return;
+    if (!publicLoadMoreRef.current) return;
+    if (typeof IntersectionObserver === 'undefined') {
+      // Old browser - just show everything
+      setPublicVisibleCount(9999);
+      return;
+    }
+    const observer = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting) {
+        setPublicVisibleCount(prev => prev + PAGE_SIZE);
+      }
+    }, { rootMargin: '400px' }); // Start loading before user hits bottom
+    observer.observe(publicLoadMoreRef.current);
+    return () => observer.disconnect();
+  }, [currentView, publicVisibleCount]);
 
   useEffect(() => {
     if (currentView !== 'library') return;
@@ -515,27 +529,6 @@ const App = () => {
       localStorage.setItem('sankirtan-dark-mode', darkMode.toString());
     } catch (e) {}
   }, [darkMode]);
-
-  // Debounce search inputs so filtering doesn't fire on every keystroke
-  useEffect(() => {
-    const timer = setTimeout(() => setDebouncedSearchQuery(searchQuery), 200);
-    return () => clearTimeout(timer);
-  }, [searchQuery]);
-
-  useEffect(() => {
-    const timer = setTimeout(() => setDebouncedPublicSearchQuery(publicSearchQuery), 200);
-    return () => clearTimeout(timer);
-  }, [publicSearchQuery]);
-
-  useEffect(() => {
-    const timer = setTimeout(() => setDebouncedProgramSearchQuery(programSearchQuery), 200);
-    return () => clearTimeout(timer);
-  }, [programSearchQuery]);
-
-  useEffect(() => {
-    const timer = setTimeout(() => setDebouncedBhajanPickerSearch(bhajanPickerSearch), 200);
-    return () => clearTimeout(timer);
-  }, [bhajanPickerSearch]);
 
   // ==============================================
   // NAVIGATION WITH HISTORY (browser back support)
@@ -1314,66 +1307,26 @@ const App = () => {
   }, [user, userProfile]);
 
   // ==============================================
+  // LOAD PUBLIC LIBRARY BHAJANS
   // ==============================================
-  // LOAD PUBLIC LIBRARY BHAJANS (Paginated)
-  // ==============================================
-  const CACHE_KEY = 'sankirtan-public-bhajans-cache';
-  const CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
-
-  const loadPublicBhajans = useCallback(async (loadMore = false) => {
-    if (!user) return;
-    if (loadMore) setPublicLoadingMore(true);
-    else setPublicLoading(true);
-
-    const db = window.firebase.firestore();
-    let query = db.collection('publicBhajans').orderBy('createdAt', 'desc').limit(PAGE_SIZE);
-    if (loadMore && publicLastDocRef.current) {
-      query = query.startAfter(publicLastDocRef.current);
-    }
-
-    try {
-      const snapshot = await query.get();
-      if (snapshot.empty) {
-        setHasMorePublic(false);
-        if (!loadMore) setPublicBhajans([]);
-        setPublicLoading(false);
-        setPublicLoadingMore(false);
-        return;
-      }
-
-      const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      publicLastDocRef.current = snapshot.docs[snapshot.docs.length - 1];
-
-      if (loadMore) {
-        setPublicBhajans(prev => [...prev, ...list]);
-      } else {
-        setPublicBhajans(list);
-        // Cache first page only
-        try {
-          localStorage.setItem(CACHE_KEY, JSON.stringify({ list, savedAt: Date.now() }));
-        } catch (e) { /* quota exceeded / private browsing */ }
-      }
-
-      setHasMorePublic(list.length === PAGE_SIZE);
-      setPublicLoading(false);
-      setPublicLoadingMore(false);
-      console.log(`✅ Loaded ${list.length} public bhajans (${loadMore ? 'more' : 'first page'})`);
-    } catch (error) {
-      console.error('Error loading public bhajans:', error);
-      setPublicLoading(false);
-      setPublicLoadingMore(false);
-    }
-  }, [user]);
-
   useEffect(() => {
     if (!user) {
       setPublicBhajans([]);
-      publicLastDocRef.current = null;
-      setHasMorePublic(true);
       return;
     }
 
-    // Cache hydration: show first page instantly while network loads
+    setPublicLoading(true);
+    const db = window.firebase.firestore();
+    const publicRef = db.collection('publicBhajans');
+
+    // CACHE HYDRATION: Show cached bhajans instantly while fresh data loads
+    // in background. Cache is a JSON string in localStorage with:
+    //   { list: [...bhajans], savedAt: timestamp }
+    // On subsequent visits users see content in <100ms instead of waiting
+    // for a network round-trip. Fresh data replaces cache silently once it
+    // arrives.
+    const CACHE_KEY = 'sankirtan-public-bhajans-cache';
+    const CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
     try {
       const raw = localStorage.getItem(CACHE_KEY);
       if (raw) {
@@ -1386,11 +1339,102 @@ const App = () => {
         }
       }
     } catch (e) {
-      console.warn('Cache hydration failed:', e);
+      console.warn('Cache hydration failed, continuing with network fetch:', e);
     }
 
+    // Save fresh list to cache (called after successful loads)
+    const saveCache = (list) => {
+      try {
+        localStorage.setItem(CACHE_KEY, JSON.stringify({
+          list,
+          savedAt: Date.now()
+        }));
+      } catch (e) {
+        // Quota exceeded / private browsing - non-fatal, just skip cache
+        console.warn('Cache save failed (non-fatal):', e);
+      }
+    };
+
+    // Simple, reliable fetch - default source (network first, cache fallback)
+    const loadPublicBhajans = async () => {
+      try {
+        const snapshot = await publicRef.get();
+        const list = [];
+        snapshot.forEach((doc) => {
+          list.push({ id: doc.id, ...doc.data() });
+        });
+
+        list.sort((a, b) => {
+          const timeA = a.createdAt?.seconds || 0;
+          const timeB = b.createdAt?.seconds || 0;
+          return timeB - timeA;
+        });
+
+        setPublicBhajans(list);
+        setPublicLoading(false);
+        saveCache(list);
+        console.log(`✅ Loaded ${list.length} public bhajans from network`);
+      } catch (error) {
+        console.error('Error loading public bhajans:', error);
+        setPublicLoading(false);
+        
+        // Retry with exponential backoff
+        [2000, 5000, 10000].forEach((delay, idx) => {
+          setTimeout(async () => {
+            try {
+              const snapshot = await publicRef.get();
+              const list = [];
+              snapshot.forEach((doc) => {
+                list.push({ id: doc.id, ...doc.data() });
+              });
+              list.sort((a, b) => {
+                const timeA = a.createdAt?.seconds || 0;
+                const timeB = b.createdAt?.seconds || 0;
+                return timeB - timeA;
+              });
+              if (list.length > 0) {
+                setPublicBhajans(list);
+                saveCache(list);
+                console.log(`✅ Retry ${idx + 1}: Loaded ${list.length} public bhajans`);
+              }
+            } catch (retryErr) {
+              console.error(`Retry ${idx + 1} failed:`, retryErr);
+            }
+          }, delay);
+        });
+      }
+    };
+    
     loadPublicBhajans();
-  }, [user, loadPublicBhajans]);
+    
+    // Also set up real-time listener (bonus for updates)
+    let unsubscribe = () => {};
+    try {
+      unsubscribe = publicRef.onSnapshot(
+        (snapshot) => {
+          const list = [];
+          snapshot.forEach((doc) => {
+            list.push({ id: doc.id, ...doc.data() });
+          });
+          list.sort((a, b) => {
+            const timeA = a.createdAt?.seconds || 0;
+            const timeB = b.createdAt?.seconds || 0;
+            return timeB - timeA;
+          });
+          setPublicBhajans(list);
+          setPublicLoading(false);
+          saveCache(list);
+        },
+        (error) => {
+          console.log('Real-time listener error (using cached data):', error.message);
+        }
+      );
+    } catch (listenerErr) {
+      console.log('Could not set up real-time listener:', listenerErr.message);
+    }
+
+    return () => unsubscribe();
+  }, [user]);
 
   // Track which public bhajans user has already saved
   useEffect(() => {
@@ -2492,27 +2536,22 @@ const App = () => {
     }
   };
 
-  // Filter public bhajans (memoized so search doesn't recompute on unrelated renders)
-  const filteredPublicBhajans = useMemo(() => {
-    if (!debouncedPublicSearchQuery && !publicFilterDeity && !publicFilterCategory && !publicFilterKeyword) {
-      return publicBhajans;
+  // Filter public bhajans
+  const filteredPublicBhajans = publicBhajans.filter(bhajan => {
+    if (publicSearchQuery) {
+      const q = publicSearchQuery.toLowerCase();
+      const matches = 
+        (bhajan.title && bhajan.title.toLowerCase().includes(q)) ||
+        (bhajan.lyrics && bhajan.lyrics.toLowerCase().includes(q)) ||
+        (bhajan.dhun && bhajan.dhun.toLowerCase().includes(q)) ||
+        (bhajan.keywords && bhajan.keywords.some(k => k.toLowerCase().includes(q)));
+      if (!matches) return false;
     }
-    return publicBhajans.filter(bhajan => {
-      if (debouncedPublicSearchQuery) {
-        const q = debouncedPublicSearchQuery.toLowerCase();
-        const matches = 
-          (bhajan.title && bhajan.title.toLowerCase().includes(q)) ||
-          (bhajan.lyrics && bhajan.lyrics.toLowerCase().includes(q)) ||
-          (bhajan.dhun && bhajan.dhun.toLowerCase().includes(q)) ||
-          (bhajan.keywords && bhajan.keywords.some(k => k.toLowerCase().includes(q)));
-        if (!matches) return false;
-      }
-      if (publicFilterDeity && bhajan.deity !== publicFilterDeity) return false;
-      if (publicFilterCategory && bhajan.category !== publicFilterCategory) return false;
-      if (publicFilterKeyword && (!bhajan.keywords || !bhajan.keywords.includes(publicFilterKeyword))) return false;
-      return true;
-    });
-  }, [publicBhajans, debouncedPublicSearchQuery, publicFilterDeity, publicFilterCategory, publicFilterKeyword]);
+    if (publicFilterDeity && bhajan.deity !== publicFilterDeity) return false;
+    if (publicFilterCategory && bhajan.category !== publicFilterCategory) return false;
+    if (publicFilterKeyword && (!bhajan.keywords || !bhajan.keywords.includes(publicFilterKeyword))) return false;
+    return true;
+  });
 
   // ==============================================
   // ADMIN PANEL FUNCTIONS
@@ -3012,15 +3051,13 @@ const App = () => {
   // Helper: get bhajan by ID
   const getBhajanById = (id) => bhajans.find(b => b.id === id);
   
-  // Filter programs (memoized)
-  const filteredPrograms = useMemo(() => {
-    if (!debouncedProgramSearchQuery) return programs;
-    const q = debouncedProgramSearchQuery.toLowerCase();
-    return programs.filter(program => 
-      (program.name && program.name.toLowerCase().includes(q)) ||
-      (program.venue && program.venue.toLowerCase().includes(q))
-    );
-  }, [programs, debouncedProgramSearchQuery]);
+  // Filter programs
+  const filteredPrograms = programs.filter(program => {
+    if (!programSearchQuery) return true;
+    const q = programSearchQuery.toLowerCase();
+    return (program.name && program.name.toLowerCase().includes(q)) ||
+           (program.venue && program.venue.toLowerCase().includes(q));
+  });
   
   // ==============================================
   // LIVE PROGRAM MODE
@@ -3074,27 +3111,22 @@ const App = () => {
     }
   };
 
-  // Filter bhajans based on search and filters (memoized)
-  const filteredBhajans = useMemo(() => {
-    if (!debouncedSearchQuery && !filterDeity && !filterCategory && !libraryFilterKeyword) {
-      return bhajans;
+  // Filter bhajans based on search and filters
+  const filteredBhajans = bhajans.filter(bhajan => {
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      const matches = 
+        (bhajan.title && bhajan.title.toLowerCase().includes(q)) ||
+        (bhajan.lyrics && bhajan.lyrics.toLowerCase().includes(q)) ||
+        (bhajan.dhun && bhajan.dhun.toLowerCase().includes(q)) ||
+        (bhajan.keywords && bhajan.keywords.some(k => k.toLowerCase().includes(q)));
+      if (!matches) return false;
     }
-    return bhajans.filter(bhajan => {
-      if (debouncedSearchQuery) {
-        const q = debouncedSearchQuery.toLowerCase();
-        const matches = 
-          (bhajan.title && bhajan.title.toLowerCase().includes(q)) ||
-          (bhajan.lyrics && bhajan.lyrics.toLowerCase().includes(q)) ||
-          (bhajan.dhun && bhajan.dhun.toLowerCase().includes(q)) ||
-          (bhajan.keywords && bhajan.keywords.some(k => k.toLowerCase().includes(q)));
-        if (!matches) return false;
-      }
-      if (filterDeity && bhajan.deity !== filterDeity) return false;
-      if (filterCategory && bhajan.category !== filterCategory) return false;
-      if (libraryFilterKeyword && (!bhajan.keywords || !bhajan.keywords.includes(libraryFilterKeyword))) return false;
-      return true;
-    });
-  }, [bhajans, debouncedSearchQuery, filterDeity, filterCategory, libraryFilterKeyword]);
+    if (filterDeity && bhajan.deity !== filterDeity) return false;
+    if (filterCategory && bhajan.category !== filterCategory) return false;
+    if (libraryFilterKeyword && (!bhajan.keywords || !bhajan.keywords.includes(libraryFilterKeyword))) return false;
+    return true;
+  });
 
   // ==============================================
   // AUTHENTICATION - GOOGLE
@@ -5248,9 +5280,9 @@ const App = () => {
                       ) : (
                         <div className="space-y-2">
                           {bhajans
-                            .filter(b => !debouncedBhajanPickerSearch || 
-                              b.title.toLowerCase().includes(debouncedBhajanPickerSearch.toLowerCase()) ||
-                              (b.lyrics && b.lyrics.toLowerCase().includes(debouncedBhajanPickerSearch.toLowerCase())))
+                            .filter(b => !bhajanPickerSearch || 
+                              b.title.toLowerCase().includes(bhajanPickerSearch.toLowerCase()) ||
+                              (b.lyrics && b.lyrics.toLowerCase().includes(bhajanPickerSearch.toLowerCase())))
                             .map(bhajan => {
                               const isAdded = programForm.bhajanIds.includes(bhajan.id);
                               return (
@@ -5546,7 +5578,7 @@ const App = () => {
                   </div>
 
                 <div className={compactView ? 'space-y-2' : 'grid grid-cols-1 md:grid-cols-2 gap-4'}>
-                  {filteredPublicBhajans.map(bhajan => {
+                  {filteredPublicBhajans.slice(0, publicVisibleCount).map(bhajan => {
                     const isSaved = savedBhajanIds.has(bhajan.id);
 
                     // COMPACT VIEW - title + one lyrics line + save state on right.
@@ -5660,28 +5692,23 @@ const App = () => {
                   })}
                 </div>
 
-                {/* Load More button (Firestore cursor pagination) */}
-                {hasMorePublic && !publicLoading && !publicLoadingMore && (
-                  <div className="text-center py-6">
-                    <button
-                      onClick={() => loadPublicBhajans(true)}
-                      className="bg-white border-2 border-orange-300 hover:border-orange-500 text-amber-800 font-semibold px-6 py-2 rounded-xl text-sm transition-colors"
-                    >
-                      Load More Bhajans
-                    </button>
-                  </div>
-                )}
-                {publicLoadingMore && (
-                  <div className="text-center py-6">
+                {/* Load more sentinel - IntersectionObserver watches this div
+                    and bumps visibleCount when it scrolls into view. Also
+                    shows a subtle "loading more" indicator + a count summary. */}
+                {publicVisibleCount < filteredPublicBhajans.length && (
+                  <div ref={publicLoadMoreRef} className="text-center py-6">
                     <div className="inline-flex items-center gap-2 text-xs text-orange-600">
                       <div className="w-4 h-4 border-2 border-orange-400 border-t-transparent rounded-full animate-spin"></div>
                       Loading more bhajans...
                     </div>
+                    <p className="text-xs text-gray-400 mt-1">
+                      Showing {publicVisibleCount} of {filteredPublicBhajans.length}
+                    </p>
                   </div>
                 )}
-                {!hasMorePublic && filteredPublicBhajans.length > 0 && (
+                {publicVisibleCount >= filteredPublicBhajans.length && filteredPublicBhajans.length > PAGE_SIZE && (
                   <p className="text-center text-xs text-gray-400 py-6">
-                    ✨ You've seen all loaded bhajans
+                    ✨ You've seen all {filteredPublicBhajans.length} bhajans
                   </p>
                 )}
                 </>
