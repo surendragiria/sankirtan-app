@@ -406,40 +406,78 @@ const App = () => {
 
   // Set up IntersectionObserver for Public Library "load more" sentinel.
   // When user scrolls the sentinel into view, bump visible count by PAGE_SIZE.
-  // Non-fatal if IntersectionObserver isn't supported - all bhajans still
-  // render, they just come in one chunk instead of progressively.
+  // Uses a retry loop to handle the case where the sentinel DOM node
+  // doesn't exist yet when the effect first runs (React hasn't rendered it).
   useEffect(() => {
     if (currentView !== 'public-library') return;
-    if (!publicLoadMoreRef.current) return;
     if (typeof IntersectionObserver === 'undefined') {
-      // Old browser - just show everything
       setPublicVisibleCount(9999);
       return;
     }
-    const observer = new IntersectionObserver((entries) => {
-      if (entries[0].isIntersecting) {
-        setPublicVisibleCount(prev => prev + PAGE_SIZE);
+
+    let observer;
+    let retryTimer;
+    let cancelled = false;
+
+    const tryObserve = (attempt = 0) => {
+      if (cancelled) return;
+      const node = publicLoadMoreRef.current;
+      if (node) {
+        observer = new IntersectionObserver((entries) => {
+          if (entries[0].isIntersecting) {
+            setPublicVisibleCount(prev => prev + PAGE_SIZE);
+          }
+        }, { rootMargin: '400px' });
+        observer.observe(node);
+      } else if (attempt < 10) {
+        // Sentinel not in DOM yet - retry after next paint
+        retryTimer = setTimeout(() => tryObserve(attempt + 1), 100);
       }
-    }, { rootMargin: '400px' }); // Start loading before user hits bottom
-    observer.observe(publicLoadMoreRef.current);
-    return () => observer.disconnect();
-  }, [currentView, publicVisibleCount]);
+    };
+
+    tryObserve();
+
+    return () => {
+      cancelled = true;
+      if (observer) observer.disconnect();
+      if (retryTimer) clearTimeout(retryTimer);
+    };
+  }, [currentView, publicVisibleCount, filteredPublicBhajans.length]);
 
   useEffect(() => {
     if (currentView !== 'library') return;
-    if (!libraryLoadMoreRef.current) return;
     if (typeof IntersectionObserver === 'undefined') {
       setLibraryVisibleCount(9999);
       return;
     }
-    const observer = new IntersectionObserver((entries) => {
-      if (entries[0].isIntersecting) {
-        setLibraryVisibleCount(prev => prev + PAGE_SIZE);
+
+    let observer;
+    let retryTimer;
+    let cancelled = false;
+
+    const tryObserve = (attempt = 0) => {
+      if (cancelled) return;
+      const node = libraryLoadMoreRef.current;
+      if (node) {
+        observer = new IntersectionObserver((entries) => {
+          if (entries[0].isIntersecting) {
+            setLibraryVisibleCount(prev => prev + PAGE_SIZE);
+          }
+        }, { rootMargin: '400px' });
+        observer.observe(node);
+      } else if (attempt < 10) {
+        retryTimer = setTimeout(() => tryObserve(attempt + 1), 100);
       }
-    }, { rootMargin: '400px' });
-    observer.observe(libraryLoadMoreRef.current);
-    return () => observer.disconnect();
-  }, [currentView, libraryVisibleCount]);
+    };
+
+    tryObserve();
+
+    return () => {
+      cancelled = true;
+      if (observer) observer.disconnect();
+      if (retryTimer) clearTimeout(retryTimer);
+    };
+  }, [currentView, libraryVisibleCount, filteredBhajans.length]);
 
   // Dark mode
   const [darkMode, setDarkMode] = useState(() => {
