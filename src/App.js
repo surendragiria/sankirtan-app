@@ -3279,19 +3279,25 @@ const App = () => {
   // ==============================================
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-orange-400 via-orange-500 to-amber-500 flex items-center justify-center">
+      <div className="min-h-screen bg-[#FDF8E4] flex items-center justify-center px-6">
         <div className="text-center">
-          <div className="text-8xl mb-4">🕉️</div>
-          <h1 className="text-4xl font-bold text-white mb-2">Sankirtan</h1>
-          <p className="text-orange-100 text-lg">भजन से भगवान तक</p>
-          <div className="mt-6">
-            <div className="animate-spin rounded-full h-10 w-10 border-4 border-white border-t-transparent mx-auto"></div>
+          {/* Wordmark component - same as header/login for consistency */}
+          <SankirtanWordmark className="h-16 sm:h-20 w-auto mx-auto" />
+          <p
+            className="text-[#0B5A70]/85 text-base sm:text-lg mt-4"
+            style={{ fontFamily: "'Noto Sans Devanagari', system-ui, sans-serif" }}
+          >
+            भजन से भगवान तक
+          </p>
+          {/* Spinner - brand teal on cream */}
+          <div className="mt-8">
+            <div className="animate-spin rounded-full h-10 w-10 border-4 border-[#0B5A70]/20 border-t-[#E65100] mx-auto"></div>
           </div>
-          <p className="text-orange-100 text-sm mt-4">
+          <p className="text-[#0B5A70]/60 text-sm mt-4">
             Loading your devotional experience...
           </p>
           {isOffline && (
-            <p className="text-white text-xs mt-2 bg-red-600 rounded-lg px-3 py-1 inline-block">
+            <p className="text-white text-xs mt-3 bg-red-500 rounded-lg px-3 py-1 inline-block">
               ⚠️ Slow connection detected
             </p>
           )}
@@ -4196,8 +4202,10 @@ const App = () => {
                           )}
                         </div>
 
-                        <p className="text-sm text-gray-700 line-clamp-3 mb-2 whitespace-pre-line">
-                          {bhajan.lyrics}
+                        {/* Same defensive lyrics preview treatment as Public
+                            Library - trim + max-height prevents card stretching. */}
+                        <p className="text-sm text-gray-700 line-clamp-3 mb-2 whitespace-pre-line max-h-16 overflow-hidden">
+                          {(bhajan.lyrics || '').trim()}
                         </p>
 
                         {bhajan.keywords && bhajan.keywords.length > 0 && (
@@ -5580,8 +5588,12 @@ const App = () => {
                             </span>
                           </div>
 
-                          <p className="text-sm text-gray-700 line-clamp-3 mb-2 whitespace-pre-line">
-                            {bhajan.lyrics}
+                          {/* Lyrics preview - explicit max-height prevents rare
+                              rendering bug where line-clamp + whitespace-pre-line
+                              can leak height on iOS Safari when lyrics have many
+                              trailing newlines or whitespace-only lines. */}
+                          <p className="text-sm text-gray-700 line-clamp-3 mb-2 whitespace-pre-line max-h-16 overflow-hidden">
+                            {(bhajan.lyrics || '').trim()}
                           </p>
 
                           {bhajan.keywords && bhajan.keywords.length > 0 && (
