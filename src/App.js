@@ -3313,7 +3313,7 @@ const App = () => {
     return (
       <div className="min-h-screen bg-[#FFF8F0] py-8 px-4">
         <div className="max-w-md mx-auto">
-          <div className="bg-white rounded-2xl shadow-2xl overflow-hidden">
+          <div className="bg-[#FFFCF8] rounded-2xl shadow-2xl overflow-hidden">
             <div className="bg-[#0B5A70] p-6 text-white text-center">
               <div className="text-5xl mb-2">🙏</div>
               <h2 className="text-2xl font-bold">Welcome to Sankirtan!</h2>
@@ -3429,7 +3429,7 @@ const App = () => {
             ============================================== */}
         {showOnboarding && currentStep && (
           <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 ">
-            <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden">
+            <div className="bg-[#FFFCF8] rounded-3xl shadow-2xl max-w-md w-full overflow-hidden">
               {/* Header with gradient */}
               <div className="bg-[#0B5A70] p-6 text-white text-center relative">
                 {/* Skip button */}
@@ -3512,11 +3512,11 @@ const App = () => {
             ============================================== */}
         {showUpdatePrompt && (
           <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4">
-            <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden">
-              <div className="bg-gradient-to-br from-green-500 to-emerald-500 p-6 text-white text-center">
+            <div className="bg-[#FFFCF8] rounded-3xl shadow-2xl max-w-md w-full overflow-hidden">
+              <div className="bg-[#0B5A70] p-6 text-white text-center">
                 <div className="text-5xl mb-2">🎉</div>
                 <h3 className="text-2xl font-bold">App Updated!</h3>
-                <p className="text-sm text-green-100 mt-1">Sankirtan just got better</p>
+                <p className="text-sm text-white/80 mt-1">Sankirtan just got better</p>
               </div>
               <div className="p-6">
                 <p className="text-sm text-gray-700 mb-4">
@@ -3524,17 +3524,17 @@ const App = () => {
                 </p>
                 <ul className="text-sm text-gray-700 space-y-2 mb-6">
                   <li className="flex items-start gap-2">
-                    <span className="text-green-500 font-bold">✓</span>
+                    <span className="text-[#0B5A70] font-bold">✓</span>
                     <span>Google Hindi typing now works in Public Library add/edit forms</span>
                   </li>
                   <li className="flex items-start gap-2">
-                    <span className="text-green-500 font-bold">✓</span>
+                    <span className="text-[#0B5A70] font-bold">✓</span>
                     <span>You will now see this prompt every time the app is updated on GitHub</span>
                   </li>
                 </ul>
                 <button
                   onClick={dismissUpdatePrompt}
-                  className="w-full bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white font-bold py-3 rounded-xl shadow-lg"
+                  className="w-full bg-[#0B5A70] hover:bg-[#094a5d] text-white font-bold py-3 rounded-xl shadow-lg"
                 >
                   Awesome, let us go! 🚀
                 </button>
@@ -3548,7 +3548,7 @@ const App = () => {
             ============================================== */}
         {showFeedbackModal && (
           <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4">
-            <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden">
+            <div className="bg-[#FFFCF8] rounded-3xl shadow-2xl max-w-md w-full overflow-hidden">
               {/* Header */}
               <div className="bg-[#0B5A70] p-6 text-white text-center relative">
                 <button
@@ -3634,7 +3634,7 @@ const App = () => {
             ============================================== */}
         {showReadingSettings && (
           <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4">
-            <div className={`rounded-3xl shadow-2xl max-w-sm w-full overflow-hidden ${darkMode ? 'bg-gray-800 text-gray-100' : 'bg-white'}`}>
+            <div className={`rounded-3xl shadow-2xl max-w-sm w-full overflow-hidden ${darkMode ? 'bg-gray-800 text-gray-100' : 'bg-[#FFFCF8]'}`}>
               <div className={`p-6 text-center ${darkMode ? 'bg-gray-700' : 'bg-[#0B5A70]'} text-white`}>
                 <div className="text-5xl mb-2">📖</div>
                 <h3 className="text-2xl font-bold">Reading View</h3>
@@ -3673,7 +3673,7 @@ const App = () => {
                         ? { ...prev, readingMode: true, fontSize: Math.max(prev.fontSize, 24), textAlign: 'center', lineHeight: 2.0 }
                         : { ...prev, readingMode: false };
                     })}
-                    className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ml-3 ${readingSettings.readingMode ? 'bg-[#0B5A70]/50' : 'bg-gray-300'}`}
+                    className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ml-3 ${readingSettings.readingMode ? 'bg-[#0B5A70]' : 'bg-gray-300'}`}
                     aria-label="Toggle reading mode"
                   >
                     <span
@@ -3695,7 +3695,7 @@ const App = () => {
                   <button
                     onClick={() => setReadingSettings(prev => ({ ...prev, keepScreenOn: !prev.keepScreenOn }))}
                     disabled={!('wakeLock' in navigator)}
-                    className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ml-3 ${readingSettings.keepScreenOn ? 'bg-[#0B5A70]/50' : 'bg-gray-300'} disabled:opacity-40 disabled:cursor-not-allowed`}
+                    className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ml-3 ${readingSettings.keepScreenOn ? 'bg-[#0B5A70]' : 'bg-gray-300'} disabled:opacity-40 disabled:cursor-not-allowed`}
                     aria-label="Toggle keep screen on"
                   >
                     <span
@@ -3720,7 +3720,7 @@ const App = () => {
             ============================================== */}
         {showInstallPrompt && deferredInstallPrompt && (
           <div className="fixed bottom-4 left-4 right-4 md:left-auto md:max-w-md z-50">
-            <div className="bg-white rounded-2xl shadow-2xl border-2 border-[#0B5A70]/20 p-5">
+            <div className="bg-[#FFFCF8] rounded-2xl shadow-2xl border border-[#0B5A70]/15 p-5">
               <div className="flex items-start gap-3">
                 <div className="text-4xl">🕉️</div>
                 <div className="flex-1">
@@ -3753,7 +3753,7 @@ const App = () => {
             ============================================== */}
         {showIOSInstructions && (
           <div className="fixed bottom-4 left-4 right-4 md:left-auto md:max-w-md z-50">
-            <div className="bg-white rounded-2xl shadow-2xl border-2 border-[#0B5A70]/20 p-5">
+            <div className="bg-[#FFFCF8] rounded-2xl shadow-2xl border border-[#0B5A70]/15 p-5">
               <div className="flex items-start gap-3">
                 <div className="text-4xl">🕉️</div>
                 <div className="flex-1">
@@ -3763,7 +3763,7 @@ const App = () => {
                   </p>
                   <div className="bg-[#0B5A70]/5 rounded-lg p-3 mb-3 text-xs text-[#0B5A70]">
                     <ol className="list-decimal list-inside space-y-1">
-                      <li>Tap the <span className="inline-block bg-white border border-gray-300 rounded px-1.5 py-0.5 text-blue-600">Share ⬆️</span> button below</li>
+                      <li>Tap the <span className="inline-block bg-white border border-gray-300 rounded px-1.5 py-0.5 text-[#0B5A70]">Share ⬆️</span> button below</li>
                       <li>Scroll down and tap <strong>"Add to Home Screen"</strong></li>
                       <li>Tap <strong>"Add"</strong> in the top right</li>
                       <li>Find Sankirtan on your home screen! 🎉</li>
@@ -3795,7 +3795,7 @@ const App = () => {
         
         {/* iOS Chrome Warning Banner */}
         {showBrowserWarning && (
-          <div className="bg-blue-500 text-white px-4 py-3 text-center text-sm sticky top-0 z-50 shadow-md">
+          <div className="bg-[#0B5A70] text-white px-4 py-3 text-center text-sm sticky top-0 z-50 shadow-md">
             <span className="inline-flex items-center gap-2 flex-wrap justify-center">
               💡 For best experience on iPhone, please use <strong>Safari</strong>
               <button
@@ -3844,7 +3844,7 @@ const App = () => {
               )}
               <div className="hidden sm:block">
                 <p className="text-sm font-semibold text-[#0B5A70]">{userProfile.displayName}</p>
-                {userProfile.verified && <span className="text-xs text-blue-600">✓ Verified</span>}
+                {userProfile.verified && <span className="text-xs text-[#0B5A70]">✓ Verified</span>}
                 {isAdmin && <span className="text-xs text-purple-600 ml-1">👑 Admin</span>}
               </div>
               <button
@@ -4271,7 +4271,7 @@ const App = () => {
                   </button>
                   <button
                     onClick={() => openEditBhajan(selectedBhajan)}
-                    className="bg-blue-100 hover:bg-blue-200 text-blue-700 font-semibold px-2.5 py-1 rounded-full text-xs flex items-center gap-1"
+                    className="bg-[#0B5A70]/8 hover:bg-[#0B5A70]/15 text-[#0B5A70] font-semibold px-2.5 py-1 rounded-full text-xs flex items-center gap-1"
                   >
                     ✏️ Edit
                   </button>
@@ -4363,7 +4363,7 @@ const App = () => {
                     <p className="text-xs text-gray-500 mb-2">Keywords:</p>
                     <div className="flex flex-wrap gap-2">
                       {selectedBhajan.keywords.map(kw => (
-                        <span key={kw} className="bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-sm">
+                        <span key={kw} className="bg-[#0B5A70]/5 text-[#0B5A70]/70 px-3 py-1 rounded-full text-sm">
                           #{kw}
                         </span>
                       ))}
@@ -4377,7 +4377,7 @@ const App = () => {
                       href={selectedBhajan.source}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-800 text-sm font-semibold"
+                      className="inline-flex items-center gap-2 text-[#0B5A70] hover:text-[#0B5A70]/80 text-sm font-semibold"
                     >
                       🔗 View Source
                     </a>
@@ -4407,7 +4407,7 @@ const App = () => {
                 </button>
               </div>
 
-              <div className="bg-white rounded-2xl shadow-lg p-6 md:p-8">
+              <div className="bg-[#FFFCF8] rounded-2xl shadow-[0_2px_12px_rgba(11,90,112,0.06)] p-6 md:p-8 border border-[#0B5A70]/8">
                 <h2 className="text-2xl font-bold text-[#0B5A70] mb-6">
                   {currentView === 'edit-bhajan' ? '✏️ Edit Bhajan' : '➕ Add New Bhajan'}
                 </h2>
@@ -4614,8 +4614,8 @@ const App = () => {
                   </div>
                   
                   {/* Add lyrics from Image / PDF / Camera (on-device OCR - no files uploaded) */}
-                  <div className="mb-3 p-3 bg-blue-50 border-2 border-blue-200 rounded-xl">
-                    <p className="text-xs font-semibold text-blue-900 mb-2">
+                  <div className="mb-3 p-3 bg-[#0B5A70]/5 border-2 border-[#0B5A70]/15 rounded-xl">
+                    <p className="text-xs font-semibold text-[#0B5A70] mb-2">
                       📥 Auto-fill lyrics from a photo, PDF, or camera — text is read on your device, nothing is uploaded or stored as a file
                     </p>
 
@@ -4631,7 +4631,7 @@ const App = () => {
                         type="button"
                         disabled={ocrProcessing}
                         onClick={() => cameraInputRef.current && cameraInputRef.current.click()}
-                        className="bg-blue-500 hover:bg-blue-600 text-white font-semibold px-3 py-2 rounded-lg text-sm disabled:opacity-50 flex items-center gap-1"
+                        className="bg-[#0B5A70] hover:bg-[#094a5d] text-white font-semibold px-3 py-2 rounded-lg text-sm disabled:opacity-50 flex items-center gap-1"
                       >
                         📷 Camera
                       </button>
@@ -4639,7 +4639,7 @@ const App = () => {
                         type="button"
                         disabled={ocrProcessing}
                         onClick={() => imageInputRef.current && imageInputRef.current.click()}
-                        className="bg-blue-500 hover:bg-blue-600 text-white font-semibold px-3 py-2 rounded-lg text-sm disabled:opacity-50 flex items-center gap-1"
+                        className="bg-[#0B5A70] hover:bg-[#094a5d] text-white font-semibold px-3 py-2 rounded-lg text-sm disabled:opacity-50 flex items-center gap-1"
                       >
                         🖼️ Upload Image
                       </button>
@@ -4647,7 +4647,7 @@ const App = () => {
                         type="button"
                         disabled={ocrProcessing}
                         onClick={() => pdfInputRef.current && pdfInputRef.current.click()}
-                        className="bg-blue-500 hover:bg-blue-600 text-white font-semibold px-3 py-2 rounded-lg text-sm disabled:opacity-50 flex items-center gap-1"
+                        className="bg-[#0B5A70] hover:bg-[#094a5d] text-white font-semibold px-3 py-2 rounded-lg text-sm disabled:opacity-50 flex items-center gap-1"
                       >
                         📄 Upload PDF
                       </button>
@@ -4690,25 +4690,25 @@ const App = () => {
                     />
 
                     {ocrProcessing && (
-                      <div className="mt-3 p-3 bg-white border-2 border-blue-300 rounded-lg">
-                        <div className="w-full bg-blue-100 rounded-full h-3 mb-2">
+                      <div className="mt-3 p-3 bg-white border-2 border-[#0B5A70]/20 rounded-lg">
+                        <div className="w-full bg-[#0B5A70]/10 rounded-full h-3 mb-2">
                           <div
-                            className="bg-gradient-to-r from-blue-500 to-blue-600 h-3 rounded-full transition-all"
+                            className="bg-[#0B5A70] h-3 rounded-full transition-all"
                             style={{ width: ocrProgress + '%' }}
                           ></div>
                         </div>
-                        <p className="text-xs font-semibold text-blue-900">{ocrMessage || 'Processing...'}</p>
+                        <p className="text-xs font-semibold text-[#0B5A70]">{ocrMessage || 'Processing...'}</p>
                         {!localStorage.getItem('sankirtan-tesseract-langs-cached') && (
-                          <p className="text-[10px] text-blue-700 mt-1">
+                          <p className="text-[10px] text-[#0B5A70]/80 mt-1">
                             💡 First-time setup takes 30-60 seconds. Future uses will be instant.
                           </p>
                         )}
                       </div>
                     )}
                     {!ocrProcessing && ocrMessage && (
-                      <p className="text-xs font-semibold text-blue-900 mt-2">{ocrMessage}</p>
+                      <p className="text-xs font-semibold text-[#0B5A70] mt-2">{ocrMessage}</p>
                     )}
-                    <p className="text-xs text-blue-700 mt-2">
+                    <p className="text-xs text-[#0B5A70]/80 mt-2">
                       💡 Works best with clear, printed Hindi/English text. Handwriting may need manual correction. Scanned PDFs supported (up to 10 pages).
                     </p>
                   </div>
@@ -4908,7 +4908,7 @@ const App = () => {
                   <p className="text-[#0B5A70]/70">Loading programs...</p>
                 </div>
               ) : filteredPrograms.length === 0 ? (
-                <div className="text-center py-12 bg-white rounded-2xl border-2 border-dashed border-[#0B5A70]/12">
+                <div className="text-center py-12 bg-[#FFFCF8] rounded-2xl border-2 border-dashed border-[#0B5A70]/12">
                   {programs.length === 0 ? (
                     <>
                       <div className="text-6xl mb-4">🎵</div>
@@ -4974,7 +4974,7 @@ const App = () => {
                 <div className="flex gap-2">
                   <button
                     onClick={() => openEditProgram(selectedProgram)}
-                    className="text-blue-600 hover:text-blue-800 px-3 py-1.5 rounded-lg hover:bg-blue-50 text-sm font-semibold"
+                    className="text-[#0B5A70] hover:text-[#0B5A70]/80 px-3 py-1.5 rounded-lg hover:bg-[#0B5A70]/5 text-sm font-semibold"
                   >
                     ✏️ Edit
                   </button>
@@ -4987,7 +4987,7 @@ const App = () => {
                 </div>
               </div>
 
-              <div className="bg-white rounded-2xl shadow-lg p-6 md:p-8 mb-4">
+              <div className="bg-[#FFFCF8] rounded-2xl shadow-[0_2px_12px_rgba(11,90,112,0.06)] p-6 md:p-8 border border-[#0B5A70]/8 mb-4">
                 <div className="text-4xl mb-2">🎵</div>
                 <h1 className="text-3xl md:text-4xl font-bold text-[#0B5A70] mb-3">
                   {selectedProgram.name}
@@ -5019,7 +5019,7 @@ const App = () => {
               <div className="mb-4">
                 <h3 className="text-lg font-bold text-[#0B5A70] mb-3">Bhajans in this Program:</h3>
                 {(!selectedProgram.bhajanIds || selectedProgram.bhajanIds.length === 0) ? (
-                  <div className="bg-white rounded-2xl p-6 text-center border-2 border-dashed border-[#0B5A70]/12">
+                  <div className="bg-[#FFFCF8] rounded-2xl p-6 text-center border-2 border-dashed border-[#0B5A70]/12">
                     <p className="text-[#0B5A70] mb-2">No bhajans in this program yet</p>
                     <button
                       onClick={() => openEditProgram(selectedProgram)}
@@ -5041,7 +5041,7 @@ const App = () => {
                         <button
                           key={bhajanId}
                           onClick={() => openBhajanDetail(bhajan)}
-                          className="w-full bg-white rounded-xl p-4 border-2 border-[#0B5A70]/10 hover:border-[#0B5A70]/25 transition-all text-left flex items-center gap-3"
+                          className="w-full bg-[#FFFCF8] rounded-xl p-4 border border-[#0B5A70]/8 hover:border-[#0B5A70]/25 transition-all text-left flex items-center gap-3 shadow-[0_1px_4px_rgba(11,90,112,0.04)]"
                         >
                           <div className="text-2xl font-bold text-[#E65100] min-w-[40px] text-center">
                             {index + 1}
@@ -5086,7 +5086,7 @@ const App = () => {
                 </button>
               </div>
 
-              <div className="bg-white rounded-2xl shadow-lg p-6 md:p-8">
+              <div className="bg-[#FFFCF8] rounded-2xl shadow-[0_2px_12px_rgba(11,90,112,0.06)] p-6 md:p-8 border border-[#0B5A70]/8">
                 <h2 className="text-2xl font-bold text-[#0B5A70] mb-6">
                   {currentView === 'edit-program' ? '✏️ Edit Program' : '➕ Create New Program'}
                 </h2>
@@ -5251,7 +5251,7 @@ const App = () => {
               {/* Bhajan Picker Modal */}
               {showBhajanPicker && (
                 <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-                  <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[80vh] flex flex-col">
+                  <div className="bg-[#FFFCF8] rounded-2xl shadow-2xl max-w-lg w-full max-h-[80vh] flex flex-col">
                     <div className="p-4 border-b border-[#0B5A70]/10 flex items-center justify-between">
                       <h3 className="text-lg font-bold text-[#0B5A70]">Add Bhajan to Program</h3>
                       <button
@@ -5343,7 +5343,7 @@ const App = () => {
                   {isAdmin && (
                     <button
                       onClick={openAddPublicBhajan}
-                      className="bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white font-semibold px-4 py-2 rounded-xl text-sm flex items-center gap-1 shadow-md"
+                      className="bg-[#0B5A70] hover:bg-[#094a5d] text-white font-semibold px-4 py-2 rounded-xl text-sm flex items-center gap-1 shadow-md"
                     >
                       + Add Bhajan
                     </button>
@@ -5724,7 +5724,7 @@ const App = () => {
                     setFeedbackError('');
                     setFeedbackSuccess(false);
                   }}
-                  className={`text-xs underline hover:no-underline transition-colors ${darkMode ? 'text-blue-400 hover:text-blue-300' : 'text-blue-600 hover:text-blue-800'}`}
+                  className={`text-xs underline hover:no-underline transition-colors ${darkMode ? 'text-blue-400 hover:text-blue-300' : 'text-[#0B5A70] hover:text-[#0B5A70]/80'}`}
                 >
                   💬 Share feedback or suggestions
                 </button>
@@ -5778,7 +5778,7 @@ const App = () => {
                     <>
                       <button
                         onClick={() => openEditPublicBhajan(selectedPublicBhajan)}
-                        className="bg-blue-100 hover:bg-blue-200 text-blue-700 font-semibold px-2.5 py-1 rounded-full text-xs flex items-center gap-1"
+                        className="bg-[#0B5A70]/8 hover:bg-[#0B5A70]/15 text-[#0B5A70] font-semibold px-2.5 py-1 rounded-full text-xs flex items-center gap-1"
                       >
                         ✏️ Edit
                       </button>
@@ -5848,7 +5848,7 @@ const App = () => {
                     <p className="text-xs text-gray-500 mb-2">Keywords:</p>
                     <div className="flex flex-wrap gap-2">
                       {selectedPublicBhajan.keywords.map(kw => (
-                        <span key={kw} className="bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-sm">
+                        <span key={kw} className="bg-[#0B5A70]/5 text-[#0B5A70]/70 px-3 py-1 rounded-full text-sm">
                           #{kw}
                         </span>
                       ))}
@@ -5862,7 +5862,7 @@ const App = () => {
                       href={selectedPublicBhajan.source}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-800 text-sm font-semibold"
+                      className="inline-flex items-center gap-2 text-[#0B5A70] hover:text-[#0B5A70]/80 text-sm font-semibold"
                     >
                       🔗 View Source
                     </a>
@@ -5895,7 +5895,7 @@ const App = () => {
               </div>
 
               {/* Stats Card */}
-              <div className="bg-gradient-to-br from-purple-500 to-indigo-500 rounded-2xl p-6 text-white mb-6">
+              <div className="bg-[#0B5A70] rounded-2xl p-6 text-white mb-6">
                 <h3 className="text-lg font-bold mb-3">📊 Public Library Stats</h3>
                 <div className="grid grid-cols-3 gap-4">
                   <div className="bg-white/20 rounded-xl p-3 text-center">
@@ -5918,21 +5918,21 @@ const App = () => {
               </div>
 
               {/* Manual Add Bhajan Card */}
-              <div className="bg-white rounded-2xl shadow-lg p-6 mb-6 border-2 border-green-200">
+              <div className="bg-[#FFFCF8] rounded-2xl shadow-[0_2px_12px_rgba(11,90,112,0.06)] p-6 mb-6 border border-green-200/60">
                 <h3 className="text-lg font-bold text-[#0B5A70] mb-3">➕ Add Bhajan Manually</h3>
                 <p className="text-sm text-gray-600 mb-4">
                   Add a single bhajan to the Public Library using a form.
                 </p>
                 <button
                   onClick={openAddPublicBhajan}
-                  className="w-full bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white font-bold py-3 rounded-xl shadow-lg"
+                  className="w-full bg-[#0B5A70] hover:bg-[#094a5d] text-white font-bold py-3 rounded-xl shadow-lg"
                 >
                   + Add New Public Bhajan
                 </button>
               </div>
               
               {/* MANAGE LISTS (Deities, Categories, Keywords) */}
-              <div className="bg-white rounded-2xl shadow-lg p-6 mb-6 border-2 border-indigo-200">
+              <div className="bg-[#FFFCF8] rounded-2xl shadow-[0_2px_12px_rgba(11,90,112,0.06)] p-6 mb-6 border border-indigo-200/60">
                 <h3 className="text-lg font-bold text-[#0B5A70] mb-2">📋 Manage Lists</h3>
                 <p className="text-sm text-gray-600 mb-4">
                   Add, rename, or delete deities, categories, and keywords. Changes apply to all users.
@@ -5981,7 +5981,7 @@ const App = () => {
                           {name}
                           <button
                             onClick={() => { setEditingItem({ type: 'deity', value: name }); setEditingValue(name); }}
-                            className="ml-1 text-blue-600 hover:text-blue-800 text-[10px]"
+                            className="ml-1 text-[#0B5A70] hover:text-[#0B5A70]/80 text-[10px]"
                             title="Rename"
                           >✏️</button>
                           <button
@@ -6047,7 +6047,7 @@ const App = () => {
                           {name}
                           <button
                             onClick={() => { setEditingItem({ type: 'category', value: name }); setEditingValue(name); }}
-                            className="ml-1 text-blue-600 hover:text-blue-800 text-[10px]"
+                            className="ml-1 text-[#0B5A70] hover:text-[#0B5A70]/80 text-[10px]"
                             title="Rename"
                           >✏️</button>
                           <button
@@ -6113,7 +6113,7 @@ const App = () => {
                           #{name}
                           <button
                             onClick={() => { setEditingItem({ type: 'keyword', value: name }); setEditingValue(name); }}
-                            className="ml-1 text-blue-600 hover:text-blue-800 text-[10px]"
+                            className="ml-1 text-[#0B5A70] hover:text-[#0B5A70]/80 text-[10px]"
                             title="Rename"
                           >✏️</button>
                           <button
@@ -6144,20 +6144,20 @@ const App = () => {
                   </div>
                 </div>
                 
-                <div className="mt-4 p-3 bg-blue-50 rounded-lg text-xs text-blue-800">
+                <div className="mt-4 p-3 bg-[#0B5A70]/5 rounded-lg text-xs text-[#0B5A70]">
                   💡 Click <strong>✏️</strong> to rename, <strong>×</strong> to delete.<br/>
                   Items in use by bhajans <strong>cannot be renamed or deleted</strong> - update those bhajans first.
                 </div>
               </div>
               
               {/* USER FEEDBACK CARD */}
-              <div className="bg-white rounded-2xl shadow-lg p-6 mb-6 border-2 border-blue-200">
+              <div className="bg-[#FFFCF8] rounded-2xl shadow-[0_2px_12px_rgba(11,90,112,0.06)] p-6 mb-6 border border-[#0B5A70]/12/60">
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-lg font-bold text-[#0B5A70]">💬 User Feedback</h3>
                   <button
                     onClick={loadFeedbackList}
                     disabled={feedbackListLoading}
-                    className="bg-blue-100 hover:bg-blue-200 text-blue-700 font-semibold px-3 py-1.5 rounded-lg text-sm disabled:opacity-50"
+                    className="bg-[#0B5A70]/8 hover:bg-[#0B5A70]/15 text-[#0B5A70] font-semibold px-3 py-1.5 rounded-lg text-sm disabled:opacity-50"
                   >
                     {feedbackListLoading ? '⏳ Loading...' : '🔄 Refresh'}
                   </button>
@@ -6175,12 +6175,12 @@ const App = () => {
                 
                 {feedbackList.length > 0 && (
                   <>
-                    <div className="text-sm text-blue-700 font-semibold mb-3">
+                    <div className="text-sm text-[#0B5A70] font-semibold mb-3">
                       📊 Total: {feedbackList.length} feedback item{feedbackList.length !== 1 ? 's' : ''}
                     </div>
                     <div className="space-y-3 max-h-96 overflow-y-auto">
                       {feedbackList.map((fb) => (
-                        <div key={fb.id} className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                        <div key={fb.id} className="bg-[#0B5A70]/5 border border-[#0B5A70]/12 rounded-lg p-4">
                           <div className="flex items-start justify-between mb-2">
                             <div className="flex-1">
                               <p className="font-semibold text-[#0B5A70] text-sm">
@@ -6210,13 +6210,13 @@ const App = () => {
                               🗑️
                             </button>
                           </div>
-                          <p className="text-gray-800 whitespace-pre-wrap text-sm mt-2 bg-white rounded-lg p-3 border border-blue-100">
+                          <p className="text-gray-800 whitespace-pre-wrap text-sm mt-2 bg-white rounded-lg p-3 border border-[#0B5A70]/10">
                             {fb.text}
                           </p>
                           {fb.userEmail && (
                             <a 
                               href={`mailto:${fb.userEmail}?subject=Re: Your Sankirtan Feedback&body=Hi ${fb.userName},%0D%0A%0D%0AThank you for your feedback!%0D%0A%0D%0A`}
-                              className="inline-block mt-2 text-xs text-blue-600 hover:text-blue-800 font-semibold"
+                              className="inline-block mt-2 text-xs text-[#0B5A70] hover:text-[#0B5A70]/80 font-semibold"
                             >
                               ✉️ Reply via email
                             </a>
@@ -6229,7 +6229,7 @@ const App = () => {
               </div>
 
               {/* JSON Import Section */}
-              <div className="bg-white rounded-2xl shadow-lg p-6 mb-6 border-2 border-purple-200">
+              <div className="bg-[#FFFCF8] rounded-2xl shadow-[0_2px_12px_rgba(11,90,112,0.06)] p-6 mb-6 border border-purple-200/60">
                 <h3 className="text-lg font-bold text-[#0B5A70] mb-3">📥 Import Bhajans from JSON</h3>
                 <p className="text-sm text-gray-600 mb-4">
                   Paste JSON exported from your personal Babosa Sankirtan app. Bhajans will be added to the Public Library.
@@ -6240,7 +6240,7 @@ const App = () => {
                     <textarea
                       value={importJsonText}
                       onChange={(e) => setImportJsonText(e.target.value)}
-                      className="w-full h-40 px-4 py-3 border-2 border-purple-200 rounded-xl focus:ring-4 focus:ring-purple-200 focus:border-purple-400 outline-none font-mono text-sm"
+                      className="w-full h-40 px-4 py-3 border-2 border-purple-200/60 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none font-mono text-sm"
                       placeholder='Paste JSON here... e.g., [{"title": "...", "lyrics": "..."}, ...]'
                     />
                     
@@ -6266,8 +6266,8 @@ const App = () => {
                   </>
                 ) : (
                   <>
-                    <div className="bg-purple-50 border-2 border-purple-200 rounded-xl p-4 mb-4">
-                      <h4 className="font-bold text-purple-900 mb-2">Ready to import:</h4>
+                    <div className="bg-purple-50/50 border border-purple-200/60 rounded-xl p-4 mb-4">
+                      <h4 className="font-bold text-[#0B5A70] mb-2">Ready to import:</h4>
                       <div className="grid grid-cols-3 gap-3 text-center text-sm">
                         <div>
                           <div className="text-2xl font-bold text-purple-700">{importPreview.total}</div>
@@ -6303,17 +6303,17 @@ const App = () => {
                     </div>
 
                     {importing && importProgress.total > 0 && (
-                      <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                        <p className="text-sm text-blue-800 font-semibold">
+                      <div className="mb-4 p-3 bg-[#0B5A70]/5 border border-[#0B5A70]/12 rounded-lg">
+                        <p className="text-sm text-[#0B5A70] font-semibold">
                           {importProgress.message}
                         </p>
-                        <div className="mt-2 bg-blue-200 rounded-full h-3 overflow-hidden">
+                        <div className="mt-2 bg-[#0B5A70]/15 rounded-full h-3 overflow-hidden">
                           <div
-                            className="bg-blue-500 h-full transition-all"
+                            className="bg-[#0B5A70] h-full transition-all"
                             style={{ width: `${(importProgress.current / importProgress.total) * 100}%` }}
                           ></div>
                         </div>
-                        <p className="text-xs text-blue-600 mt-1">
+                        <p className="text-xs text-[#0B5A70] mt-1">
                           {importProgress.current} of {importProgress.total}
                         </p>
                       </div>
@@ -6323,7 +6323,7 @@ const App = () => {
                       <button
                         onClick={executeImport}
                         disabled={importing}
-                        className="flex-1 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white font-bold py-3 rounded-xl shadow-lg disabled:opacity-50"
+                        className="flex-1 bg-[#0B5A70] hover:bg-[#094a5d] text-white font-bold py-3 rounded-xl shadow-lg disabled:opacity-50"
                       >
                         {importing ? 'Importing...' : `✅ Import ${importPreview.valid} Bhajans`}
                       </button>
@@ -6343,10 +6343,10 @@ const App = () => {
               </div>
 
               {/* Quick Info */}
-              <div className="bg-blue-50 border-2 border-blue-200 rounded-xl p-4">
-                <h4 className="font-bold text-blue-900 mb-2">💡 JSON Format Support:</h4>
-                <p className="text-xs text-blue-700 mb-2">The importer accepts:</p>
-                <ul className="text-xs text-blue-700 space-y-1 ml-4">
+              <div className="bg-[#0B5A70]/5 border-2 border-[#0B5A70]/15 rounded-xl p-4">
+                <h4 className="font-bold text-[#0B5A70] mb-2">💡 JSON Format Support:</h4>
+                <p className="text-xs text-[#0B5A70]/80 mb-2">The importer accepts:</p>
+                <ul className="text-xs text-[#0B5A70]/80 space-y-1 ml-4">
                   <li>• Array of bhajans: <code className="bg-white px-1 rounded">[{`{"title": "...", "lyrics": "..."}`}]</code></li>
                   <li>• Object with bhajans property</li>
                   <li>• Fields: title, lyrics, deity, category, dhun, scale, keywords, source</li>
@@ -6362,7 +6362,7 @@ const App = () => {
             ============================================== */}
         {showPublicBhajanForm && isAdmin && (
           <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 overflow-y-auto">
-            <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full my-8 max-h-[90vh] overflow-y-auto">
+            <div className="bg-[#FFFCF8] rounded-2xl shadow-2xl max-w-2xl w-full my-8 max-h-[90vh] overflow-y-auto">
               <div className="p-4 border-b border-[#0B5A70]/10 flex items-center justify-between sticky top-0 bg-white rounded-t-2xl z-10">
                 <h3 className="text-lg font-bold text-[#0B5A70]">
                   {editingPublicBhajan ? '✏️ Edit Public Bhajan' : '➕ Add Public Bhajan'}
@@ -6554,8 +6554,8 @@ const App = () => {
                 </div>
 
                 {/* NEW: Add lyrics from Image / PDF / Camera (on-device OCR) */}
-                <div className="mb-3 p-3 bg-blue-50 border-2 border-blue-200 rounded-xl">
-                  <p className="text-xs font-semibold text-blue-900 mb-2">
+                <div className="mb-3 p-3 bg-[#0B5A70]/5 border-2 border-[#0B5A70]/15 rounded-xl">
+                  <p className="text-xs font-semibold text-[#0B5A70] mb-2">
                     📥 Auto-fill lyrics from a photo, PDF, or camera — text is read on your device, nothing is uploaded or stored as a file
                   </p>
 
@@ -6571,7 +6571,7 @@ const App = () => {
                       type="button"
                       disabled={ocrProcessing}
                       onClick={() => publicCameraInputRef.current && publicCameraInputRef.current.click()}
-                      className="bg-blue-500 hover:bg-blue-600 text-white font-semibold px-3 py-2 rounded-lg text-sm disabled:opacity-50 flex items-center gap-1"
+                      className="bg-[#0B5A70] hover:bg-[#094a5d] text-white font-semibold px-3 py-2 rounded-lg text-sm disabled:opacity-50 flex items-center gap-1"
                     >
                       📷 Camera
                     </button>
@@ -6579,7 +6579,7 @@ const App = () => {
                       type="button"
                       disabled={ocrProcessing}
                       onClick={() => publicImageInputRef.current && publicImageInputRef.current.click()}
-                      className="bg-blue-500 hover:bg-blue-600 text-white font-semibold px-3 py-2 rounded-lg text-sm disabled:opacity-50 flex items-center gap-1"
+                      className="bg-[#0B5A70] hover:bg-[#094a5d] text-white font-semibold px-3 py-2 rounded-lg text-sm disabled:opacity-50 flex items-center gap-1"
                     >
                       🖼️ Upload Image
                     </button>
@@ -6587,7 +6587,7 @@ const App = () => {
                       type="button"
                       disabled={ocrProcessing}
                       onClick={() => publicPdfInputRef.current && publicPdfInputRef.current.click()}
-                      className="bg-blue-500 hover:bg-blue-600 text-white font-semibold px-3 py-2 rounded-lg text-sm disabled:opacity-50 flex items-center gap-1"
+                      className="bg-[#0B5A70] hover:bg-[#094a5d] text-white font-semibold px-3 py-2 rounded-lg text-sm disabled:opacity-50 flex items-center gap-1"
                     >
                       📄 Upload PDF
                     </button>
@@ -6630,25 +6630,25 @@ const App = () => {
                   />
 
                   {ocrProcessing && (
-                    <div className="mt-3 p-3 bg-white border-2 border-blue-300 rounded-lg">
-                      <div className="w-full bg-blue-100 rounded-full h-3 mb-2">
+                    <div className="mt-3 p-3 bg-white border-2 border-[#0B5A70]/20 rounded-lg">
+                      <div className="w-full bg-[#0B5A70]/10 rounded-full h-3 mb-2">
                         <div
-                          className="bg-gradient-to-r from-blue-500 to-blue-600 h-3 rounded-full transition-all"
+                          className="bg-[#0B5A70] h-3 rounded-full transition-all"
                           style={{ width: ocrProgress + '%' }}
                         ></div>
                       </div>
-                      <p className="text-xs font-semibold text-blue-900">{ocrMessage || 'Processing...'}</p>
+                      <p className="text-xs font-semibold text-[#0B5A70]">{ocrMessage || 'Processing...'}</p>
                       {!localStorage.getItem('sankirtan-tesseract-langs-cached') && (
-                        <p className="text-[10px] text-blue-700 mt-1">
+                        <p className="text-[10px] text-[#0B5A70]/80 mt-1">
                           💡 First-time setup takes 30-60 seconds. Future uses will be instant.
                         </p>
                       )}
                     </div>
                   )}
                   {!ocrProcessing && ocrMessage && (
-                    <p className="text-xs font-semibold text-blue-900 mt-2">{ocrMessage}</p>
+                    <p className="text-xs font-semibold text-[#0B5A70] mt-2">{ocrMessage}</p>
                   )}
-                  <p className="text-xs text-blue-700 mt-2">
+                  <p className="text-xs text-[#0B5A70]/80 mt-2">
                     💡 Works best with clear, printed Hindi/English text. Handwriting may need manual correction. Scanned PDFs supported (up to 10 pages).
                   </p>
                 </div>
@@ -6789,7 +6789,7 @@ const App = () => {
                   <button
                     onClick={savePublicBhajan}
                     disabled={publicBhajanFormSaving || !publicBhajanForm.title.trim() || !publicBhajanForm.lyrics.trim()}
-                    className="flex-1 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white font-bold py-3 rounded-xl shadow-lg disabled:opacity-50"
+                    className="flex-1 bg-[#0B5A70] hover:bg-[#094a5d] text-white font-bold py-3 rounded-xl shadow-lg disabled:opacity-50"
                   >
                     {publicBhajanFormSaving ? 'Saving...' : (editingPublicBhajan ? '💾 Save Changes' : '➕ Add Bhajan')}
                   </button>
@@ -6839,7 +6839,7 @@ const App = () => {
     return (
       <div className="min-h-screen bg-[#FFF8F0]">
         {/* Live Header */}
-        <div className="bg-white/95 backdrop-blur-md sticky top-0 z-40 shadow-md border-b-2 border-[#0B5A70]/12">
+        <div className="bg-[#FFF8F0]/95 backdrop-blur-md sticky top-0 z-40 border-b border-[#0B5A70]/10">
           <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
             <button
               onClick={exitLiveProgram}
@@ -6901,7 +6901,7 @@ const App = () => {
               {currentBhajan.deity}
             </span>
             {currentBhajan.scale && (
-              <span className="bg-purple-100 text-purple-800 px-3 py-1 rounded-full text-sm font-semibold">
+              <span className="bg-purple-50 text-purple-700 px-3 py-1 rounded-full text-sm font-semibold">
                 🎵 {currentBhajan.scale}
               </span>
             )}
@@ -6932,7 +6932,7 @@ const App = () => {
         </div>
         
         {/* Bottom Navigation Bar */}
-        <div className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t-2 border-[#0B5A70]/12 shadow-2xl z-40">
+        <div className="fixed bottom-0 left-0 right-0 bg-[#FFF8F0]/95 backdrop-blur-md border-t border-[#0B5A70]/10 shadow-2xl z-40">
           <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
             <button
               onClick={livePrev}
@@ -6975,7 +6975,7 @@ const App = () => {
       {/* App Update Prompt */}
       {showUpdatePrompt && (
         <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden">
+          <div className="bg-[#FFFCF8] rounded-3xl shadow-2xl max-w-md w-full overflow-hidden">
             <div className="bg-gradient-to-br from-green-500 to-emerald-500 p-6 text-white text-center">
               <div className="text-5xl mb-2">🎉</div>
               <h3 className="text-2xl font-bold">App Updated!</h3>
@@ -6987,17 +6987,17 @@ const App = () => {
               </p>
               <ul className="text-sm text-gray-700 space-y-2 mb-6">
                 <li className="flex items-start gap-2">
-                  <span className="text-green-500 font-bold">✓</span>
+                  <span className="text-[#0B5A70] font-bold">✓</span>
                   <span>Google Hindi typing now works in Public Library add/edit forms</span>
                 </li>
                 <li className="flex items-start gap-2">
-                  <span className="text-green-500 font-bold">✓</span>
+                  <span className="text-[#0B5A70] font-bold">✓</span>
                   <span>You will now see this prompt every time the app is updated on GitHub</span>
                 </li>
               </ul>
               <button
                 onClick={dismissUpdatePrompt}
-                className="w-full bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white font-bold py-3 rounded-xl shadow-lg"
+                className="w-full bg-[#0B5A70] hover:bg-[#094a5d] text-white font-bold py-3 rounded-xl shadow-lg"
               >
                 Awesome, let us go! 🚀
               </button>
@@ -7242,7 +7242,7 @@ class ErrorBoundary extends React.Component {
 
       return (
         <div className="min-h-screen bg-[#FFF8F0] flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-8 text-center border-2 border-[#0B5A70]/12">
+          <div className="bg-[#FFFCF8] rounded-3xl shadow-2xl max-w-md w-full p-8 text-center border border-[#0B5A70]/10">
             <div className="text-6xl mb-4">🙏</div>
             <h1 className="text-2xl font-bold text-[#0B5A70] mb-2">
               Something went wrong
