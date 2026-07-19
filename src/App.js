@@ -3279,7 +3279,7 @@ const App = () => {
   // ==============================================
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#FDF8E4] flex items-center justify-center px-6">
+      <div className="min-h-screen bg-[#FFF8F0] flex items-center justify-center px-6">
         <div className="text-center">
           {/* Wordmark component - same as header/login for consistency */}
           <SankirtanWordmark className="h-16 sm:h-20 w-auto mx-auto" />
@@ -3423,7 +3423,7 @@ const App = () => {
     const currentStep = ONBOARDING_STEPS[onboardingStep];
     
     return (
-      <div className={`min-h-screen ${darkMode ? 'bg-gray-900 text-gray-100' : 'bg-[#FFF8F0]'}`}>
+      <div className={`min-h-screen ${darkMode ? 'bg-[#0f1a1c] text-gray-100' : 'bg-[#FFF8F0]'}`}>
         {/* ==============================================
             ONBOARDING TOUR MODAL
             ============================================== */}
@@ -3634,8 +3634,8 @@ const App = () => {
             ============================================== */}
         {showReadingSettings && (
           <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4">
-            <div className={`rounded-3xl shadow-2xl max-w-sm w-full overflow-hidden ${darkMode ? 'bg-gray-800 text-gray-100' : 'bg-[#FFFCF8]'}`}>
-              <div className={`p-6 text-center ${darkMode ? 'bg-gray-700' : 'bg-[#0B5A70]'} text-white`}>
+            <div className={`rounded-3xl shadow-2xl max-w-sm w-full overflow-hidden ${darkMode ? 'bg-[#162226] text-gray-100' : 'bg-[#FFFCF8]'}`}>
+              <div className={`p-6 text-center ${darkMode ? 'bg-[#1e2e33]' : 'bg-[#0B5A70]'} text-white`}>
                 <div className="text-5xl mb-2">📖</div>
                 <h3 className="text-2xl font-bold">Reading View</h3>
                 <p className="text-sm opacity-90 mt-1">Comfortable lyrics reading</p>
@@ -3659,7 +3659,7 @@ const App = () => {
                 </div>
 
                 {/* Reading Mode toggle - larger font + tighter alignment for focused reading */}
-                <div className={`flex items-center justify-between p-3 rounded-xl ${darkMode ? 'bg-gray-700' : 'bg-[#0B5A70]/5'}`}>
+                <div className={`flex items-center justify-between p-3 rounded-xl ${darkMode ? 'bg-[#1e2e33]' : 'bg-[#0B5A70]/5'}`}>
                   <div>
                     <div className="text-sm font-semibold">Reading Mode</div>
                     <div className="text-xs opacity-75">Larger, centered text for focused singing</div>
@@ -3683,7 +3683,7 @@ const App = () => {
                 </div>
 
                 {/* Keep Screen On toggle - uses Wake Lock API */}
-                <div className={`flex items-center justify-between p-3 rounded-xl ${darkMode ? 'bg-gray-700' : 'bg-[#0B5A70]/5'}`}>
+                <div className={`flex items-center justify-between p-3 rounded-xl ${darkMode ? 'bg-[#1e2e33]' : 'bg-[#0B5A70]/5'}`}>
                   <div>
                     <div className="text-sm font-semibold">Keep Screen On</div>
                     <div className="text-xs opacity-75">
@@ -3812,7 +3812,7 @@ const App = () => {
         )}
         
         {/* Header */}
-        <header className={`sticky top-0 z-40 border-b ${darkMode ? 'bg-gray-900 border-gray-700' : 'bg-[#FFF8F0]/95 backdrop-blur-md border-[#0B5A70]/10'}`}>
+        <header className={`sticky top-0 z-40 border-b ${darkMode ? 'bg-[#0f1a1c] border-[#0B5A70]/15' : 'bg-[#FFF8F0]/95 backdrop-blur-md border-[#0B5A70]/10'}`}>
           <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
             <button
               onClick={() => setCurrentView('public-library')}
@@ -3849,7 +3849,7 @@ const App = () => {
               </div>
               <button
                 onClick={() => setDarkMode(!darkMode)}
-                className={`p-2 rounded-lg transition-colors ${darkMode ? 'text-yellow-400 hover:bg-gray-700' : 'text-gray-600 hover:bg-gray-100'}`}
+                className={`p-2 rounded-lg transition-colors ${darkMode ? 'text-[#E65100] hover:bg-[#1e2e33]' : 'text-[#0B5A70]/50 hover:bg-[#0B5A70]/5'}`}
                 title={darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
               >
                 {darkMode ? (
@@ -3901,7 +3901,7 @@ const App = () => {
               <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
                 <div className="flex items-center gap-3 flex-wrap">
                   {/* Public ↔ Personal library switcher */}
-                  <div className={`inline-flex rounded-xl p-1 ${darkMode ? 'bg-gray-700' : 'bg-[#0B5A70]/8'}`}>
+                  <div className={`inline-flex rounded-xl p-1 ${darkMode ? 'bg-[#1e2e33]' : 'bg-[#0B5A70]/8'}`}>
                     <button
                       onClick={openPublicLibrary}
                       className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-all ${darkMode ? 'text-gray-400 hover:text-gray-200' : 'text-[#0B5A70]/60 hover:text-[#0B5A70]'}`}
@@ -3909,7 +3909,7 @@ const App = () => {
                       🌐 Public
                     </button>
                     <button
-                      className={`px-3 py-1.5 rounded-lg text-sm font-semibold shadow-sm ${darkMode ? 'bg-gray-600 text-gray-100' : 'bg-white text-[#0B5A70]'}`}
+                      className={`px-3 py-1.5 rounded-lg text-sm font-semibold shadow-sm ${darkMode ? 'bg-[#0B5A70]/30 text-gray-100' : 'bg-white text-[#0B5A70]'}`}
                     >
                       📚 My Library
                     </button>
@@ -3918,7 +3918,7 @@ const App = () => {
                 <div className="flex items-center gap-2 flex-wrap">
                   <button
                     onClick={openPrograms}
-                    className={`border-2 font-semibold px-3 py-2 rounded-xl text-sm flex items-center gap-1 ${darkMode ? 'bg-gray-800 border-gray-600 text-gray-200 hover:border-gray-500' : 'bg-[#FFFCF8] border-[#0B5A70]/15 hover:border-[#0B5A70]/40 text-[#0B5A70]'}`}
+                    className={`border-2 font-semibold px-3 py-2 rounded-xl text-sm flex items-center gap-1 ${darkMode ? 'bg-[#162226] border-[#0B5A70]/15 text-gray-200 hover:border-[#0B5A70]/30' : 'bg-[#FFFCF8] border-[#0B5A70]/15 hover:border-[#0B5A70]/40 text-[#0B5A70]'}`}
                     title="View and manage your programs / setlists"
                   >
                     🎵 Programs ({programs.length})
@@ -3948,7 +3948,7 @@ const App = () => {
                     placeholder="🔍 Search bhajans (title, lyrics, keywords)..."
                     className={`w-full px-4 py-3 pr-24 border-2 rounded-xl focus:ring-4 outline-none ${
                       darkMode
-                        ? 'bg-gray-800 border-gray-600 text-gray-100 focus:ring-gray-700 focus:border-gray-500'
+                        ? 'bg-[#162226] border-[#0B5A70]/15 text-gray-100 focus:ring-[#0B5A70]/20 focus:border-[#0B5A70]/30'
                         : 'bg-white border-[#0B5A70]/12 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30'
                     }`}
                   />
@@ -3969,7 +3969,7 @@ const App = () => {
                       isListening
                         ? 'bg-red-500 text-white animate-pulse'
                         : darkMode
-                          ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-700'
+                          ? 'text-[#0B5A70]/40 hover:text-[#0B5A70]/70 hover:bg-[#1e2e33]'
                           : 'text-[#0B5A70]/40 hover:text-[#0B5A70] hover:bg-[#0B5A70]/5'
                     }`}
                     title={isListening ? 'Listening...' : 'Voice search'}
@@ -4077,34 +4077,34 @@ const App = () => {
                     compactView ? (
                       <div
                         key={i}
-                        className={`rounded-xl p-3 border-2 flex items-center gap-3 animate-pulse ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-[#0B5A70]/10'}`}
+                        className={`rounded-xl p-3 border-2 flex items-center gap-3 animate-pulse ${darkMode ? 'bg-[#162226] border-[#0B5A70]/15' : 'bg-white border-[#0B5A70]/10'}`}
                       >
                         <div className="flex-1 min-w-0 space-y-2">
-                          <div className={`h-3 rounded w-3/4 ${darkMode ? 'bg-gray-700' : 'bg-[#0B5A70]/8'}`}></div>
-                          <div className={`h-2 rounded w-1/2 ${darkMode ? 'bg-gray-700' : 'bg-[#0B5A70]/5'}`}></div>
+                          <div className={`h-3 rounded w-3/4 ${darkMode ? 'bg-[#1e2e33]' : 'bg-[#0B5A70]/8'}`}></div>
+                          <div className={`h-2 rounded w-1/2 ${darkMode ? 'bg-[#1e2e33]' : 'bg-[#0B5A70]/5'}`}></div>
                         </div>
                       </div>
                     ) : (
                       <div
                         key={i}
-                        className={`rounded-2xl shadow-md p-5 border animate-pulse ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-[#FFFCF8] border-[#0B5A70]/8'}`}
+                        className={`rounded-2xl shadow-md p-5 border animate-pulse ${darkMode ? 'bg-[#162226] border-[#0B5A70]/15' : 'bg-[#FFFCF8] border-[#0B5A70]/8'}`}
                       >
-                        <div className={`h-5 rounded w-3/4 mb-3 ${darkMode ? 'bg-gray-700' : 'bg-[#0B5A70]/8'}`}></div>
+                        <div className={`h-5 rounded w-3/4 mb-3 ${darkMode ? 'bg-[#1e2e33]' : 'bg-[#0B5A70]/8'}`}></div>
                         <div className="flex gap-2 mb-3">
-                          <div className={`h-5 w-16 rounded-full ${darkMode ? 'bg-gray-700' : 'bg-[#0B5A70]/8'}`}></div>
-                          <div className={`h-5 w-14 rounded-full ${darkMode ? 'bg-gray-700' : 'bg-[#E65100]/5'}`}></div>
+                          <div className={`h-5 w-16 rounded-full ${darkMode ? 'bg-[#1e2e33]' : 'bg-[#0B5A70]/8'}`}></div>
+                          <div className={`h-5 w-14 rounded-full ${darkMode ? 'bg-[#1e2e33]' : 'bg-[#E65100]/5'}`}></div>
                         </div>
                         <div className="space-y-2">
-                          <div className={`h-3 rounded ${darkMode ? 'bg-gray-700' : 'bg-gray-100'}`}></div>
-                          <div className={`h-3 rounded w-5/6 ${darkMode ? 'bg-gray-700' : 'bg-gray-100'}`}></div>
-                          <div className={`h-3 rounded w-4/6 ${darkMode ? 'bg-gray-700' : 'bg-gray-100'}`}></div>
+                          <div className={`h-3 rounded ${darkMode ? 'bg-[#1e2e33]' : 'bg-gray-100'}`}></div>
+                          <div className={`h-3 rounded w-5/6 ${darkMode ? 'bg-[#1e2e33]' : 'bg-gray-100'}`}></div>
+                          <div className={`h-3 rounded w-4/6 ${darkMode ? 'bg-[#1e2e33]' : 'bg-gray-100'}`}></div>
                         </div>
                       </div>
                     )
                   ))}
                 </div>
               ) : filteredBhajans.length === 0 ? (
-                <div className={`text-center py-12 rounded-2xl border-2 border-dashed ${darkMode ? 'bg-gray-800 border-gray-600' : 'bg-[#FFFCF8] border-[#0B5A70]/15'}`}>
+                <div className={`text-center py-12 rounded-2xl border-2 border-dashed ${darkMode ? 'bg-[#162226] border-[#0B5A70]/12' : 'bg-[#FFFCF8] border-[#0B5A70]/15'}`}>
                   {bhajans.length === 0 ? (
                     <>
                       <div className="text-6xl mb-4">📚</div>
@@ -4155,7 +4155,7 @@ const App = () => {
                         <button
                           key={bhajan.id}
                           onClick={() => openBhajanDetail(bhajan)}
-                          className={`w-full text-left rounded-xl p-3 border transition-all flex items-center gap-3 ${darkMode ? 'bg-gray-800 border-gray-700 hover:border-gray-500' : 'bg-[#FFFCF8] border-[#0B5A70]/8 shadow-[0_1px_4px_rgba(11,90,112,0.04)] hover:border-[#0B5A70]/25 hover:shadow-[0_2px_8px_rgba(11,90,112,0.10)]'}`}
+                          className={`w-full text-left rounded-xl p-3 border transition-all flex items-center gap-3 ${darkMode ? 'bg-[#162226] border-[#0B5A70]/15 hover:border-[#0B5A70]/30' : 'bg-[#FFFCF8] border-[#0B5A70]/8 shadow-[0_1px_4px_rgba(11,90,112,0.04)] hover:border-[#0B5A70]/25 hover:shadow-[0_2px_8px_rgba(11,90,112,0.10)]'}`}
                         >
                           <div className="flex-1 min-w-0">
                             <h3 className={`text-sm font-bold truncate ${darkMode ? 'text-amber-100' : 'text-[#0B5A70]'}`}>
@@ -4174,7 +4174,7 @@ const App = () => {
                       <button
                         key={bhajan.id}
                         onClick={() => openBhajanDetail(bhajan)}
-                        className={`rounded-2xl p-5 border transition-all text-left ${darkMode ? 'bg-gray-800 border-gray-700 shadow-md hover:border-gray-500 hover:shadow-xl' : 'bg-[#FFFCF8] border-[#0B5A70]/8 shadow-[0_2px_12px_rgba(11,90,112,0.06)] hover:border-[#0B5A70]/25 hover:shadow-[0_4px_20px_rgba(11,90,112,0.12)]'}`}
+                        className={`rounded-2xl p-5 border transition-all text-left ${darkMode ? 'bg-[#162226] border-[#0B5A70]/15 shadow-md hover:border-[#0B5A70]/30 hover:shadow-xl' : 'bg-[#FFFCF8] border-[#0B5A70]/8 shadow-[0_2px_12px_rgba(11,90,112,0.06)] hover:border-[#0B5A70]/25 hover:shadow-[0_4px_20px_rgba(11,90,112,0.12)]'}`}
                       >
                         <div className="flex items-start justify-between mb-2">
                           <h3 className="text-lg font-bold text-[#0B5A70] flex-1 line-clamp-2">
@@ -4264,7 +4264,7 @@ const App = () => {
                 <div className="flex gap-1.5 flex-wrap">
                   <button
                     onClick={() => setShowReadingSettings(true)}
-                    className={`px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 transition-colors ${darkMode ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15'}`}
+                    className={`px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 transition-colors ${darkMode ? 'bg-[#1e2e33] text-gray-300 hover:bg-[#0B5A70]/20' : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15'}`}
                     title="Reading view options"
                   >
                     👁️ View
@@ -4285,7 +4285,7 @@ const App = () => {
               </div>
 
               {/* Bhajan Content */}
-              <div className={`rounded-2xl shadow-[0_2px_12px_rgba(11,90,112,0.06)] p-6 md:p-8 mb-4 ${darkMode ? 'bg-gray-800 border border-gray-700' : 'bg-[#FFFCF8] border border-[#0B5A70]/8'}`}>
+              <div className={`rounded-2xl shadow-[0_2px_12px_rgba(11,90,112,0.06)] p-6 md:p-8 mb-4 ${darkMode ? 'bg-[#162226] border border-[#0B5A70]/15' : 'bg-[#FFFCF8] border border-[#0B5A70]/8'}`}>
                 {/* Title (smaller, max 2 lines) - View button already in action bar above */}
                 <h1
                   className={`text-xl md:text-2xl font-bold mb-3 line-clamp-2 ${darkMode ? 'text-amber-100' : 'text-[#0B5A70]'}`}
@@ -4295,7 +4295,7 @@ const App = () => {
                 </h1>
 
                 {selectedBhajan.dhun && (
-                  <div className={`border-l-4 border-[#E65100]/40 p-3 rounded-r-lg mb-4 ${darkMode ? 'bg-gray-700' : 'bg-[#0B5A70]/5'}`}>
+                  <div className={`border-l-4 border-[#E65100]/40 p-3 rounded-r-lg mb-4 ${darkMode ? 'bg-[#1e2e33]' : 'bg-[#0B5A70]/5'}`}>
                     <p className={`text-sm ${darkMode ? 'text-orange-200' : 'text-[#E65100]'}`}>
                       <span className="font-semibold">तर्ज़ / धुन:</span> {selectedBhajan.dhun}
                     </p>
@@ -4318,7 +4318,7 @@ const App = () => {
                   ) : (
                     <button
                       onClick={() => openEditBhajan(selectedBhajan)}
-                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold border border-dashed transition-colors ${darkMode ? 'bg-transparent text-gray-400 border-gray-500 hover:bg-gray-700 hover:text-gray-200' : 'bg-transparent text-gray-500 border-gray-400 hover:bg-purple-50 hover:text-purple-700 hover:border-purple-400'}`}
+                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold border border-dashed transition-colors ${darkMode ? 'bg-transparent text-gray-400 border-[#0B5A70]/20 hover:bg-[#1e2e33] hover:text-gray-200' : 'bg-transparent text-gray-500 border-gray-400 hover:bg-purple-50 hover:text-purple-700 hover:border-purple-400'}`}
                       title="Add scale/raag for this bhajan"
                     >
                       + Add Scale
@@ -4326,12 +4326,12 @@ const App = () => {
                   )}
                 </div>
 
-                <div className={`border-t pt-4 ${darkMode ? 'border-gray-700' : 'border-[#0B5A70]/8'}`}>
+                <div className={`border-t pt-4 ${darkMode ? 'border-[#0B5A70]/15' : 'border-[#0B5A70]/8'}`}>
                   {/* Quick font size adjust */}
                   <div className="flex items-center justify-end gap-1 mb-2">
                     <button
                       onClick={() => setReadingSettings(prev => ({ ...prev, fontSize: Math.max(14, prev.fontSize - 2) }))}
-                      className={`px-2 py-1 rounded-md text-xs font-semibold transition-colors ${darkMode ? 'bg-gray-700 hover:bg-gray-600 text-gray-200' : 'bg-[#0B5A70]/5 hover:bg-[#0B5A70]/10 text-[#0B5A70] border border-[#0B5A70]/12'}`}
+                      className={`px-2 py-1 rounded-md text-xs font-semibold transition-colors ${darkMode ? 'bg-[#1e2e33] hover:bg-[#0B5A70]/20 text-gray-200' : 'bg-[#0B5A70]/5 hover:bg-[#0B5A70]/10 text-[#0B5A70] border border-[#0B5A70]/12'}`}
                       title="Decrease font size"
                     >
                       Aa−
@@ -4339,7 +4339,7 @@ const App = () => {
                     <span className={`text-xs w-8 text-center ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{readingSettings.fontSize}</span>
                     <button
                       onClick={() => setReadingSettings(prev => ({ ...prev, fontSize: Math.min(40, prev.fontSize + 2) }))}
-                      className={`px-2 py-1 rounded-md text-xs font-semibold transition-colors ${darkMode ? 'bg-gray-700 hover:bg-gray-600 text-gray-200' : 'bg-[#0B5A70]/5 hover:bg-[#0B5A70]/10 text-[#0B5A70] border border-[#0B5A70]/12'}`}
+                      className={`px-2 py-1 rounded-md text-xs font-semibold transition-colors ${darkMode ? 'bg-[#1e2e33] hover:bg-[#0B5A70]/20 text-gray-200' : 'bg-[#0B5A70]/5 hover:bg-[#0B5A70]/10 text-[#0B5A70] border border-[#0B5A70]/12'}`}
                       title="Increase font size"
                     >
                       Aa+
@@ -5326,9 +5326,9 @@ const App = () => {
               <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
                 <div className="flex items-center gap-3 flex-wrap">
                   {/* Public ↔ Personal library switcher */}
-                  <div className={`inline-flex rounded-xl p-1 ${darkMode ? 'bg-gray-700' : 'bg-[#0B5A70]/8'}`}>
+                  <div className={`inline-flex rounded-xl p-1 ${darkMode ? 'bg-[#1e2e33]' : 'bg-[#0B5A70]/8'}`}>
                     <button
-                      className={`px-3 py-1.5 rounded-lg text-sm font-semibold shadow-sm ${darkMode ? 'bg-gray-600 text-gray-100' : 'bg-white text-[#0B5A70]'}`}
+                      className={`px-3 py-1.5 rounded-lg text-sm font-semibold shadow-sm ${darkMode ? 'bg-[#0B5A70]/30 text-gray-100' : 'bg-white text-[#0B5A70]'}`}
                     >
                       🌐 Public
                     </button>
@@ -5362,7 +5362,7 @@ const App = () => {
                     placeholder="🔍 Search public bhajans..."
                     className={`w-full px-4 py-3 pr-24 border-2 rounded-xl focus:ring-4 outline-none ${
                       darkMode
-                        ? 'bg-gray-800 border-gray-600 text-gray-100 focus:ring-gray-700 focus:border-gray-500'
+                        ? 'bg-[#162226] border-[#0B5A70]/15 text-gray-100 focus:ring-[#0B5A70]/20 focus:border-[#0B5A70]/30'
                         : 'bg-white border-[#0B5A70]/12 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30'
                     }`}
                   />
@@ -5384,7 +5384,7 @@ const App = () => {
                       isListening
                         ? 'bg-red-500 text-white animate-pulse'
                         : darkMode
-                          ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-700'
+                          ? 'text-[#0B5A70]/40 hover:text-[#0B5A70]/70 hover:bg-[#1e2e33]'
                           : 'text-[#0B5A70]/40 hover:text-[#0B5A70] hover:bg-[#0B5A70]/5'
                     }`}
                     title={isListening ? 'Listening...' : 'Voice search'}
@@ -5496,40 +5496,40 @@ const App = () => {
                     compactView ? (
                       <div
                         key={i}
-                        className={`rounded-xl p-3 border-2 flex items-center gap-3 animate-pulse ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-[#0B5A70]/10'}`}
+                        className={`rounded-xl p-3 border-2 flex items-center gap-3 animate-pulse ${darkMode ? 'bg-[#162226] border-[#0B5A70]/15' : 'bg-white border-[#0B5A70]/10'}`}
                       >
                         <div className="flex-1 min-w-0 space-y-2">
-                          <div className={`h-3 rounded w-3/4 ${darkMode ? 'bg-gray-700' : 'bg-[#0B5A70]/8'}`}></div>
-                          <div className={`h-2 rounded w-1/2 ${darkMode ? 'bg-gray-700' : 'bg-[#0B5A70]/5'}`}></div>
+                          <div className={`h-3 rounded w-3/4 ${darkMode ? 'bg-[#1e2e33]' : 'bg-[#0B5A70]/8'}`}></div>
+                          <div className={`h-2 rounded w-1/2 ${darkMode ? 'bg-[#1e2e33]' : 'bg-[#0B5A70]/5'}`}></div>
                         </div>
-                        <div className={`h-6 w-10 rounded-full flex-shrink-0 ${darkMode ? 'bg-gray-700' : 'bg-[#0B5A70]/8'}`}></div>
+                        <div className={`h-6 w-10 rounded-full flex-shrink-0 ${darkMode ? 'bg-[#1e2e33]' : 'bg-[#0B5A70]/8'}`}></div>
                       </div>
                     ) : (
                       <div
                         key={i}
-                        className={`rounded-2xl shadow-md p-5 border animate-pulse ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-[#FFFCF8] border-[#0B5A70]/8'}`}
+                        className={`rounded-2xl shadow-md p-5 border animate-pulse ${darkMode ? 'bg-[#162226] border-[#0B5A70]/15' : 'bg-[#FFFCF8] border-[#0B5A70]/8'}`}
                       >
                         {/* Title placeholder */}
-                        <div className={`h-5 rounded w-3/4 mb-3 ${darkMode ? 'bg-gray-700' : 'bg-[#0B5A70]/8'}`}></div>
+                        <div className={`h-5 rounded w-3/4 mb-3 ${darkMode ? 'bg-[#1e2e33]' : 'bg-[#0B5A70]/8'}`}></div>
                         {/* Tags row placeholder */}
                         <div className="flex gap-2 mb-3">
-                          <div className={`h-5 w-16 rounded-full ${darkMode ? 'bg-gray-700' : 'bg-[#0B5A70]/8'}`}></div>
-                          <div className={`h-5 w-14 rounded-full ${darkMode ? 'bg-gray-700' : 'bg-[#E65100]/5'}`}></div>
+                          <div className={`h-5 w-16 rounded-full ${darkMode ? 'bg-[#1e2e33]' : 'bg-[#0B5A70]/8'}`}></div>
+                          <div className={`h-5 w-14 rounded-full ${darkMode ? 'bg-[#1e2e33]' : 'bg-[#E65100]/5'}`}></div>
                         </div>
                         {/* Lyrics placeholder - 3 lines */}
                         <div className="space-y-2 mb-3">
-                          <div className={`h-3 rounded ${darkMode ? 'bg-gray-700' : 'bg-gray-100'}`}></div>
-                          <div className={`h-3 rounded w-5/6 ${darkMode ? 'bg-gray-700' : 'bg-gray-100'}`}></div>
-                          <div className={`h-3 rounded w-4/6 ${darkMode ? 'bg-gray-700' : 'bg-gray-100'}`}></div>
+                          <div className={`h-3 rounded ${darkMode ? 'bg-[#1e2e33]' : 'bg-gray-100'}`}></div>
+                          <div className={`h-3 rounded w-5/6 ${darkMode ? 'bg-[#1e2e33]' : 'bg-gray-100'}`}></div>
+                          <div className={`h-3 rounded w-4/6 ${darkMode ? 'bg-[#1e2e33]' : 'bg-gray-100'}`}></div>
                         </div>
                         {/* Bottom action placeholder */}
-                        <div className={`h-9 rounded-lg mt-3 ${darkMode ? 'bg-gray-700' : 'bg-[#0B5A70]/5'}`}></div>
+                        <div className={`h-9 rounded-lg mt-3 ${darkMode ? 'bg-[#1e2e33]' : 'bg-[#0B5A70]/5'}`}></div>
                       </div>
                     )
                   ))}
                 </div>
               ) : filteredPublicBhajans.length === 0 ? (
-                <div className={`text-center py-12 rounded-2xl border-2 border-dashed ${darkMode ? 'bg-gray-800 border-gray-600' : 'bg-[#FFFCF8] border-[#0B5A70]/15'}`}>
+                <div className={`text-center py-12 rounded-2xl border-2 border-dashed ${darkMode ? 'bg-[#162226] border-[#0B5A70]/12' : 'bg-[#FFFCF8] border-[#0B5A70]/15'}`}>
                   {publicBhajans.length === 0 ? (
                     <>
                       <div className="text-6xl mb-4">🌐</div>
@@ -5588,7 +5588,7 @@ const App = () => {
                         <button
                           key={bhajan.id}
                           onClick={() => openPublicBhajanDetail(bhajan)}
-                          className={`w-full text-left rounded-xl p-3 border transition-all flex items-center gap-3 ${darkMode ? 'bg-gray-800 border-gray-700 hover:border-gray-500' : 'bg-[#FFFCF8] border-[#0B5A70]/8 shadow-[0_1px_4px_rgba(11,90,112,0.04)] hover:border-[#0B5A70]/25 hover:shadow-[0_2px_8px_rgba(11,90,112,0.10)]'}`}
+                          className={`w-full text-left rounded-xl p-3 border transition-all flex items-center gap-3 ${darkMode ? 'bg-[#162226] border-[#0B5A70]/15 hover:border-[#0B5A70]/30' : 'bg-[#FFFCF8] border-[#0B5A70]/8 shadow-[0_1px_4px_rgba(11,90,112,0.04)] hover:border-[#0B5A70]/25 hover:shadow-[0_2px_8px_rgba(11,90,112,0.10)]'}`}
                         >
                           <div className="flex-1 min-w-0">
                             <h3 className={`text-sm font-bold truncate ${darkMode ? 'text-amber-100' : 'text-[#0B5A70]'}`}>
@@ -5618,7 +5618,7 @@ const App = () => {
                     return (
                       <div
                         key={bhajan.id}
-                        className={`rounded-2xl p-5 border transition-all ${darkMode ? 'bg-gray-800 border-gray-700 shadow-md hover:border-gray-500 hover:shadow-xl' : 'bg-[#FFFCF8] border-[#0B5A70]/8 shadow-[0_2px_12px_rgba(11,90,112,0.06)] hover:border-[#0B5A70]/25 hover:shadow-[0_4px_20px_rgba(11,90,112,0.12)]'}`}
+                        className={`rounded-2xl p-5 border transition-all ${darkMode ? 'bg-[#162226] border-[#0B5A70]/15 shadow-md hover:border-[#0B5A70]/30 hover:shadow-xl' : 'bg-[#FFFCF8] border-[#0B5A70]/8 shadow-[0_2px_12px_rgba(11,90,112,0.06)] hover:border-[#0B5A70]/25 hover:shadow-[0_4px_20px_rgba(11,90,112,0.12)]'}`}
                       >
                         <button
                           onClick={() => openPublicBhajanDetail(bhajan)}
@@ -5666,7 +5666,7 @@ const App = () => {
 
                         {/* Action row - only Save/In Library. "Read" removed since
                             clicking the card body above already opens the bhajan. */}
-                        <div className={`flex gap-2 mt-3 pt-3 border-t ${darkMode ? 'border-gray-700' : 'border-[#0B5A70]/8'}`}>
+                        <div className={`flex gap-2 mt-3 pt-3 border-t ${darkMode ? 'border-[#0B5A70]/15' : 'border-[#0B5A70]/8'}`}>
                           {isSaved ? (
                             <span className="flex-1 bg-green-50 text-green-700 font-semibold py-2 rounded-lg text-sm text-center">
                               ✓ In Your Library
@@ -5768,7 +5768,7 @@ const App = () => {
                   {/* View settings pill (was up in title row before) */}
                   <button
                     onClick={() => setShowReadingSettings(true)}
-                    className={`px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 transition-colors ${darkMode ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15'}`}
+                    className={`px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 transition-colors ${darkMode ? 'bg-[#1e2e33] text-gray-300 hover:bg-[#0B5A70]/20' : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15'}`}
                     title="Reading view options"
                   >
                     👁️ View
@@ -5793,7 +5793,7 @@ const App = () => {
                 </div>
               </div>
 
-              <div className={`rounded-2xl shadow-[0_2px_12px_rgba(11,90,112,0.06)] p-6 md:p-8 mb-4 ${darkMode ? 'bg-gray-800 border border-gray-700' : 'bg-[#FFFCF8] border border-[#0B5A70]/8'}`}>
+              <div className={`rounded-2xl shadow-[0_2px_12px_rgba(11,90,112,0.06)] p-6 md:p-8 mb-4 ${darkMode ? 'bg-[#162226] border border-[#0B5A70]/15' : 'bg-[#FFFCF8] border border-[#0B5A70]/8'}`}>
                 {/* Title (smaller, max 2 lines - was xl 3xl before) */}
                 <h1
                   className={`text-xl md:text-2xl font-bold mb-3 line-clamp-2 ${darkMode ? 'text-amber-100' : 'text-[#0B5A70]'}`}
@@ -5803,20 +5803,20 @@ const App = () => {
                 </h1>
 
                 {selectedPublicBhajan.dhun && (
-                  <div className={`border-l-4 border-[#E65100]/40 p-3 rounded-r-lg mb-4 ${darkMode ? 'bg-gray-700' : 'bg-[#0B5A70]/5'}`}>
+                  <div className={`border-l-4 border-[#E65100]/40 p-3 rounded-r-lg mb-4 ${darkMode ? 'bg-[#1e2e33]' : 'bg-[#0B5A70]/5'}`}>
                     <p className={`text-sm ${darkMode ? 'text-orange-200' : 'text-[#E65100]'}`}>
                       <span className="font-semibold">तर्ज़ / धुन:</span> {selectedPublicBhajan.dhun}
                     </p>
                   </div>
                 )}
 
-                <div className={`border-t pt-4 ${darkMode ? 'border-gray-700' : 'border-[#0B5A70]/8'}`}>
+                <div className={`border-t pt-4 ${darkMode ? 'border-[#0B5A70]/15' : 'border-[#0B5A70]/8'}`}>
                   {/* Quick font size adjust - no need to open Reading View modal for
                       common tweaks. Range clamped to 14-40px to match the modal slider. */}
                   <div className="flex items-center justify-end gap-1 mb-2">
                     <button
                       onClick={() => setReadingSettings(prev => ({ ...prev, fontSize: Math.max(14, prev.fontSize - 2) }))}
-                      className={`px-2 py-1 rounded-md text-xs font-semibold transition-colors ${darkMode ? 'bg-gray-700 hover:bg-gray-600 text-gray-200' : 'bg-[#0B5A70]/5 hover:bg-[#0B5A70]/10 text-[#0B5A70] border border-[#0B5A70]/12'}`}
+                      className={`px-2 py-1 rounded-md text-xs font-semibold transition-colors ${darkMode ? 'bg-[#1e2e33] hover:bg-[#0B5A70]/20 text-gray-200' : 'bg-[#0B5A70]/5 hover:bg-[#0B5A70]/10 text-[#0B5A70] border border-[#0B5A70]/12'}`}
                       title="Decrease font size"
                     >
                       Aa−
@@ -5824,7 +5824,7 @@ const App = () => {
                     <span className={`text-xs w-8 text-center ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{readingSettings.fontSize}</span>
                     <button
                       onClick={() => setReadingSettings(prev => ({ ...prev, fontSize: Math.min(40, prev.fontSize + 2) }))}
-                      className={`px-2 py-1 rounded-md text-xs font-semibold transition-colors ${darkMode ? 'bg-gray-700 hover:bg-gray-600 text-gray-200' : 'bg-[#0B5A70]/5 hover:bg-[#0B5A70]/10 text-[#0B5A70] border border-[#0B5A70]/12'}`}
+                      className={`px-2 py-1 rounded-md text-xs font-semibold transition-colors ${darkMode ? 'bg-[#1e2e33] hover:bg-[#0B5A70]/20 text-gray-200' : 'bg-[#0B5A70]/5 hover:bg-[#0B5A70]/10 text-[#0B5A70] border border-[#0B5A70]/12'}`}
                       title="Increase font size"
                     >
                       Aa+
@@ -6907,11 +6907,11 @@ const App = () => {
             )}
           </div>
           
-          <div className={`rounded-2xl shadow-[0_2px_12px_rgba(11,90,112,0.06)] p-6 md:p-8 ${darkMode ? 'bg-gray-800 border border-gray-700' : 'bg-[#FFFCF8] border border-[#0B5A70]/8'}`}>
+          <div className={`rounded-2xl shadow-[0_2px_12px_rgba(11,90,112,0.06)] p-6 md:p-8 ${darkMode ? 'bg-[#162226] border border-[#0B5A70]/15' : 'bg-[#FFFCF8] border border-[#0B5A70]/8'}`}>
             <div className="flex justify-end mb-2">
               <button
                 onClick={() => setShowReadingSettings(true)}
-                className={`p-2 rounded-lg text-sm font-semibold flex items-center gap-1 transition-colors ${darkMode ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15'}`}
+                className={`p-2 rounded-lg text-sm font-semibold flex items-center gap-1 transition-colors ${darkMode ? 'bg-[#1e2e33] text-gray-300 hover:bg-[#0B5A70]/20' : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15'}`}
                 title="Reading view options"
               >
                 ⚙️ View
@@ -6962,7 +6962,7 @@ const App = () => {
   // LANDING / SIGN-IN SCREEN
   // ==============================================
   return (
-    <div className="min-h-screen bg-[#FDF8E4] flex items-center justify-center p-4">
+    <div className="min-h-screen bg-[#FFF8F0] flex items-center justify-center p-4">
       {/* Offline Indicator */}
       {isOffline && (
         <div className="fixed top-0 left-0 right-0 bg-red-500 text-white px-4 py-2 text-center text-sm font-semibold z-50 shadow-md">
@@ -6976,10 +6976,10 @@ const App = () => {
       {showUpdatePrompt && (
         <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4">
           <div className="bg-[#FFFCF8] rounded-3xl shadow-2xl max-w-md w-full overflow-hidden">
-            <div className="bg-gradient-to-br from-green-500 to-emerald-500 p-6 text-white text-center">
+            <div className="bg-[#0B5A70] p-6 text-white text-center">
               <div className="text-5xl mb-2">🎉</div>
               <h3 className="text-2xl font-bold">App Updated!</h3>
-              <p className="text-sm text-green-100 mt-1">Sankirtan just got better</p>
+              <p className="text-sm text-white/80 mt-1">Sankirtan just got better</p>
             </div>
             <div className="p-6">
               <p className="text-sm text-gray-700 mb-4">
@@ -7007,10 +7007,10 @@ const App = () => {
       )}
 
             <div className="max-w-md w-full">
-        <div className="bg-[#FFFEF7] rounded-3xl shadow-xl overflow-hidden border border-[#0B5A70]/10">
+        <div className="bg-[#FFFCF8] rounded-3xl shadow-xl overflow-hidden border border-[#0B5A70]/10">
           {/* Cream hero with wordmark - matches new brand aesthetic.
               Wordmark component reused from header (single source of truth). */}
-          <div className="bg-[#FDF8E4] p-8 text-center border-b border-[#0B5A70]/10">
+          <div className="bg-[#FFF8F0] p-8 text-center border-b border-[#0B5A70]/10">
             <SankirtanWordmark className="h-14 sm:h-16 w-auto mx-auto" />
             <p className="text-sm text-[#0B5A70] mt-3" style={{ fontFamily: "'Noto Sans Devanagari', system-ui, sans-serif" }}>
               भजन से भगवान तक
@@ -7023,13 +7023,13 @@ const App = () => {
             </div>
           </div>
 
-          <div className="p-6 space-y-4 bg-[#FFFEF7]">
+          <div className="p-6 space-y-4 bg-[#FFFCF8]">
             {!showPhoneLogin ? (
               <>
                 <button
                   onClick={handleGoogleLogin}
                   disabled={authLoading}
-                  className="w-full bg-white border border-[#0B5A70]/20 hover:border-[#E65100]/50 hover:bg-[#FDF8E4] transition-all flex items-center justify-center gap-3 py-3 px-4 rounded-xl font-semibold text-gray-700 disabled:opacity-50"
+                  className="w-full bg-white border border-[#0B5A70]/20 hover:border-[#E65100]/50 hover:bg-[#FFF8F0] transition-all flex items-center justify-center gap-3 py-3 px-4 rounded-xl font-semibold text-gray-700 disabled:opacity-50"
                 >
                   <svg className="w-5 h-5" viewBox="0 0 48 48">
                     <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
