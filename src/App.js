@@ -4455,6 +4455,25 @@ const App = () => {
                             {idx === 0 && '⭐ '}{suggestion}
                           </button>
                         ))}
+                        {/* English fallback - keeps the original English word.
+                            Useful for proper nouns (Krishna, Radha) and bilingual titles
+                            (कृष्ण भजन / Krishna Bhajan). Styled subtly so it doesn't
+                            compete with Hindi options; positioned last as an escape hatch. */}
+                        <button
+                          type="button"
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            applySuggestion(currentWord, 'title');
+                          }}
+                          onTouchStart={(e) => {
+                            e.preventDefault();
+                            applySuggestion(currentWord, 'title');
+                          }}
+                          className="px-3 py-1.5 rounded-lg text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition-all border border-gray-300"
+                          title="Keep as English"
+                        >
+                          {currentWord}
+                        </button>
                       </div>
                     )}
                   </div>
@@ -4536,6 +4555,25 @@ const App = () => {
                             {idx === 0 && '⭐ '}{suggestion}
                           </button>
                         ))}
+                        {/* English fallback - keeps the original English word.
+                            Useful for proper nouns (Krishna, Radha) and bilingual titles
+                            (कृष्ण भजन / Krishna Bhajan). Styled subtly so it doesn't
+                            compete with Hindi options; positioned last as an escape hatch. */}
+                        <button
+                          type="button"
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            applySuggestion(currentWord, 'dhun');
+                          }}
+                          onTouchStart={(e) => {
+                            e.preventDefault();
+                            applySuggestion(currentWord, 'dhun');
+                          }}
+                          className="px-3 py-1.5 rounded-lg text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition-all border border-gray-300"
+                          title="Keep as English"
+                        >
+                          {currentWord}
+                        </button>
                       </div>
                     )}
                   </div>
@@ -4728,6 +4766,25 @@ const App = () => {
                             {idx === 0 && '⭐ '}{suggestion}
                           </button>
                         ))}
+                        {/* English fallback - keeps the original English word.
+                            Useful for proper nouns (Krishna, Radha) and bilingual titles
+                            (कृष्ण भजन / Krishna Bhajan). Styled subtly so it doesn't
+                            compete with Hindi options; positioned last as an escape hatch. */}
+                        <button
+                          type="button"
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            applySuggestion(currentWord, 'lyrics');
+                          }}
+                          onTouchStart={(e) => {
+                            e.preventDefault();
+                            applySuggestion(currentWord, 'lyrics');
+                          }}
+                          className="px-3 py-1.5 rounded-lg text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition-all border border-gray-300"
+                          title="Keep as English"
+                        >
+                          {currentWord}
+                        </button>
                       </div>
                     )}
                   </div>
@@ -6365,6 +6422,25 @@ const App = () => {
                             {idx === 0 && '⭐ '}{suggestion}
                           </button>
                         ))}
+                        {/* English fallback - keeps the original English word.
+                            Useful for proper nouns (Krishna, Radha) and bilingual titles
+                            (कृष्ण भजन / Krishna Bhajan). Styled subtly so it doesn't
+                            compete with Hindi options; positioned last as an escape hatch. */}
+                        <button
+                          type="button"
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            applyPublicSuggestion(currentWord, 'title');
+                          }}
+                          onTouchStart={(e) => {
+                            e.preventDefault();
+                            applyPublicSuggestion(currentWord, 'title');
+                          }}
+                          className="px-3 py-1.5 rounded-lg text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition-all border border-gray-300"
+                          title="Keep as English"
+                        >
+                          {currentWord}
+                        </button>
                       </div>
                     )}
                   </div>
@@ -6441,6 +6517,25 @@ const App = () => {
                             {idx === 0 && '⭐ '}{suggestion}
                           </button>
                         ))}
+                        {/* English fallback - keeps the original English word.
+                            Useful for proper nouns (Krishna, Radha) and bilingual titles
+                            (कृष्ण भजन / Krishna Bhajan). Styled subtly so it doesn't
+                            compete with Hindi options; positioned last as an escape hatch. */}
+                        <button
+                          type="button"
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            applyPublicSuggestion(currentWord, 'dhun');
+                          }}
+                          onTouchStart={(e) => {
+                            e.preventDefault();
+                            applyPublicSuggestion(currentWord, 'dhun');
+                          }}
+                          className="px-3 py-1.5 rounded-lg text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition-all border border-gray-300"
+                          title="Keep as English"
+                        >
+                          {currentWord}
+                        </button>
                       </div>
                     )}
                   </div>
@@ -6627,6 +6722,25 @@ const App = () => {
                             {idx === 0 && '⭐ '}{suggestion}
                           </button>
                         ))}
+                        {/* English fallback - keeps the original English word.
+                            Useful for proper nouns (Krishna, Radha) and bilingual titles
+                            (कृष्ण भजन / Krishna Bhajan). Styled subtly so it doesn't
+                            compete with Hindi options; positioned last as an escape hatch. */}
+                        <button
+                          type="button"
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            applyPublicSuggestion(currentWord, 'lyrics');
+                          }}
+                          onTouchStart={(e) => {
+                            e.preventDefault();
+                            applyPublicSuggestion(currentWord, 'lyrics');
+                          }}
+                          className="px-3 py-1.5 rounded-lg text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition-all border border-gray-300"
+                          title="Keep as English"
+                        >
+                          {currentWord}
+                        </button>
                       </div>
                     )}
                   </div>
