@@ -3035,6 +3035,12 @@ const App = () => {
     setProgramFormError('');
     setEditingProgram(null);
     setCurrentView('create-program');
+    // Auto-open bhajan picker so user can start adding immediately
+    setShowBhajanPicker(true);
+    setBhajanPickerSearch('');
+    setPickerDeityFilter('');
+    setPickerCategoryFilter('');
+    setPickerKeywordFilter('');
   };
   
   const openEditProgram = (program) => {
@@ -4110,15 +4116,15 @@ const App = () => {
               <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
                 <div className="flex items-center gap-3 flex-wrap">
                   {/* Public ↔ Personal library switcher */}
-                  <div className={`inline-flex rounded-xl p-1 ${darkMode ? 'bg-[#1e2e33]' : 'bg-[#0B5A70]/8'}`}>
+                  <div className={`inline-flex rounded-xl p-1.5 border ${darkMode ? 'bg-[#1e2e33] border-[#0B5A70]/20' : 'bg-[#0B5A70]/10 border-[#0B5A70]/20'}`}>
                     <button
                       onClick={openPublicLibrary}
-                      className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-all ${darkMode ? 'text-gray-400 hover:text-gray-200' : 'text-[#0B5A70]/60 hover:text-[#0B5A70]'}`}
+                      className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${darkMode ? 'text-gray-400 hover:text-gray-200 hover:bg-[#0B5A70]/10' : 'text-[#0B5A70]/70 hover:text-[#0B5A70] hover:bg-white/50'}`}
                     >
                       🌐 Public
                     </button>
                     <button
-                      className={`px-3 py-1.5 rounded-lg text-sm font-semibold shadow-sm ${darkMode ? 'bg-[#0B5A70]/30 text-gray-100' : 'bg-white text-[#0B5A70]'}`}
+                      className={`px-4 py-2 rounded-lg text-sm font-bold shadow-md ${darkMode ? 'bg-[#0B5A70]/30 text-gray-100' : 'bg-white text-[#0B5A70] border border-[#0B5A70]/15'}`}
                     >
                       📚 My Library
                     </button>
@@ -4593,6 +4599,52 @@ const App = () => {
                   </div>
                 )}
               </div>
+
+              {/* Related Bhajans - compact cards BELOW the main bhajan card.
+                  Auto-generated from shared keywords. No toggle — just shows up. */}
+              {selectedBhajan.keywords && selectedBhajan.keywords.length > 0 && (() => {
+                const relKws = new Set(selectedBhajan.keywords);
+                const related = bhajans
+                  .filter(b => b.id !== selectedBhajan.id && b.keywords && b.keywords.some(kw => relKws.has(kw)))
+                  .map(b => ({
+                    ...b,
+                    matchCount: b.keywords.filter(kw => relKws.has(kw)).length,
+                    matchedKws: b.keywords.filter(kw => relKws.has(kw))
+                  }))
+                  .sort((a, b) => b.matchCount - a.matchCount)
+                  .slice(0, 6);
+                if (related.length === 0) return null;
+                return (
+                  <div className="mt-6">
+                    <p className={`text-sm font-bold mb-3 flex items-center gap-1.5 ${darkMode ? 'text-gray-300' : 'text-[#0B5A70]'}`}>
+                      ✨ Related Bhajans
+                    </p>
+                    <div className="space-y-1.5">
+                      {related.map(b => (
+                        <button
+                          key={b.id}
+                          onClick={() => {
+                            setSelectedBhajan(b);
+                            window.scrollTo({ top: 0, behavior: 'smooth' });
+                          }}
+                          className={`w-full text-left rounded-xl p-3 border transition-all flex items-center gap-3 ${darkMode ? 'bg-[#162226] border-[#0B5A70]/15 hover:border-[#0B5A70]/30' : 'bg-[#FFFCF8] border-[#0B5A70]/8 shadow-[0_1px_4px_rgba(11,90,112,0.04)] hover:border-[#0B5A70]/25 hover:shadow-[0_2px_8px_rgba(11,90,112,0.10)]'}`}
+                        >
+                          <div className="flex-1 min-w-0">
+                            <p className={`text-sm font-bold truncate ${darkMode ? 'text-amber-100' : 'text-[#0B5A70]'}`}>{b.title}</p>
+                            <p className="text-xs text-gray-600 truncate">
+                              {b.deity} · {b.category}
+                              {b.matchedKws.length > 0 && (
+                                <span className="text-[#E65100]/60"> · {b.matchedKws.slice(0, 2).map(k => `#${k}`).join(' ')}</span>
+                              )}
+                            </p>
+                          </div>
+                          <span className="text-[#0B5A70]/30 text-lg flex-shrink-0">›</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
             </>
           )}
 
@@ -5321,24 +5373,36 @@ const App = () => {
                       Date (optional)
                     </label>
                     <input
-                      type="text"
+                      type="date"
                       value={programForm.date}
                       onChange={(e) => setProgramForm({...programForm, date: e.target.value})}
                       className="w-full px-4 py-3 border border-[#0B5A70]/15 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none"
-                      placeholder="e.g., 25 Oct 2026"
                     />
                   </div>
                   <div>
                     <label className="block text-sm font-semibold text-[#0B5A70] mb-1">
                       Venue (optional)
                     </label>
-                    <input
-                      type="text"
-                      value={programForm.venue}
-                      onChange={(e) => setProgramForm({...programForm, venue: e.target.value})}
-                      className="w-full px-4 py-3 border border-[#0B5A70]/15 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none"
-                      placeholder="e.g., Delhi Temple"
-                    />
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={programForm.venue}
+                        onChange={(e) => setProgramForm({...programForm, venue: e.target.value})}
+                        className="w-full px-4 py-3 pr-10 border border-[#0B5A70]/15 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none"
+                        placeholder="e.g., Delhi Temple"
+                      />
+                      {programForm.venue.trim() && (
+                        <a
+                          href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(programForm.venue)}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-[#0B5A70]/50 hover:text-[#0B5A70] p-1.5 rounded-lg hover:bg-[#0B5A70]/5 transition-colors"
+                          title="Open in Google Maps"
+                        >
+                          📍
+                        </a>
+                      )}
+                    </div>
                   </div>
                 </div>
 
@@ -5728,15 +5792,15 @@ const App = () => {
               <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
                 <div className="flex items-center gap-3 flex-wrap">
                   {/* Public ↔ Personal library switcher */}
-                  <div className={`inline-flex rounded-xl p-1 ${darkMode ? 'bg-[#1e2e33]' : 'bg-[#0B5A70]/8'}`}>
+                  <div className={`inline-flex rounded-xl p-1.5 border ${darkMode ? 'bg-[#1e2e33] border-[#0B5A70]/20' : 'bg-[#0B5A70]/10 border-[#0B5A70]/20'}`}>
                     <button
-                      className={`px-3 py-1.5 rounded-lg text-sm font-semibold shadow-sm ${darkMode ? 'bg-[#0B5A70]/30 text-gray-100' : 'bg-white text-[#0B5A70]'}`}
+                      className={`px-4 py-2 rounded-lg text-sm font-bold shadow-md ${darkMode ? 'bg-[#0B5A70]/30 text-gray-100' : 'bg-white text-[#0B5A70] border border-[#0B5A70]/15'}`}
                     >
                       🌐 Public
                     </button>
                     <button
                       onClick={() => setCurrentView('library')}
-                      className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-all ${darkMode ? 'text-gray-400 hover:text-gray-200' : 'text-[#0B5A70]/60 hover:text-[#0B5A70]'}`}
+                      className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${darkMode ? 'text-gray-400 hover:text-gray-200 hover:bg-[#0B5A70]/10' : 'text-[#0B5A70]/70 hover:text-[#0B5A70] hover:bg-white/50'}`}
                     >
                       📚 My Library
                     </button>
@@ -6271,6 +6335,51 @@ const App = () => {
                   </div>
                 )}
               </div>
+
+              {/* Related Bhajans - compact cards BELOW the main bhajan card */}
+              {selectedPublicBhajan.keywords && selectedPublicBhajan.keywords.length > 0 && (() => {
+                const relKws = new Set(selectedPublicBhajan.keywords);
+                const related = publicBhajans
+                  .filter(b => b.id !== selectedPublicBhajan.id && b.keywords && b.keywords.some(kw => relKws.has(kw)))
+                  .map(b => ({
+                    ...b,
+                    matchCount: b.keywords.filter(kw => relKws.has(kw)).length,
+                    matchedKws: b.keywords.filter(kw => relKws.has(kw))
+                  }))
+                  .sort((a, b) => b.matchCount - a.matchCount)
+                  .slice(0, 6);
+                if (related.length === 0) return null;
+                return (
+                  <div className="mt-6">
+                    <p className={`text-sm font-bold mb-3 flex items-center gap-1.5 ${darkMode ? 'text-gray-300' : 'text-[#0B5A70]'}`}>
+                      ✨ Related Bhajans
+                    </p>
+                    <div className="space-y-1.5">
+                      {related.map(b => (
+                        <button
+                          key={b.id}
+                          onClick={() => {
+                            openPublicBhajanDetail(b);
+                            window.scrollTo({ top: 0, behavior: 'smooth' });
+                          }}
+                          className={`w-full text-left rounded-xl p-3 border transition-all flex items-center gap-3 ${darkMode ? 'bg-[#162226] border-[#0B5A70]/15 hover:border-[#0B5A70]/30' : 'bg-[#FFFCF8] border-[#0B5A70]/8 shadow-[0_1px_4px_rgba(11,90,112,0.04)] hover:border-[#0B5A70]/25 hover:shadow-[0_2px_8px_rgba(11,90,112,0.10)]'}`}
+                        >
+                          <div className="flex-1 min-w-0">
+                            <p className={`text-sm font-bold truncate ${darkMode ? 'text-amber-100' : 'text-[#0B5A70]'}`}>{b.title}</p>
+                            <p className="text-xs text-gray-600 truncate">
+                              {b.deity} · {b.category}
+                              {b.matchedKws.length > 0 && (
+                                <span className="text-[#E65100]/60"> · {b.matchedKws.slice(0, 2).map(k => `#${k}`).join(' ')}</span>
+                              )}
+                            </p>
+                          </div>
+                          <span className="text-[#0B5A70]/30 text-lg flex-shrink-0">›</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
             </>
           )}
 
