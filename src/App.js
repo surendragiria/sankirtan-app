@@ -244,6 +244,7 @@ const App = () => {
   const [selectedBhajan, setSelectedBhajan] = useState(null);
   const [editingBhajan, setEditingBhajan] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
   const [filterDeity, setFilterDeity] = useState('');
   const [filterCategory, setFilterCategory] = useState('');
   const [bhajansLoading, setBhajansLoading] = useState(false);
@@ -281,6 +282,7 @@ const App = () => {
   const [publicBhajans, setPublicBhajans] = useState([]);
   const [publicLoading, setPublicLoading] = useState(false);
   const [publicSearchQuery, setPublicSearchQuery] = useState('');
+  const [debouncedPublicSearch, setDebouncedPublicSearch] = useState('');
   const [publicFilterKeyword, setPublicFilterKeyword] = useState('');
   const [libraryFilterKeyword, setLibraryFilterKeyword] = useState('');
   const [publicFilterDeity, setPublicFilterDeity] = useState('');
@@ -414,6 +416,46 @@ const App = () => {
   // first paint significantly, especially on lower-end phones.
 
   // Global ESC key handler — closes the topmost open modal/popup
+  useEffect(() => {
+
+    // Debounce My Library search (200ms)
+    const t1 = setTimeout(() => setDebouncedSearchQuery(searchQuery), 200);
+    return () => clearTimeout(t1);
+  }, [searchQuery]);
+
+  useEffect(() => {
+    // Debounce Public Library search (200ms)
+    const t2 = setTimeout(() => setDebouncedPublicSearch(publicSearchQuery), 200);
+    return () => clearTimeout(t2);
+  }, [publicSearchQuery]);
+
+  // Scroll-to-top button — shows after scrolling 600px
+  const [showScrollTop, setShowScrollTop] = useState(false);
+  useEffect(() => {
+    const handleScroll = () => setShowScrollTop(window.scrollY > 600);
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  // Recently Read — track last 5 bhajans opened (localStorage)
+  const RECENT_KEY = user ? `sankirtan-recent-${user.uid}` : 'sankirtan-recent-guest';
+  const [recentlyRead, setRecentlyRead] = useState(() => {
+    try {
+      const raw = localStorage.getItem(RECENT_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch { return []; }
+  });
+
+  const trackRecentRead = useCallback((bhajan) => {
+    if (!bhajan || !bhajan.id) return;
+    setRecentlyRead(prev => {
+      const filtered = prev.filter(b => b.id !== bhajan.id);
+      const updated = [{ id: bhajan.id, title: bhajan.title, deity: bhajan.deity, category: bhajan.category }, ...filtered].slice(0, 5);
+      try { localStorage.setItem(RECENT_KEY, JSON.stringify(updated)); } catch {}
+      return updated;
+    });
+  }, [RECENT_KEY]);
+
   useEffect(() => {
     const handleEsc = (e) => {
       if (e.key !== 'Escape') return;
@@ -2177,6 +2219,7 @@ const App = () => {
   const openBhajanDetail = async (bhajan) => {
     setSelectedBhajan(bhajan);
     setCurrentView('bhajan-detail');
+    trackRecentRead(bhajan);
     
     // Increment view count
     try {
@@ -2665,8 +2708,8 @@ const App = () => {
 
   // Filter public bhajans
   const filteredPublicBhajans = publicBhajans.filter(bhajan => {
-    if (publicSearchQuery) {
-      const q = publicSearchQuery.toLowerCase();
+    if (debouncedPublicSearch) {
+      const q = debouncedPublicSearch.toLowerCase();
       const matches = 
         (bhajan.title && bhajan.title.toLowerCase().includes(q)) ||
         (bhajan.lyrics && bhajan.lyrics.toLowerCase().includes(q)) ||
@@ -3246,8 +3289,8 @@ const App = () => {
 
   // Filter bhajans based on search and filters
   const filteredBhajans = bhajans.filter(bhajan => {
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
+    if (debouncedSearchQuery) {
+      const q = debouncedSearchQuery.toLowerCase();
       const matches = 
         (bhajan.title && bhajan.title.toLowerCase().includes(q)) ||
         (bhajan.lyrics && bhajan.lyrics.toLowerCase().includes(q)) ||
@@ -4193,6 +4236,35 @@ const App = () => {
               <p className={`text-xs mb-3 ${darkMode ? 'text-gray-400' : 'text-[#0B5A70]/60'}`}>
                 {bhajans.length} bhajan{bhajans.length === 1 ? '' : 's'} in your collection
               </p>
+
+              {/* Recently Read - last 5 bhajans opened */}
+              {recentlyRead.length > 0 && !searchQuery && !filterDeity && !filterCategory && !libraryFilterKeyword && (
+                <div className="mb-4">
+                  <p className={`text-xs font-semibold uppercase tracking-wide mb-2 ${darkMode ? 'text-gray-500' : 'text-[#0B5A70]/50'}`}>
+                    🕐 Recently Read
+                  </p>
+                  <div className="flex gap-2 overflow-x-auto pb-2" style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
+                    {recentlyRead.map(r => {
+                      const fullBhajan = bhajans.find(b => b.id === r.id);
+                      if (!fullBhajan) return null;
+                      return (
+                        <button
+                          key={r.id}
+                          onClick={() => { setSelectedBhajan(fullBhajan); setCurrentView('bhajan-detail'); trackRecentRead(fullBhajan); }}
+                          className={`flex-shrink-0 px-3 py-2 rounded-xl border text-left transition-all max-w-[160px] ${
+                            darkMode
+                              ? 'bg-[#162226] border-[#0B5A70]/15 hover:border-[#0B5A70]/30'
+                              : 'bg-[#FFFCF8] border-[#0B5A70]/8 hover:border-[#0B5A70]/25 shadow-[0_1px_4px_rgba(11,90,112,0.04)]'
+                          }`}
+                        >
+                          <p className={`text-xs font-bold truncate ${darkMode ? 'text-amber-100' : 'text-[#0B5A70]'}`}>{r.title}</p>
+                          <p className="text-[10px] text-gray-500 truncate">{r.deity} · {r.category}</p>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               {/* Search Bar - voice language toggle sits inline with mic */}
               <div className="mb-4">
@@ -6247,6 +6319,11 @@ const App = () => {
                 >
                   💬 Share feedback or suggestions
                 </button>
+                <div className={`flex items-center justify-center gap-3 mt-2 text-xs ${darkMode ? 'text-gray-600' : 'text-[#0B5A70]/40'}`}>
+                  <a href="/privacy-policy.html" className="hover:underline">Privacy Policy</a>
+                  <span>·</span>
+                  <a href="/terms.html" className="hover:underline">Terms & Copyright</a>
+                </div>
               </div>
             </>
           )}
@@ -7370,6 +7447,21 @@ const App = () => {
               </div>
             </div>
           </div>
+        )}
+
+        {/* Scroll-to-top floating button */}
+        {showScrollTop && (
+          <button
+            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+            className={`fixed bottom-6 right-6 z-40 w-11 h-11 rounded-full shadow-lg flex items-center justify-center transition-all ${
+              darkMode
+                ? 'bg-[#0B5A70] text-white hover:bg-[#094a5d]'
+                : 'bg-[#0B5A70] text-white hover:bg-[#094a5d] shadow-[0_4px_12px_rgba(11,90,112,0.3)]'
+            }`}
+            title="Scroll to top"
+          >
+            ↑
+          </button>
         )}
       </div>
     );
