@@ -176,6 +176,7 @@ const App = () => {
   // Auth states
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [splashVisible, setSplashVisible] = useState(true);
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
   const [showBrowserWarning, setShowBrowserWarning] = useState(() => {
     // Detect iOS Chrome and suggest Safari
@@ -385,6 +386,18 @@ const App = () => {
   useEffect(() => {
     try { localStorage.setItem('sankirtan-compact-view', compactView.toString()); } catch (e) {}
   }, [compactView]);
+
+  // Branded splash screen - minimum 2.8s so user sees the full animation
+  // (logo fade-in + tagline typewriter + credit line) before main app loads.
+  const [splashFadeOut, setSplashFadeOut] = useState(false);
+  useEffect(() => {
+    const SPLASH_MIN_MS = 2800;
+    const timer = setTimeout(() => {
+      setSplashFadeOut(true); // Start fade-out animation
+      setTimeout(() => setSplashVisible(false), 600); // Remove after fade completes
+    }, SPLASH_MIN_MS);
+    return () => clearTimeout(timer);
+  }, []);
 
   // Progressive rendering - show first N cards, load more as user scrolls.
   // Keeps initial DOM small (~20 nodes instead of 175) which speeds up
@@ -3363,29 +3376,134 @@ const App = () => {
   };
 
   // ==============================================
-  // LOADING SCREEN
+  // BRANDED SPLASH SCREEN
+  // Shows on every app open with animated brand identity.
+  // Minimum 2.8s display so users see the full animation
+  // sequence: logo → tagline typewriter → credit line glow.
   // ==============================================
-  if (loading) {
+  if (loading || splashVisible) {
     return (
-      <div className="min-h-screen bg-[#FFF8F0] flex items-center justify-center px-6">
-        <div className="text-center">
-          {/* Wordmark component - same as header/login for consistency */}
-          <SankirtanWordmark className="h-16 sm:h-20 w-auto mx-auto" />
+      <div
+        className={`min-h-screen bg-[#FFF8F0] flex items-center justify-center px-6 transition-opacity duration-500 ${splashFadeOut ? 'opacity-0' : 'opacity-100'}`}
+      >
+        <style>{`
+          @keyframes splashLogoIn {
+            0% { opacity: 0; transform: scale(0.85) translateY(12px); }
+            100% { opacity: 1; transform: scale(1) translateY(0); }
+          }
+          @keyframes splashTaglineIn {
+            0% { opacity: 0; transform: translateY(10px); letter-spacing: 0.3em; }
+            60% { opacity: 1; letter-spacing: 0.05em; }
+            100% { opacity: 1; transform: translateY(0); letter-spacing: 0.08em; }
+          }
+          @keyframes splashDividerGrow {
+            0% { width: 0; opacity: 0; }
+            100% { width: 80px; opacity: 1; }
+          }
+          @keyframes splashCreditIn {
+            0% { opacity: 0; transform: translateY(8px); }
+            100% { opacity: 1; transform: translateY(0); }
+          }
+          @keyframes splashBabosaGlow {
+            0%, 100% { color: #E65100; text-shadow: 0 0 0px transparent; }
+            50% { color: #E65100; text-shadow: 0 0 12px rgba(230, 81, 0, 0.35); }
+          }
+          @keyframes splashSpinnerIn {
+            0% { opacity: 0; }
+            100% { opacity: 1; }
+          }
+          @keyframes splashPrayerPulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.15); }
+          }
+        `}</style>
+
+        <div className="text-center max-w-sm mx-auto">
+          {/* Logo with scale+fade entrance */}
+          <div
+            style={{
+              animation: 'splashLogoIn 0.8s ease-out forwards',
+              opacity: 0,
+            }}
+          >
+            <SankirtanWordmark className="h-16 sm:h-20 w-auto mx-auto" />
+          </div>
+
+          {/* Tagline in Devanagari with letter-spacing entrance */}
           <p
-            className="text-[#0B5A70]/85 text-base sm:text-lg mt-4"
-            style={{ fontFamily: "'Noto Sans Devanagari', system-ui, sans-serif" }}
+            style={{
+              fontFamily: "'Noto Sans Devanagari', system-ui, sans-serif",
+              animation: 'splashTaglineIn 1s ease-out 0.6s forwards',
+              opacity: 0,
+              letterSpacing: '0.08em',
+            }}
+            className="text-[#0B5A70] text-xl sm:text-2xl font-semibold mt-5"
           >
             भजन से भगवान तक
           </p>
-          {/* Spinner - brand teal on cream */}
-          <div className="mt-8">
-            <div className="animate-spin rounded-full h-10 w-10 border-4 border-[#0B5A70]/20 border-t-[#E65100] mx-auto"></div>
+
+          {/* Decorative divider */}
+          <div className="flex justify-center mt-4">
+            <div
+              style={{
+                height: '2px',
+                background: 'linear-gradient(90deg, transparent, #0B5A70, #E65100, #0B5A70, transparent)',
+                animation: 'splashDividerGrow 0.8s ease-out 1.2s forwards',
+                width: 0,
+                opacity: 0,
+              }}
+            />
           </div>
-          <p className="text-[#0B5A70]/60 text-sm mt-4">
-            Loading your devotional experience...
-          </p>
+
+          {/* Credit line with Babosa Bhagwan glow */}
+          <div
+            style={{
+              animation: 'splashCreditIn 0.7s ease-out 1.6s forwards',
+              opacity: 0,
+            }}
+            className="mt-5"
+          >
+            <p className="text-[#0B5A70]/50 text-xs sm:text-sm leading-relaxed">
+              Founded for the Bhajan Community
+            </p>
+            <p className="text-[#0B5A70]/50 text-xs sm:text-sm mt-1 flex items-center justify-center gap-1.5">
+              <span
+                style={{ animation: 'splashPrayerPulse 2s ease-in-out 2s infinite' }}
+              >
+                🙏
+              </span>
+              <span>by Grace of</span>
+              <span
+                style={{
+                  animation: 'splashBabosaGlow 2.5s ease-in-out 2s infinite',
+                  fontWeight: 700,
+                }}
+              >
+                Babosa Bhagwan
+              </span>
+              <span>🙏</span>
+            </p>
+          </div>
+
+          {/* Spinner appears last */}
+          <div
+            className="mt-8"
+            style={{
+              animation: 'splashSpinnerIn 0.5s ease-out 2s forwards',
+              opacity: 0,
+            }}
+          >
+            <div className="animate-spin rounded-full h-8 w-8 border-[3px] border-[#0B5A70]/15 border-t-[#E65100] mx-auto"></div>
+          </div>
+
           {isOffline && (
-            <p className="text-white text-xs mt-3 bg-red-500 rounded-lg px-3 py-1 inline-block">
+            <p
+              className="text-white text-xs mt-4 bg-red-500/80 rounded-lg px-3 py-1 inline-block"
+              style={{
+                animation: 'splashCreditIn 0.5s ease-out 2.2s forwards',
+                opacity: 0,
+              }}
+            >
               ⚠️ Slow connection detected
             </p>
           )}
