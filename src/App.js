@@ -28,20 +28,21 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 const SankirtanWordmark = ({ className = "" }) => (
   <svg
     className={className}
-    viewBox="0 -12 320 68"
+    viewBox="0 -18 400 86"
     xmlns="http://www.w3.org/2000/svg"
     role="img"
     aria-label="संकीर्तन"
+    style={{ overflow: 'visible' }}
   >
     <title>संकीर्तन</title>
     <text
       x="0"
-      y="42"
+      y="48"
       style={{
         fontFamily: "'Noto Sans Devanagari', 'Mangal', system-ui, sans-serif",
         fontSize: '46px',
         fontWeight: 700,
-        letterSpacing: '-0.01em',
+        letterSpacing: '0.01em',
       }}
     >
       <tspan fill="#0B5A70">सं</tspan>
@@ -86,7 +87,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (only this user can manage public library)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.07.17.s3';
+const APP_VERSION = '2026.07.20.s4';
 
 // Onboarding tour steps
 const ONBOARDING_STEPS = [
@@ -176,6 +177,116 @@ const HINDI_FALLBACK_MAP = {
   'mera': 'मेरा', 'meri': 'मेरी', 'mere': 'मेरे', 'mujh': 'मुझ',
   'bhajans': 'भजन', 'kirtan': 'कीर्तन', 'sankirtan': 'संकीर्तन',
   'satsang': 'सत्संग', 'jagran': 'जागरण', 'mela': 'मेला',
+};
+
+// ==============================================
+// CSS KEYFRAMES — injected once into <head>
+// Card entrance animation + share toast
+// ==============================================
+if (typeof document !== 'undefined' && !document.getElementById('sankirtan-animations')) {
+  const styleEl = document.createElement('style');
+  styleEl.id = 'sankirtan-animations';
+  styleEl.textContent = `
+    @keyframes sk-card-in {
+      from { opacity: 0; transform: translateY(18px) scale(0.97); }
+      to   { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    .sk-card-animate {
+      animation: sk-card-in 0.35s cubic-bezier(0.22,1,0.36,1) both;
+    }
+    @keyframes sk-toast-in {
+      from { opacity: 0; transform: translateY(16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes sk-toast-out {
+      from { opacity: 1; transform: translateY(0); }
+      to   { opacity: 0; transform: translateY(16px); }
+    }
+    @keyframes sk-slide-left-in {
+      from { opacity: 0; transform: translateX(60px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+    @keyframes sk-slide-right-in {
+      from { opacity: 0; transform: translateX(-60px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+    .sk-slide-left  { animation: sk-slide-left-in  0.28s cubic-bezier(0.22,1,0.36,1) both; }
+    .sk-slide-right { animation: sk-slide-right-in 0.28s cubic-bezier(0.22,1,0.36,1) both; }
+    @media (prefers-reduced-motion: reduce) {
+      .sk-card-animate, .sk-slide-left, .sk-slide-right { animation: none !important; }
+    }
+  `;
+  document.head.appendChild(styleEl);
+}
+
+// ==============================================
+// SHARE HELPER — Web Share API with clipboard fallback
+// ==============================================
+const shareBhajan = async (bhajan) => {
+  if (!bhajan) return false;
+  const shareTitle = bhajan.title || 'Bhajan';
+  const lyricsPreview = (bhajan.lyrics || '').trim().substring(0, 300);
+  const shareText = `${shareTitle}\n\n${lyricsPreview}${(bhajan.lyrics || '').length > 300 ? '…' : ''}\n\n— Shared from Sankirtan App (sankirtan.app)`;
+  
+  // Try native Web Share API (mobile + some desktop browsers)
+  if (navigator.share) {
+    try {
+      await navigator.share({ title: shareTitle, text: shareText });
+      return 'shared';
+    } catch (err) {
+      if (err.name === 'AbortError') return 'cancelled';
+      // Fall through to clipboard
+    }
+  }
+  
+  // Fallback: copy to clipboard
+  try {
+    await navigator.clipboard.writeText(shareText);
+    return 'copied';
+  } catch {
+    // Last resort: textarea trick for older browsers
+    const ta = document.createElement('textarea');
+    ta.value = shareText;
+    ta.style.cssText = 'position:fixed;left:-9999px';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    return 'copied';
+  }
+};
+
+// ==============================================
+// SWIPE HOOK — horizontal swipe detection for reading views
+// Returns { onTouchStart, onTouchEnd, swipeDir }
+// swipeDir = 'left' | 'right' | null (resets after read)
+// ==============================================
+const useSwipe = (onSwipeLeft, onSwipeRight, { threshold = 60, enabled = true } = {}) => {
+  const touchStart = useRef(null);
+  const touchStartY = useRef(null);
+  
+  const onTouchStart = useCallback((e) => {
+    if (!enabled) return;
+    const touch = e.touches[0];
+    touchStart.current = touch.clientX;
+    touchStartY.current = touch.clientY;
+  }, [enabled]);
+  
+  const onTouchEnd = useCallback((e) => {
+    if (!enabled || touchStart.current === null) return;
+    const touch = e.changedTouches[0];
+    const dx = touch.clientX - touchStart.current;
+    const dy = Math.abs(touch.clientY - touchStartY.current);
+    touchStart.current = null;
+    
+    // Only fire if horizontal distance > threshold AND mostly horizontal (dx > dy)
+    if (Math.abs(dx) < threshold || dy > Math.abs(dx) * 0.8) return;
+    
+    if (dx < 0 && onSwipeLeft) onSwipeLeft();
+    if (dx > 0 && onSwipeRight) onSwipeRight();
+  }, [enabled, threshold, onSwipeLeft, onSwipeRight]);
+  
+  return { onTouchStart, onTouchEnd };
 };
 
 const App = () => {
@@ -386,6 +497,21 @@ const App = () => {
   const [showReadingSettings, setShowReadingSettings] = useState(false);
   // Wake lock for reading view - separate from live mode's wake lock
   const [readingWakeLock, setReadingWakeLock] = useState(null);
+
+  // Share toast
+  const [shareToast, setShareToast] = useState(null); // { message, visible }
+  const shareToastTimer = useRef(null);
+  const showShareToast = useCallback((message) => {
+    if (shareToastTimer.current) clearTimeout(shareToastTimer.current);
+    setShareToast({ message, visible: true });
+    shareToastTimer.current = setTimeout(() => {
+      setShareToast(prev => prev ? { ...prev, visible: false } : null);
+      setTimeout(() => setShareToast(null), 400);
+    }, 2200);
+  }, []);
+  
+  // Swipe animation direction for reading view transitions
+  const [slideDir, setSlideDir] = useState(null); // 'left' | 'right' | null
 
   // Compact card view - saved to localStorage so users don't have to re-toggle
   const [compactView, setCompactView] = useState(() => {
@@ -3305,6 +3431,50 @@ const App = () => {
   });
 
   // ==============================================
+  // SWIPE NAVIGATION — next/prev bhajan in reading view
+  // Works in both public and my-library detail views.
+  // ==============================================
+  const navigateBhajan = useCallback((direction, isPublic) => {
+    const list = isPublic ? filteredPublicBhajans : filteredBhajans;
+    const current = isPublic ? selectedPublicBhajan : selectedBhajan;
+    if (!current || list.length < 2) return;
+    const idx = list.findIndex(b => b.id === current.id);
+    if (idx === -1) return;
+    const nextIdx = direction === 'next'
+      ? (idx + 1) % list.length
+      : (idx - 1 + list.length) % list.length;
+    const nextBhajan = list[nextIdx];
+    setSlideDir(direction === 'next' ? 'left' : 'right');
+    setTimeout(() => setSlideDir(null), 350);
+    if (isPublic) {
+      setSelectedPublicBhajan(nextBhajan);
+    } else {
+      setSelectedBhajan(nextBhajan);
+      trackRecentRead(nextBhajan);
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [filteredPublicBhajans, filteredBhajans, selectedPublicBhajan, selectedBhajan, trackRecentRead]);
+
+  // Swipe handlers for detail views
+  const publicSwipe = useSwipe(
+    () => navigateBhajan('next', true),
+    () => navigateBhajan('prev', true),
+    { enabled: currentView === 'public-bhajan-detail' }
+  );
+  const librarySwipe = useSwipe(
+    () => navigateBhajan('next', false),
+    () => navigateBhajan('prev', false),
+    { enabled: currentView === 'bhajan-detail' }
+  );
+
+  // Share handler with toast feedback
+  const handleShareBhajan = useCallback(async (bhajan) => {
+    const result = await shareBhajan(bhajan);
+    if (result === 'copied') showShareToast('📋 Lyrics copied to clipboard!');
+    else if (result === 'shared') showShareToast('✓ Shared successfully!');
+  }, [showShareToast]);
+
+  // ==============================================
   // AUTHENTICATION - GOOGLE
   // ==============================================
   const handleGoogleLogin = async () => {
@@ -4498,11 +4668,13 @@ const App = () => {
                     }
 
                     // FULL CARD VIEW
+                    const cardIndex = filteredBhajans.slice(0, libraryVisibleCount).indexOf(bhajan);
                     return (
                       <button
                         key={bhajan.id}
                         onClick={() => openBhajanDetail(bhajan)}
-                        className={`rounded-2xl p-5 border transition-all text-left ${darkMode ? 'bg-[#162226] border-[#0B5A70]/15 shadow-[0_2px_12px_rgba(11,90,112,0.15)] hover:border-[#0B5A70]/30 hover:shadow-[0_4px_20px_rgba(11,90,112,0.25)]' : 'bg-[#FFFCF8] border-[#0B5A70]/8 shadow-[0_2px_12px_rgba(11,90,112,0.06)] hover:border-[#0B5A70]/25 hover:shadow-[0_4px_20px_rgba(11,90,112,0.12)]'}`}
+                        className={`sk-card-animate rounded-2xl p-5 border transition-all text-left ${darkMode ? 'bg-[#162226] border-[#0B5A70]/15 shadow-[0_2px_12px_rgba(11,90,112,0.15)] hover:border-[#0B5A70]/30 hover:shadow-[0_4px_20px_rgba(11,90,112,0.25)]' : 'bg-[#FFFCF8] border-[#0B5A70]/8 shadow-[0_2px_12px_rgba(11,90,112,0.06)] hover:border-[#0B5A70]/25 hover:shadow-[0_4px_20px_rgba(11,90,112,0.12)]'}`}
+                        style={{ animationDelay: `${Math.min(cardIndex, 8) * 0.04}s` }}
                       >
                         <div className="flex items-start justify-between mb-2">
                           <h3 className={`text-lg font-bold flex-1 line-clamp-2 ${darkMode ? 'text-amber-100' : 'text-[#0B5A70]'}`}>
@@ -4585,10 +4757,13 @@ const App = () => {
               BHAJAN DETAIL VIEW
               ============================================== */}
           {currentView === 'bhajan-detail' && selectedBhajan && (
-            <>
+            <div
+              onTouchStart={librarySwipe.onTouchStart}
+              onTouchEnd={librarySwipe.onTouchEnd}
+            >
               {/* Detail Header */}
               <div className="flex items-center justify-between mb-4">
-                {/* Compact action bar: back + pill actions (Edit / Delete / View) */}
+                {/* Compact action bar: back + pill actions (Edit / Delete / Share / View) */}
                 <button
                   onClick={() => { if (guestMode && !user) { setGuestMode(false); } else { setCurrentView('library'); } }}
                   className="text-[#0B5A70] hover:text-[#0B5A70]/80 flex items-center gap-1 text-sm"
@@ -4596,6 +4771,13 @@ const App = () => {
                   ← Back
                 </button>
                 <div className="flex gap-1.5 flex-wrap">
+                  <button
+                    onClick={() => handleShareBhajan(selectedBhajan)}
+                    className={`px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 transition-colors ${darkMode ? 'bg-[#1e2e33] text-gray-300 hover:bg-[#0B5A70]/20' : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15'}`}
+                    title="Share this bhajan"
+                  >
+                    ↗ Share
+                  </button>
                   <button
                     onClick={() => setShowReadingSettings(true)}
                     className={`px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 transition-colors ${darkMode ? 'bg-[#1e2e33] text-gray-300 hover:bg-[#0B5A70]/20' : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15'}`}
@@ -4619,7 +4801,10 @@ const App = () => {
               </div>
 
               {/* Bhajan Content */}
-              <div className={`rounded-2xl shadow-[0_2px_12px_rgba(11,90,112,0.06)] p-6 md:p-8 mb-4 ${darkMode ? 'bg-[#162226] border border-[#0B5A70]/15' : 'bg-[#FFFCF8] border border-[#0B5A70]/8'}`}>
+              <div
+                key={selectedBhajan.id}
+                className={`rounded-2xl shadow-[0_2px_12px_rgba(11,90,112,0.06)] p-6 md:p-8 mb-4 ${darkMode ? 'bg-[#162226] border border-[#0B5A70]/15' : 'bg-[#FFFCF8] border border-[#0B5A70]/8'} ${slideDir === 'left' ? 'sk-slide-left' : slideDir === 'right' ? 'sk-slide-right' : ''}`}
+              >
                 {/* Title (smaller, max 2 lines) - View button already in action bar above */}
                 <h1
                   className={`text-xl md:text-2xl font-bold mb-3 line-clamp-2 ${darkMode ? 'text-amber-100' : 'text-[#0B5A70]'}`}
@@ -4764,7 +4949,34 @@ const App = () => {
                   </div>
                 );
               })()}
-            </>
+
+              {/* Prev / Next navigation */}
+              {filteredBhajans.length > 1 && (() => {
+                const idx = filteredBhajans.findIndex(b => b.id === selectedBhajan.id);
+                if (idx === -1) return null;
+                const prevB = filteredBhajans[(idx - 1 + filteredBhajans.length) % filteredBhajans.length];
+                const nextB = filteredBhajans[(idx + 1) % filteredBhajans.length];
+                return (
+                  <div className={`flex items-center justify-between mt-6 pt-4 border-t ${darkMode ? 'border-[#0B5A70]/15' : 'border-[#0B5A70]/8'}`}>
+                    <button
+                      onClick={() => navigateBhajan('prev', false)}
+                      className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold transition-all max-w-[45%] ${darkMode ? 'text-gray-300 hover:bg-[#1e2e33]' : 'text-[#0B5A70] hover:bg-[#0B5A70]/5'}`}
+                    >
+                      <span className="flex-shrink-0">‹</span>
+                      <span className="truncate">{prevB.title}</span>
+                    </button>
+                    <span className={`text-xs flex-shrink-0 ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>{idx + 1}/{filteredBhajans.length}</span>
+                    <button
+                      onClick={() => navigateBhajan('next', false)}
+                      className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold transition-all max-w-[45%] text-right ${darkMode ? 'text-gray-300 hover:bg-[#1e2e33]' : 'text-[#0B5A70] hover:bg-[#0B5A70]/5'}`}
+                    >
+                      <span className="truncate">{nextB.title}</span>
+                      <span className="flex-shrink-0">›</span>
+                    </button>
+                  </div>
+                );
+              })()}
+            </div>
           )}
 
           {/* ==============================================
@@ -6200,10 +6412,12 @@ const App = () => {
                     }
 
                     // FULL CARD VIEW
+                    const pubCardIndex = filteredPublicBhajans.slice(0, publicVisibleCount).indexOf(bhajan);
                     return (
                       <div
                         key={bhajan.id}
-                        className={`rounded-2xl p-5 border transition-all ${darkMode ? 'bg-[#162226] border-[#0B5A70]/15 shadow-[0_2px_12px_rgba(11,90,112,0.15)] hover:border-[#0B5A70]/30 hover:shadow-[0_4px_20px_rgba(11,90,112,0.25)]' : 'bg-[#FFFCF8] border-[#0B5A70]/8 shadow-[0_2px_12px_rgba(11,90,112,0.06)] hover:border-[#0B5A70]/25 hover:shadow-[0_4px_20px_rgba(11,90,112,0.12)]'}`}
+                        className={`sk-card-animate rounded-2xl p-5 border transition-all ${darkMode ? 'bg-[#162226] border-[#0B5A70]/15 shadow-[0_2px_12px_rgba(11,90,112,0.15)] hover:border-[#0B5A70]/30 hover:shadow-[0_4px_20px_rgba(11,90,112,0.25)]' : 'bg-[#FFFCF8] border-[#0B5A70]/8 shadow-[0_2px_12px_rgba(11,90,112,0.06)] hover:border-[#0B5A70]/25 hover:shadow-[0_4px_20px_rgba(11,90,112,0.12)]'}`}
+                        style={{ animationDelay: `${Math.min(pubCardIndex, 8) * 0.04}s` }}
                       >
                         <button
                           onClick={() => openPublicBhajanDetail(bhajan)}
@@ -6332,9 +6546,12 @@ const App = () => {
               PUBLIC BHAJAN DETAIL VIEW
               ============================================== */}
           {currentView === 'public-bhajan-detail' && selectedPublicBhajan && (
-            <>
+            <div
+              onTouchStart={publicSwipe.onTouchStart}
+              onTouchEnd={publicSwipe.onTouchEnd}
+            >
               {/* Compact action bar: back button + pill actions.
-                  All actions live in one row now: Save / Edit / Delete / View. */}
+                  All actions live in one row now: Save / Share / Edit / Delete / View. */}
               <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
                 <button
                   onClick={() => setCurrentView('public-library')}
@@ -6361,7 +6578,16 @@ const App = () => {
                     </button>
                   )}
 
-                  {/* View settings pill (was up in title row before) */}
+                  {/* Share pill */}
+                  <button
+                    onClick={() => handleShareBhajan(selectedPublicBhajan)}
+                    className={`px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 transition-colors ${darkMode ? 'bg-[#1e2e33] text-gray-300 hover:bg-[#0B5A70]/20' : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15'}`}
+                    title="Share this bhajan"
+                  >
+                    ↗ Share
+                  </button>
+
+                  {/* View settings pill */}
                   <button
                     onClick={() => setShowReadingSettings(true)}
                     className={`px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 transition-colors ${darkMode ? 'bg-[#1e2e33] text-gray-300 hover:bg-[#0B5A70]/20' : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15'}`}
@@ -6389,8 +6615,11 @@ const App = () => {
                 </div>
               </div>
 
-              <div className={`rounded-2xl shadow-[0_2px_12px_rgba(11,90,112,0.06)] p-6 md:p-8 mb-4 ${darkMode ? 'bg-[#162226] border border-[#0B5A70]/15' : 'bg-[#FFFCF8] border border-[#0B5A70]/8'}`}>
-                {/* Title (smaller, max 2 lines - was xl 3xl before) */}
+              <div
+                key={selectedPublicBhajan.id}
+                className={`rounded-2xl shadow-[0_2px_12px_rgba(11,90,112,0.06)] p-6 md:p-8 mb-4 ${darkMode ? 'bg-[#162226] border border-[#0B5A70]/15' : 'bg-[#FFFCF8] border border-[#0B5A70]/8'} ${slideDir === 'left' ? 'sk-slide-left' : slideDir === 'right' ? 'sk-slide-right' : ''}`}
+              >
+                {/* Title (smaller, max 2 lines) */}
                 <h1
                   className={`text-xl md:text-2xl font-bold mb-3 line-clamp-2 ${darkMode ? 'text-amber-100' : 'text-[#0B5A70]'}`}
                   title={selectedPublicBhajan.title}
@@ -6510,7 +6739,34 @@ const App = () => {
                   </div>
                 );
               })()}
-            </>
+
+              {/* Prev / Next navigation */}
+              {filteredPublicBhajans.length > 1 && (() => {
+                const idx = filteredPublicBhajans.findIndex(b => b.id === selectedPublicBhajan.id);
+                if (idx === -1) return null;
+                const prevB = filteredPublicBhajans[(idx - 1 + filteredPublicBhajans.length) % filteredPublicBhajans.length];
+                const nextB = filteredPublicBhajans[(idx + 1) % filteredPublicBhajans.length];
+                return (
+                  <div className={`flex items-center justify-between mt-6 pt-4 border-t ${darkMode ? 'border-[#0B5A70]/15' : 'border-[#0B5A70]/8'}`}>
+                    <button
+                      onClick={() => navigateBhajan('prev', true)}
+                      className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold transition-all max-w-[45%] ${darkMode ? 'text-gray-300 hover:bg-[#1e2e33]' : 'text-[#0B5A70] hover:bg-[#0B5A70]/5'}`}
+                    >
+                      <span className="flex-shrink-0">‹</span>
+                      <span className="truncate">{prevB.title}</span>
+                    </button>
+                    <span className={`text-xs flex-shrink-0 ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>{idx + 1}/{filteredPublicBhajans.length}</span>
+                    <button
+                      onClick={() => navigateBhajan('next', true)}
+                      className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold transition-all max-w-[45%] text-right ${darkMode ? 'text-gray-300 hover:bg-[#1e2e33]' : 'text-[#0B5A70] hover:bg-[#0B5A70]/5'}`}
+                    >
+                      <span className="truncate">{nextB.title}</span>
+                      <span className="flex-shrink-0">›</span>
+                    </button>
+                  </div>
+                );
+              })()}
+            </div>
           )}
 
           {/* ==============================================
@@ -7462,6 +7718,26 @@ const App = () => {
           >
             ↑
           </button>
+        )}
+
+        {/* Share toast notification */}
+        {shareToast && (
+          <div
+            className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 pointer-events-none"
+            style={{
+              animation: shareToast.visible
+                ? 'sk-toast-in 0.3s cubic-bezier(0.22,1,0.36,1) both'
+                : 'sk-toast-out 0.3s ease-in both'
+            }}
+          >
+            <div className={`px-5 py-3 rounded-2xl shadow-lg text-sm font-semibold whitespace-nowrap ${
+              darkMode
+                ? 'bg-[#1e2e33] text-gray-100 border border-[#0B5A70]/20'
+                : 'bg-[#0B5A70] text-white shadow-[0_4px_20px_rgba(11,90,112,0.3)]'
+            }`}>
+              {shareToast.message}
+            </div>
+          </div>
         )}
       </div>
     );
