@@ -28,7 +28,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 const SankirtanWordmark = ({ className = "" }) => (
   <svg
     className={className}
-    viewBox="0 0 320 52"
+    viewBox="0 -12 320 68"
     xmlns="http://www.w3.org/2000/svg"
     role="img"
     aria-label="संकीर्तन"
@@ -4157,15 +4157,15 @@ const App = () => {
               <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
                 <div className="flex items-center gap-3 flex-wrap">
                   {/* Public ↔ Personal library switcher */}
-                  <div className={`inline-flex rounded-xl p-1.5 border ${darkMode ? 'bg-[#1e2e33] border-[#0B5A70]/20' : 'bg-[#0B5A70]/10 border-[#0B5A70]/20'}`}>
+                  <div className={`inline-flex rounded-xl p-1 border ${darkMode ? 'bg-[#1e2e33] border-[#0B5A70]/20' : 'bg-[#0B5A70]/10 border-[#0B5A70]/20'}`}>
                     <button
                       onClick={openPublicLibrary}
-                      className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${darkMode ? 'text-gray-400 hover:text-gray-200 hover:bg-[#0B5A70]/10' : 'text-[#0B5A70]/70 hover:text-[#0B5A70] hover:bg-white/50'}`}
+                      className={`px-3 py-1.5 rounded-lg text-sm font-bold transition-all ${darkMode ? 'text-gray-400 hover:text-gray-200 hover:bg-[#0B5A70]/10' : 'text-[#0B5A70]/70 hover:text-[#0B5A70] hover:bg-white/50'}`}
                     >
                       🌐 Public
                     </button>
                     <button
-                      className={`px-4 py-2 rounded-lg text-sm font-bold shadow-md ${darkMode ? 'bg-[#0B5A70]/30 text-gray-100' : 'bg-white text-[#0B5A70] border border-[#0B5A70]/15'}`}
+                      className={`px-3 py-1.5 rounded-lg text-sm font-bold shadow-sm ${darkMode ? 'bg-[#0B5A70]/30 text-gray-100' : 'bg-white text-[#0B5A70] border border-[#0B5A70]/15'}`}
                     >
                       📚 My Library
                     </button>
@@ -5839,15 +5839,15 @@ const App = () => {
               <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
                 <div className="flex items-center gap-3 flex-wrap">
                   {/* Public ↔ Personal library switcher */}
-                  <div className={`inline-flex rounded-xl p-1.5 border ${darkMode ? 'bg-[#1e2e33] border-[#0B5A70]/20' : 'bg-[#0B5A70]/10 border-[#0B5A70]/20'}`}>
+                  <div className={`inline-flex rounded-xl p-1 border ${darkMode ? 'bg-[#1e2e33] border-[#0B5A70]/20' : 'bg-[#0B5A70]/10 border-[#0B5A70]/20'}`}>
                     <button
-                      className={`px-4 py-2 rounded-lg text-sm font-bold shadow-md ${darkMode ? 'bg-[#0B5A70]/30 text-gray-100' : 'bg-white text-[#0B5A70] border border-[#0B5A70]/15'}`}
+                      className={`px-3 py-1.5 rounded-lg text-sm font-bold shadow-sm ${darkMode ? 'bg-[#0B5A70]/30 text-gray-100' : 'bg-white text-[#0B5A70] border border-[#0B5A70]/15'}`}
                     >
                       🌐 Public
                     </button>
                     <button
                       onClick={() => { if (guestMode && !user) { setGuestMode(false); } else { setCurrentView('library'); } }}
-                      className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${darkMode ? 'text-gray-400 hover:text-gray-200 hover:bg-[#0B5A70]/10' : 'text-[#0B5A70]/70 hover:text-[#0B5A70] hover:bg-white/50'}`}
+                      className={`px-3 py-1.5 rounded-lg text-sm font-bold transition-all ${darkMode ? 'text-gray-400 hover:text-gray-200 hover:bg-[#0B5A70]/10' : 'text-[#0B5A70]/70 hover:text-[#0B5A70] hover:bg-white/50'}`}
                     >
                       📚 My Library
                     </button>
