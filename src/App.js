@@ -405,6 +405,19 @@ const App = () => {
   // Progressive rendering - show first N cards, load more as user scrolls.
   // Keeps initial DOM small (~20 nodes instead of 175) which speeds up
   // first paint significantly, especially on lower-end phones.
+
+  // Global ESC key handler — closes the topmost open modal/popup
+  useEffect(() => {
+    const handleEsc = (e) => {
+      if (e.key !== 'Escape') return;
+      if (showBhajanPicker) { setShowBhajanPicker(false); return; }
+      if (showReadingSettings) { setShowReadingSettings(false); return; }
+      if (showOnboarding) { setShowOnboarding(false); return; }
+      if (showPhoneLogin) { setShowPhoneLogin(false); return; }
+    };
+    document.addEventListener('keydown', handleEsc);
+    return () => document.removeEventListener('keydown', handleEsc);
+  }, [showBhajanPicker, showReadingSettings, showOnboarding, showPhoneLogin]);
   const PAGE_SIZE = 20;
   const [publicVisibleCount, setPublicVisibleCount] = useState(PAGE_SIZE);
   const [libraryVisibleCount, setLibraryVisibleCount] = useState(PAGE_SIZE);
@@ -3643,8 +3656,8 @@ const App = () => {
             ONBOARDING TOUR MODAL
             ============================================== */}
         {showOnboarding && currentStep && (
-          <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 ">
-            <div className="bg-[#FFFCF8] rounded-3xl shadow-[0_8px_40px_rgba(11,90,112,0.15)] max-w-md w-full overflow-hidden">
+          <div onClick={() => { setShowOnboarding(false); }} className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4">
+            <div onClick={(e) => e.stopPropagation()} className="bg-[#FFFCF8] rounded-3xl shadow-[0_8px_40px_rgba(11,90,112,0.15)] max-w-md w-full overflow-hidden">
               {/* Header with gradient */}
               <div className="bg-[#0B5A70] p-6 text-white text-center relative">
                 {/* Skip button */}
@@ -3848,8 +3861,8 @@ const App = () => {
             READING SETTINGS MODAL
             ============================================== */}
         {showReadingSettings && (
-          <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4">
-            <div className={`rounded-3xl shadow-[0_8px_40px_rgba(11,90,112,0.15)] max-w-sm w-full overflow-hidden ${darkMode ? 'bg-[#162226] text-gray-100' : 'bg-[#FFFCF8]'}`}>
+          <div onClick={() => setShowReadingSettings(false)} className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4">
+            <div onClick={(e) => e.stopPropagation()} className={`rounded-3xl shadow-[0_8px_40px_rgba(11,90,112,0.15)] max-w-sm w-full overflow-hidden ${darkMode ? 'bg-[#162226] text-gray-100' : 'bg-[#FFFCF8]'}`}>
               <div className={`p-6 text-center ${darkMode ? 'bg-[#1e2e33]' : 'bg-[#0B5A70]'} text-white`}>
                 <div className="text-5xl mb-2">📖</div>
                 <h3 className="text-2xl font-bold">Reading View</h3>
@@ -4224,10 +4237,10 @@ const App = () => {
                 <select
                   value={filterDeity}
                   onChange={(e) => setFilterDeity(e.target.value)}
-                  className={`flex-1 min-w-[110px] px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none text-sm bg-[#FFFCF8] transition-all ${
+                  className={`flex-1 min-w-[110px] px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none text-sm transition-all ${darkMode ? 'bg-[#162226] text-gray-200' : 'bg-[#FFFCF8]'} ${
                     filterDeity
-                      ? 'border-[#0B5A70]/50 ring-2 ring-[#0B5A70]/10 font-semibold text-[#0B5A70]'
-                      : 'border-[#0B5A70]/12'
+                      ? `border-[#0B5A70]/50 ring-2 ring-[#0B5A70]/10 font-semibold ${darkMode ? 'text-white' : 'text-[#0B5A70]'}`
+                      : `${darkMode ? 'border-[#0B5A70]/20' : 'border-[#0B5A70]/12'}`
                   }`}
                 >
                   <option value="">All Deities</option>
@@ -4239,10 +4252,10 @@ const App = () => {
                 <select
                   value={filterCategory}
                   onChange={(e) => setFilterCategory(e.target.value)}
-                  className={`flex-1 min-w-[110px] px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none text-sm bg-[#FFFCF8] transition-all ${
+                  className={`flex-1 min-w-[110px] px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none text-sm transition-all ${darkMode ? 'bg-[#162226] text-gray-200' : 'bg-[#FFFCF8]'} ${
                     filterCategory
-                      ? 'border-[#0B5A70]/50 ring-2 ring-[#0B5A70]/10 font-semibold text-[#0B5A70]'
-                      : 'border-[#0B5A70]/12'
+                      ? `border-[#0B5A70]/50 ring-2 ring-[#0B5A70]/10 font-semibold ${darkMode ? 'text-white' : 'text-[#0B5A70]'}`
+                      : `${darkMode ? 'border-[#0B5A70]/20' : 'border-[#0B5A70]/12'}`
                   }`}
                 >
                   <option value="">All Categories</option>
@@ -4254,10 +4267,10 @@ const App = () => {
                 <select
                   value={libraryFilterKeyword}
                   onChange={(e) => setLibraryFilterKeyword(e.target.value)}
-                  className={`flex-1 min-w-[110px] px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none text-sm bg-[#FFFCF8] transition-all ${
+                  className={`flex-1 min-w-[110px] px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none text-sm transition-all ${darkMode ? 'bg-[#162226] text-gray-200' : 'bg-[#FFFCF8]'} ${
                     libraryFilterKeyword
-                      ? 'border-[#0B5A70]/50 ring-2 ring-[#0B5A70]/10 font-semibold text-[#0B5A70]'
-                      : 'border-[#0B5A70]/12'
+                      ? `border-[#0B5A70]/50 ring-2 ring-[#0B5A70]/10 font-semibold ${darkMode ? 'text-white' : 'text-[#0B5A70]'}`
+                      : `${darkMode ? 'border-[#0B5A70]/20' : 'border-[#0B5A70]/12'}`
                   }`}
                 >
                   <option value="">All Keywords</option>
@@ -4277,7 +4290,7 @@ const App = () => {
                     className={`px-3 py-1 rounded-full text-xs font-semibold transition-all ${
                       libraryFilterKeyword === kw
                         ? 'bg-[#0B5A70] text-white shadow-md'
-                        : 'bg-[#0B5A70]/5 text-[#0B5A70] border border-[#0B5A70]/12 hover:bg-[#0B5A70]/10'
+                        : `${darkMode ? 'bg-[#0B5A70]/15 text-teal-300 border border-[#0B5A70]/25 hover:bg-[#0B5A70]/25' : 'bg-[#0B5A70]/5 text-[#0B5A70] border border-[#0B5A70]/12 hover:bg-[#0B5A70]/10'}`
                     }`}
                   >
                     {libraryFilterKeyword === kw ? '✓ ' : ''}#{kw}
@@ -4392,22 +4405,22 @@ const App = () => {
                         className={`rounded-2xl p-5 border transition-all text-left ${darkMode ? 'bg-[#162226] border-[#0B5A70]/15 shadow-[0_2px_12px_rgba(11,90,112,0.15)] hover:border-[#0B5A70]/30 hover:shadow-[0_4px_20px_rgba(11,90,112,0.25)]' : 'bg-[#FFFCF8] border-[#0B5A70]/8 shadow-[0_2px_12px_rgba(11,90,112,0.06)] hover:border-[#0B5A70]/25 hover:shadow-[0_4px_20px_rgba(11,90,112,0.12)]'}`}
                       >
                         <div className="flex items-start justify-between mb-2">
-                          <h3 className="text-lg font-bold text-[#0B5A70] flex-1 line-clamp-2">
+                          <h3 className={`text-lg font-bold flex-1 line-clamp-2 ${darkMode ? 'text-amber-100' : 'text-[#0B5A70]'}`}>
                             {bhajan.title}
                           </h3>
                         </div>
 
                         {bhajan.dhun && (
-                          <p className="text-xs text-[#E65100] mb-2">
+                          <p className={`text-xs mb-2 ${darkMode ? 'text-orange-200' : 'text-[#E65100]'}`}>
                             <span className="font-semibold">तर्ज़:</span> {bhajan.dhun}
                           </p>
                         )}
 
                         <div className="flex flex-wrap gap-1 mb-2">
-                          <span className="text-xs bg-[#0B5A70]/8 text-[#0B5A70] px-2 py-1 rounded-full">
+                          <span className={`text-xs px-2 py-1 rounded-full ${darkMode ? 'bg-[#0B5A70]/20 text-teal-300' : 'bg-[#0B5A70]/8 text-[#0B5A70]'}`}>
                             {bhajan.deity}
                           </span>
-                          <span className="text-xs bg-[#E65100]/8 text-[#E65100] px-2 py-1 rounded-full">
+                          <span className={`text-xs px-2 py-1 rounded-full ${darkMode ? 'bg-[#E65100]/15 text-orange-300' : 'bg-[#E65100]/8 text-[#E65100]'}`}>
                             {bhajan.category}
                           </span>
                           {bhajan.scale && (
@@ -4419,14 +4432,14 @@ const App = () => {
 
                         {/* Same defensive lyrics preview treatment as Public
                             Library - trim + max-height prevents card stretching. */}
-                        <p className="text-sm text-gray-600 line-clamp-3 mb-2 whitespace-pre-line max-h-16 overflow-hidden">
+                        <p className={`text-sm line-clamp-3 mb-2 whitespace-pre-line max-h-16 overflow-hidden ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
                           {(bhajan.lyrics || '').trim()}
                         </p>
 
                         {bhajan.keywords && bhajan.keywords.length > 0 && (
                           <div className="flex flex-wrap gap-1">
                             {bhajan.keywords.slice(0, 4).map(kw => (
-                              <span key={kw} className="text-xs bg-[#0B5A70]/5 text-[#0B5A70]/70 px-2 py-0.5 rounded-full">
+                              <span key={kw} className={`text-xs px-2 py-0.5 rounded-full ${darkMode ? 'bg-[#0B5A70]/15 text-teal-400' : 'bg-[#0B5A70]/5 text-[#0B5A70]/70'}`}>
                                 #{kw}
                               </span>
                             ))}
@@ -4450,6 +4463,12 @@ const App = () => {
                     <p className="text-xs text-gray-400 mt-1">
                       Showing {libraryVisibleCount} of {filteredBhajans.length}
                     </p>
+                    <button
+                      onClick={() => setLibraryVisibleCount(prev => prev + PAGE_SIZE * 3)}
+                      className={`mt-2 text-xs font-semibold px-4 py-1.5 rounded-lg transition-all ${darkMode ? 'bg-[#0B5A70]/20 text-teal-300 hover:bg-[#0B5A70]/30' : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15'}`}
+                    >
+                      ↻ Load more
+                    </button>
                   </div>
                 )}
                 {libraryVisibleCount >= filteredBhajans.length && filteredBhajans.length > PAGE_SIZE && (
@@ -5065,7 +5084,7 @@ const App = () => {
                         className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
                           bhajanForm.keywords.includes(kw)
                             ? 'bg-[#0B5A70] text-white shadow-md'
-                            : 'bg-[#0B5A70]/5 text-[#0B5A70] border border-[#0B5A70]/12 hover:bg-[#0B5A70]/10'
+                            : `${darkMode ? 'bg-[#0B5A70]/15 text-teal-300 border border-[#0B5A70]/25 hover:bg-[#0B5A70]/25' : 'bg-[#0B5A70]/5 text-[#0B5A70] border border-[#0B5A70]/12 hover:bg-[#0B5A70]/10'}`
                         }`}
                       >
                         {bhajanForm.keywords.includes(kw) ? '✓ ' : ''}#{kw}
@@ -5572,8 +5591,8 @@ const App = () => {
                 const hasActiveFilters = bhajanPickerSearch || pickerDeityFilter || pickerCategoryFilter || pickerKeywordFilter;
 
                 return (
-                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-                  <div className="bg-[#FFFCF8] rounded-2xl shadow-[0_8px_40px_rgba(11,90,112,0.15)] max-w-lg w-full max-h-[85vh] flex flex-col">
+                <div onClick={() => setShowBhajanPicker(false)} className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+                  <div onClick={(e) => e.stopPropagation()} className="bg-[#FFFCF8] rounded-2xl shadow-[0_8px_40px_rgba(11,90,112,0.15)] max-w-lg w-full max-h-[85vh] flex flex-col">
                     {/* Header */}
                     <div className="p-4 border-b border-[#0B5A70]/10 flex items-center justify-between">
                       <h3 className="text-lg font-bold text-[#0B5A70]">Add Bhajans to Program</h3>
@@ -5604,7 +5623,7 @@ const App = () => {
                           onChange={(e) => setPickerDeityFilter(e.target.value)}
                           className={`flex-1 px-2 py-1.5 border rounded-lg text-xs outline-none bg-[#FFFCF8] transition-all ${
                             pickerDeityFilter
-                              ? 'border-[#0B5A70]/50 ring-2 ring-[#0B5A70]/10 font-semibold text-[#0B5A70]'
+                              ? `border-[#0B5A70]/50 ring-2 ring-[#0B5A70]/10 font-semibold ${darkMode ? 'text-white' : 'text-[#0B5A70]'}`
                               : 'border-[#0B5A70]/15'
                           }`}
                         >
@@ -5616,7 +5635,7 @@ const App = () => {
                           onChange={(e) => setPickerCategoryFilter(e.target.value)}
                           className={`flex-1 px-2 py-1.5 border rounded-lg text-xs outline-none bg-[#FFFCF8] transition-all ${
                             pickerCategoryFilter
-                              ? 'border-[#0B5A70]/50 ring-2 ring-[#0B5A70]/10 font-semibold text-[#0B5A70]'
+                              ? `border-[#0B5A70]/50 ring-2 ring-[#0B5A70]/10 font-semibold ${darkMode ? 'text-white' : 'text-[#0B5A70]'}`
                               : 'border-[#0B5A70]/15'
                           }`}
                         >
@@ -5648,7 +5667,7 @@ const App = () => {
                               className={`text-xs px-2.5 py-1 rounded-full transition-all ${
                                 pickerKeywordFilter === kw
                                   ? 'bg-[#0B5A70] text-white shadow-md'
-                                  : 'bg-[#0B5A70]/5 text-[#0B5A70] border border-[#0B5A70]/12 hover:bg-[#0B5A70]/10'
+                                  : `${darkMode ? 'bg-[#0B5A70]/15 text-teal-300 border border-[#0B5A70]/25 hover:bg-[#0B5A70]/25' : 'bg-[#0B5A70]/5 text-[#0B5A70] border border-[#0B5A70]/12 hover:bg-[#0B5A70]/10'}`
                               }`}
                             >
                               #{kw}
@@ -5892,10 +5911,10 @@ const App = () => {
                 <select
                   value={publicFilterDeity}
                   onChange={(e) => setPublicFilterDeity(e.target.value)}
-                  className={`flex-1 min-w-[110px] px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none text-sm bg-[#FFFCF8] transition-all ${
+                  className={`flex-1 min-w-[110px] px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none text-sm transition-all ${darkMode ? 'bg-[#162226] text-gray-200' : 'bg-[#FFFCF8]'} ${
                     publicFilterDeity
-                      ? 'border-[#0B5A70]/50 ring-2 ring-[#0B5A70]/10 font-semibold text-[#0B5A70]'
-                      : 'border-[#0B5A70]/12'
+                      ? `border-[#0B5A70]/50 ring-2 ring-[#0B5A70]/10 font-semibold ${darkMode ? 'text-white' : 'text-[#0B5A70]'}`
+                      : `${darkMode ? 'border-[#0B5A70]/20' : 'border-[#0B5A70]/12'}`
                   }`}
                 >
                   <option value="">All Deities</option>
@@ -5907,10 +5926,10 @@ const App = () => {
                 <select
                   value={publicFilterCategory}
                   onChange={(e) => setPublicFilterCategory(e.target.value)}
-                  className={`flex-1 min-w-[110px] px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none text-sm bg-[#FFFCF8] transition-all ${
+                  className={`flex-1 min-w-[110px] px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none text-sm transition-all ${darkMode ? 'bg-[#162226] text-gray-200' : 'bg-[#FFFCF8]'} ${
                     publicFilterCategory
-                      ? 'border-[#0B5A70]/50 ring-2 ring-[#0B5A70]/10 font-semibold text-[#0B5A70]'
-                      : 'border-[#0B5A70]/12'
+                      ? `border-[#0B5A70]/50 ring-2 ring-[#0B5A70]/10 font-semibold ${darkMode ? 'text-white' : 'text-[#0B5A70]'}`
+                      : `${darkMode ? 'border-[#0B5A70]/20' : 'border-[#0B5A70]/12'}`
                   }`}
                 >
                   <option value="">All Categories</option>
@@ -5922,10 +5941,10 @@ const App = () => {
                 <select
                   value={publicFilterKeyword}
                   onChange={(e) => setPublicFilterKeyword(e.target.value)}
-                  className={`flex-1 min-w-[110px] px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none text-sm bg-[#FFFCF8] transition-all ${
+                  className={`flex-1 min-w-[110px] px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none text-sm transition-all ${darkMode ? 'bg-[#162226] text-gray-200' : 'bg-[#FFFCF8]'} ${
                     publicFilterKeyword
-                      ? 'border-[#0B5A70]/50 ring-2 ring-[#0B5A70]/10 font-semibold text-[#0B5A70]'
-                      : 'border-[#0B5A70]/12'
+                      ? `border-[#0B5A70]/50 ring-2 ring-[#0B5A70]/10 font-semibold ${darkMode ? 'text-white' : 'text-[#0B5A70]'}`
+                      : `${darkMode ? 'border-[#0B5A70]/20' : 'border-[#0B5A70]/12'}`
                   }`}
                 >
                   <option value="">All Keywords</option>
@@ -5945,7 +5964,7 @@ const App = () => {
                     className={`px-3 py-1 rounded-full text-xs font-semibold transition-all ${
                       publicFilterKeyword === kw
                         ? 'bg-[#0B5A70] text-white shadow-md'
-                        : 'bg-[#0B5A70]/5 text-[#0B5A70] border border-[#0B5A70]/12 hover:bg-[#0B5A70]/10'
+                        : `${darkMode ? 'bg-[#0B5A70]/15 text-teal-300 border border-[#0B5A70]/25 hover:bg-[#0B5A70]/25' : 'bg-[#0B5A70]/5 text-[#0B5A70] border border-[#0B5A70]/12 hover:bg-[#0B5A70]/10'}`
                     }`}
                   >
                     {publicFilterKeyword === kw ? '✓ ' : ''}#{kw}
@@ -6091,22 +6110,22 @@ const App = () => {
                           className="w-full text-left"
                         >
                           <div className="flex items-start justify-between mb-2">
-                            <h3 className="text-lg font-bold text-[#0B5A70] flex-1 line-clamp-2">
+                            <h3 className={`text-lg font-bold flex-1 line-clamp-2 ${darkMode ? 'text-amber-100' : 'text-[#0B5A70]'}`}>
                               {bhajan.title}
                             </h3>
                           </div>
 
                           {bhajan.dhun && (
-                            <p className="text-xs text-[#E65100] mb-2">
+                            <p className={`text-xs mb-2 ${darkMode ? 'text-orange-200' : 'text-[#E65100]'}`}>
                               <span className="font-semibold">तर्ज़:</span> {bhajan.dhun}
                             </p>
                           )}
 
                           <div className="flex flex-wrap gap-1 mb-2">
-                            <span className="text-xs bg-[#0B5A70]/8 text-[#0B5A70] px-2 py-1 rounded-full">
+                            <span className={`text-xs px-2 py-1 rounded-full ${darkMode ? 'bg-[#0B5A70]/20 text-teal-300' : 'bg-[#0B5A70]/8 text-[#0B5A70]'}`}>
                               {bhajan.deity}
                             </span>
-                            <span className="text-xs bg-[#E65100]/8 text-[#E65100] px-2 py-1 rounded-full">
+                            <span className={`text-xs px-2 py-1 rounded-full ${darkMode ? 'bg-[#E65100]/15 text-orange-300' : 'bg-[#E65100]/8 text-[#E65100]'}`}>
                               {bhajan.category}
                             </span>
                           </div>
@@ -6115,14 +6134,14 @@ const App = () => {
                               rendering bug where line-clamp + whitespace-pre-line
                               can leak height on iOS Safari when lyrics have many
                               trailing newlines or whitespace-only lines. */}
-                          <p className="text-sm text-gray-600 line-clamp-3 mb-2 whitespace-pre-line max-h-16 overflow-hidden">
+                          <p className={`text-sm line-clamp-3 mb-2 whitespace-pre-line max-h-16 overflow-hidden ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
                             {(bhajan.lyrics || '').trim()}
                           </p>
 
                           {bhajan.keywords && bhajan.keywords.length > 0 && (
                             <div className="flex flex-wrap gap-1 mb-3">
                               {bhajan.keywords.slice(0, 4).map(kw => (
-                                <span key={kw} className="text-xs bg-[#0B5A70]/5 text-[#0B5A70]/70 px-2 py-0.5 rounded-full">
+                                <span key={kw} className={`text-xs px-2 py-0.5 rounded-full ${darkMode ? 'bg-[#0B5A70]/15 text-teal-400' : 'bg-[#0B5A70]/5 text-[#0B5A70]/70'}`}>
                                   #{kw}
                                 </span>
                               ))}
@@ -6149,7 +6168,7 @@ const App = () => {
                         </div>
 
                         {(bhajan.saveCount > 0) && (
-                          <p className="text-xs text-[#0B5A70]/40 mt-2 text-center">
+                          <p className={`text-xs mt-2 text-center ${darkMode ? 'text-gray-500' : 'text-[#0B5A70]/40'}`}>
                             ✨ Added by {bhajan.saveCount} {bhajan.saveCount === 1 ? 'person' : 'people'}
                           </p>
                         )}
@@ -6170,6 +6189,12 @@ const App = () => {
                     <p className="text-xs text-gray-400 mt-1">
                       Showing {publicVisibleCount} of {filteredPublicBhajans.length}
                     </p>
+                    <button
+                      onClick={() => setPublicVisibleCount(prev => prev + PAGE_SIZE * 3)}
+                      className={`mt-2 text-xs font-semibold px-4 py-1.5 rounded-lg transition-all ${darkMode ? 'bg-[#0B5A70]/20 text-teal-300 hover:bg-[#0B5A70]/30' : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15'}`}
+                    >
+                      ↻ Load more
+                    </button>
                   </div>
                 )}
                 {publicVisibleCount >= filteredPublicBhajans.length && filteredPublicBhajans.length > PAGE_SIZE && (
@@ -7269,7 +7294,7 @@ const App = () => {
                         className={`px-3 py-1.5 rounded-full text-sm font-medium ${
                           publicBhajanForm.keywords.includes(kw)
                             ? 'bg-[#0B5A70] text-white shadow-md'
-                            : 'bg-[#0B5A70]/5 text-[#0B5A70] border border-[#0B5A70]/12 hover:bg-[#0B5A70]/10'
+                            : `${darkMode ? 'bg-[#0B5A70]/15 text-teal-300 border border-[#0B5A70]/25 hover:bg-[#0B5A70]/25' : 'bg-[#0B5A70]/5 text-[#0B5A70] border border-[#0B5A70]/12 hover:bg-[#0B5A70]/10'}`
                         }`}
                       >
                         {publicBhajanForm.keywords.includes(kw) ? '✓ ' : ''}#{kw}
@@ -7540,15 +7565,35 @@ const App = () => {
                 <button
                   onClick={handleGoogleLogin}
                   disabled={authLoading}
-                  className="w-full bg-white border border-[#0B5A70]/20 hover:border-[#E65100]/50 hover:bg-[#FFF8F0] transition-all flex items-center justify-center gap-3 py-3 px-4 rounded-xl font-semibold text-gray-700 disabled:opacity-50"
+                  className="w-full bg-white border-2 border-[#0B5A70]/20 hover:border-[#E65100]/50 hover:bg-[#FFF8F0] transition-all flex items-center justify-center gap-3 py-4 px-4 rounded-xl font-bold text-gray-700 disabled:opacity-50 text-base shadow-sm"
                 >
-                  <svg className="w-5 h-5" viewBox="0 0 48 48">
+                  <svg className="w-6 h-6" viewBox="0 0 48 48">
                     <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
                     <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
                     <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
                     <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
                   </svg>
-                  {authLoading ? 'Signing in...' : 'Continue with Google'}
+                  {authLoading ? 'Signing in...' : 'Sign in with Google'}
+                </button>
+
+                <p className="text-[11px] text-[#0B5A70]/40 text-center">One tap sign-in — no passwords needed</p>
+
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 border-t border-[#0B5A70]/15"></div>
+                  <span className="text-[10px] text-[#0B5A70]/50 uppercase tracking-wider font-semibold">or</span>
+                  <div className="flex-1 border-t border-[#0B5A70]/15"></div>
+                </div>
+
+                <button
+                  onClick={() => {
+                    setUser(null);
+                    setLoading(false);
+                    setSplashVisible(false);
+                    setCurrentView('public-library');
+                  }}
+                  className="w-full bg-transparent border border-[#0B5A70]/15 hover:border-[#0B5A70]/30 hover:bg-[#0B5A70]/5 transition-all py-3 px-4 rounded-xl font-semibold text-[#0B5A70]/70 text-sm"
+                >
+                  Browse Public Library as Guest →
                 </button>
 
                 {/* Phone login temporarily hidden - will be enabled when Blaze plan is active */}
@@ -7567,7 +7612,7 @@ const App = () => {
                   </div>
                 )}
 
-                <div className="flex items-center gap-3 my-4">
+                <div className="flex items-center gap-3 my-2">
                   <div className="flex-1 border-t border-[#0B5A70]/15"></div>
                   <span className="text-[10px] text-[#0B5A70]/50 uppercase tracking-wider font-semibold">What you'll do</span>
                   <div className="flex-1 border-t border-[#0B5A70]/15"></div>
