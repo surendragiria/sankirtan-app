@@ -1428,7 +1428,7 @@ const App = () => {
   // LOAD PUBLIC LIBRARY BHAJANS
   // ==============================================
   useEffect(() => {
-    if (!user) {
+    if (!user && !guestMode) {
       setPublicBhajans([]);
       return;
     }
@@ -1552,7 +1552,7 @@ const App = () => {
     }
 
     return () => unsubscribe();
-  }, [user]);
+  }, [user, guestMode]);
 
   // Track which public bhajans user has already saved
   useEffect(() => {
