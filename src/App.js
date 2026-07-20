@@ -18,30 +18,36 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 // ==============================================
 
 // ==============================================
-// SANKIRTAN WORDMARK COMPONENT
+// SANKIRTAN WORDMARK COMPONENT (Devanagari)
 // ==============================================
-// Sankirtan wordmark - text converted to SVG paths (Poppins Bold).
-// Renders identically on every device with no font dependency.
-// Tight viewBox for use in header (no tagline - shown on splash/login).
+// संकीर्तन. wordmark in Devanagari — Option A color split:
+//   सं = brand teal (#0B5A70)
+//   कीर्तन. = brand saffron (#E65100)
+// Uses system Devanagari font (Noto Sans Devanagari / system-ui).
+// viewBox tuned so the wordmark scales correctly via className height.
 const SankirtanWordmark = ({ className = "" }) => (
   <svg
     className={className}
-    viewBox="0 0 1089 305"
+    viewBox="0 0 320 52"
     xmlns="http://www.w3.org/2000/svg"
     role="img"
-    aria-label="Sankirtan"
+    aria-label="संकीर्तन"
   >
-    <title>Sankirtan</title>
-    <g transform="translate(15.00 220.00) scale(0.200000 -0.200000)"><path d="M32 183H201Q204 154 228.0 136.0Q252 118 287 118Q319 118 336.5 130.5Q354 143 354 163Q354 187 329.0 198.5Q304 210 248 224Q188 238 148.0 253.5Q108 269 79.0 302.5Q50 336 50 393Q50 441 76.5 480.5Q103 520 154.5 543.0Q206 566 277 566Q382 566 442.5 514.0Q503 462 512 376H354Q350 405 328.5 422.0Q307 439 272 439Q242 439 226.0 427.5Q210 416 210 396Q210 372 235.5 360.0Q261 348 315 336Q377 320 416.0 304.5Q455 289 484.5 254.5Q514 220 515 162Q515 113 487.5 74.5Q460 36 408.5 14.0Q357 -8 289 -8Q216 -8 159.0 17.0Q102 42 69.0 85.5Q36 129 32 183Z" fill="#E65100"/></g>
-    <g transform="translate(126.60 220.00) scale(0.200000 -0.200000)"><path d="M274 566Q333 566 377.5 542.0Q422 518 446 479V558H617V0H446V79Q421 40 376.5 16.0Q332 -8 273 -8Q205 -8 149.0 27.5Q93 63 60.5 128.5Q28 194 28 280Q28 366 60.5 431.0Q93 496 149.0 531.0Q205 566 274 566ZM324 417Q273 417 237.5 380.5Q202 344 202 280Q202 216 237.5 178.5Q273 141 324 141Q375 141 410.5 178.0Q446 215 446 279Q446 343 410.5 380.0Q375 417 324 417Z" fill="#E65100"/></g>
-    <g transform="translate(262.40 220.00) scale(0.200000 -0.200000)"><path d="M617 326V0H447V303Q447 359 418.0 390.0Q389 421 340 421Q291 421 262.0 390.0Q233 359 233 303V0H62V558H233V484Q259 521 303.0 542.5Q347 564 402 564Q500 564 558.5 500.5Q617 437 617 326Z" fill="#E65100"/></g>
-    <g transform="translate(397.20 220.00) scale(0.200000 -0.200000)"><path d="M403 0 233 234V0H62V740H233V331L402 558H613L381 278L615 0Z" fill="#0B5A70"/></g>
-    <g transform="translate(520.80 220.00) scale(0.200000 -0.200000)"><path d="M46 708Q46 748 74.5 774.5Q103 801 148 801Q192 801 220.5 774.5Q249 748 249 708Q249 669 220.5 642.5Q192 616 148 616Q103 616 74.5 642.5Q46 669 46 708ZM233 558V0H62V558Z" fill="#0B5A70"/></g>
-    <g transform="translate(579.80 220.00) scale(0.200000 -0.200000)"><path d="M408 564V383H361Q297 383 265.0 355.5Q233 328 233 259V0H62V558H233V465Q263 511 308.0 537.5Q353 564 408 564Z" fill="#0B5A70"/></g>
-    <g transform="translate(665.40 220.00) scale(0.200000 -0.200000)"><path d="M373 145V0H286Q193 0 141.0 45.5Q89 91 89 194V416H21V558H89V694H260V558H372V416H260V192Q260 167 272.0 156.0Q284 145 312 145Z" fill="#0B5A70"/></g>
-    <g transform="translate(746.60 220.00) scale(0.200000 -0.200000)"><path d="M274 566Q333 566 377.5 542.0Q422 518 446 479V558H617V0H446V79Q421 40 376.5 16.0Q332 -8 273 -8Q205 -8 149.0 27.5Q93 63 60.5 128.5Q28 194 28 280Q28 366 60.5 431.0Q93 496 149.0 531.0Q205 566 274 566ZM324 417Q273 417 237.5 380.5Q202 344 202 280Q202 216 237.5 178.5Q273 141 324 141Q375 141 410.5 178.0Q446 215 446 279Q446 343 410.5 380.0Q375 417 324 417Z" fill="#0B5A70"/></g>
-    <g transform="translate(882.40 220.00) scale(0.200000 -0.200000)"><path d="M617 326V0H447V303Q447 359 418.0 390.0Q389 421 340 421Q291 421 262.0 390.0Q233 359 233 303V0H62V558H233V484Q259 521 303.0 542.5Q347 564 402 564Q500 564 558.5 500.5Q617 437 617 326Z" fill="#0B5A70"/></g>
-    <g transform="translate(1017.20 220.00) scale(0.200000 -0.200000)"><path d="M40 84Q40 124 68.5 151.0Q97 178 142 178Q186 178 214.5 151.0Q243 124 243 84Q243 45 214.5 18.5Q186 -8 142 -8Q97 -8 68.5 18.5Q40 45 40 84Z" fill="#E65100"/></g>
+    <title>संकीर्तन</title>
+    <text
+      x="0"
+      y="42"
+      style={{
+        fontFamily: "'Noto Sans Devanagari', 'Mangal', system-ui, sans-serif",
+        fontSize: '46px',
+        fontWeight: 700,
+        letterSpacing: '-0.01em',
+      }}
+    >
+      <tspan fill="#0B5A70">सं</tspan>
+      <tspan fill="#E65100">कीर्तन</tspan>
+      <tspan fill="#E65100">.</tspan>
+    </text>
   </svg>
 );
 
