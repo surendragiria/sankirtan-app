@@ -253,6 +253,9 @@ const App = () => {
   const [programFormSaving, setProgramFormSaving] = useState(false);
   const [showBhajanPicker, setShowBhajanPicker] = useState(false);
   const [bhajanPickerSearch, setBhajanPickerSearch] = useState('');
+  const [pickerDeityFilter, setPickerDeityFilter] = useState('');
+  const [pickerCategoryFilter, setPickerCategoryFilter] = useState('');
+  const [pickerKeywordFilter, setPickerKeywordFilter] = useState('');
   
   // Program form
   const [programForm, setProgramForm] = useState({
@@ -5350,6 +5353,9 @@ const App = () => {
                       onClick={() => {
                         setShowBhajanPicker(true);
                         setBhajanPickerSearch('');
+                        setPickerDeityFilter('');
+                        setPickerCategoryFilter('');
+                        setPickerKeywordFilter('');
                       }}
                       className="bg-[#0B5A70]/8 hover:bg-[#0B5A70]/15 text-[#0B5A70] font-semibold px-3 py-1.5 rounded-lg text-sm"
                     >
@@ -5455,11 +5461,58 @@ const App = () => {
               </div>
 
               {/* Bhajan Picker Modal */}
-              {showBhajanPicker && (
+              {showBhajanPicker && (() => {
+                // Collect unique deities, categories, and keywords from user's library
+                const pickerDeities = [...new Set(bhajans.map(b => b.deity).filter(Boolean))].sort();
+                const pickerCategories = [...new Set(bhajans.map(b => b.category).filter(Boolean))].sort();
+                const allKeywordsMap = {};
+                bhajans.forEach(b => {
+                  (b.keywords || []).forEach(kw => {
+                    allKeywordsMap[kw] = (allKeywordsMap[kw] || 0) + 1;
+                  });
+                });
+                const topKeywords = Object.entries(allKeywordsMap)
+                  .sort((a, b) => b[1] - a[1])
+                  .slice(0, 15)
+                  .map(([kw]) => kw);
+
+                // Gather keywords from bhajans already in the program for "Related" suggestions
+                const programKeywords = new Set();
+                programForm.bhajanIds.forEach(id => {
+                  const b = getBhajanById(id);
+                  if (b && b.keywords) b.keywords.forEach(kw => programKeywords.add(kw));
+                });
+
+                // Filter bhajans
+                const searchLower = bhajanPickerSearch.toLowerCase();
+                const filteredPickerBhajans = bhajans.filter(b => {
+                  if (bhajanPickerSearch && !(
+                    b.title.toLowerCase().includes(searchLower) ||
+                    (b.lyrics && b.lyrics.toLowerCase().includes(searchLower)) ||
+                    (b.keywords && b.keywords.some(kw => kw.toLowerCase().includes(searchLower)))
+                  )) return false;
+                  if (pickerDeityFilter && b.deity !== pickerDeityFilter) return false;
+                  if (pickerCategoryFilter && b.category !== pickerCategoryFilter) return false;
+                  if (pickerKeywordFilter && !(b.keywords && b.keywords.includes(pickerKeywordFilter))) return false;
+                  return true;
+                });
+
+                // Related bhajans: not already in program, share keywords with program bhajans
+                const relatedBhajans = programKeywords.size > 0 && !bhajanPickerSearch && !pickerDeityFilter && !pickerCategoryFilter && !pickerKeywordFilter
+                  ? bhajans.filter(b => {
+                      if (programForm.bhajanIds.includes(b.id)) return false;
+                      return b.keywords && b.keywords.some(kw => programKeywords.has(kw));
+                    }).slice(0, 8)
+                  : [];
+
+                const hasActiveFilters = bhajanPickerSearch || pickerDeityFilter || pickerCategoryFilter || pickerKeywordFilter;
+
+                return (
                 <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-                  <div className="bg-[#FFFCF8] rounded-2xl shadow-[0_8px_40px_rgba(11,90,112,0.15)] max-w-lg w-full max-h-[80vh] flex flex-col">
+                  <div className="bg-[#FFFCF8] rounded-2xl shadow-[0_8px_40px_rgba(11,90,112,0.15)] max-w-lg w-full max-h-[85vh] flex flex-col">
+                    {/* Header */}
                     <div className="p-4 border-b border-[#0B5A70]/10 flex items-center justify-between">
-                      <h3 className="text-lg font-bold text-[#0B5A70]">Add Bhajan to Program</h3>
+                      <h3 className="text-lg font-bold text-[#0B5A70]">Add Bhajans to Program</h3>
                       <button
                         onClick={() => setShowBhajanPicker(false)}
                         className="text-gray-500 hover:text-gray-700 text-2xl leading-none"
@@ -5467,16 +5520,81 @@ const App = () => {
                         ×
                       </button>
                     </div>
-                    <div className="p-4 border-b border-[#0B5A70]/10">
+
+                    {/* Search + Filters */}
+                    <div className="p-4 border-b border-[#0B5A70]/10 space-y-3">
+                      {/* Search bar */}
                       <input
                         type="text"
                         value={bhajanPickerSearch}
                         onChange={(e) => setBhajanPickerSearch(e.target.value)}
-                        placeholder="🔍 Search your library..."
-                        className="w-full px-3 py-2 border border-[#0B5A70]/15 rounded-lg focus:ring-2 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none text-sm"
+                        placeholder="🔍 Search by title, lyrics, or keyword..."
+                        className="w-full px-3 py-2.5 border border-[#0B5A70]/15 rounded-lg focus:ring-2 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none text-sm bg-white"
                         autoFocus
                       />
+
+                      {/* Filter row */}
+                      <div className="flex gap-2">
+                        <select
+                          value={pickerDeityFilter}
+                          onChange={(e) => setPickerDeityFilter(e.target.value)}
+                          className={`flex-1 px-2 py-1.5 border rounded-lg text-xs outline-none bg-[#FFFCF8] transition-all ${
+                            pickerDeityFilter
+                              ? 'border-[#0B5A70]/50 ring-2 ring-[#0B5A70]/10 font-semibold text-[#0B5A70]'
+                              : 'border-[#0B5A70]/15'
+                          }`}
+                        >
+                          <option value="">All Deities</option>
+                          {pickerDeities.map(d => <option key={d} value={d}>{d}</option>)}
+                        </select>
+                        <select
+                          value={pickerCategoryFilter}
+                          onChange={(e) => setPickerCategoryFilter(e.target.value)}
+                          className={`flex-1 px-2 py-1.5 border rounded-lg text-xs outline-none bg-[#FFFCF8] transition-all ${
+                            pickerCategoryFilter
+                              ? 'border-[#0B5A70]/50 ring-2 ring-[#0B5A70]/10 font-semibold text-[#0B5A70]'
+                              : 'border-[#0B5A70]/15'
+                          }`}
+                        >
+                          <option value="">All Categories</option>
+                          {pickerCategories.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                        {hasActiveFilters && (
+                          <button
+                            onClick={() => {
+                              setBhajanPickerSearch('');
+                              setPickerDeityFilter('');
+                              setPickerCategoryFilter('');
+                              setPickerKeywordFilter('');
+                            }}
+                            className="text-xs text-red-600 hover:text-red-800 whitespace-nowrap px-2"
+                          >
+                            Clear
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Keyword chips */}
+                      {topKeywords.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5">
+                          {topKeywords.map(kw => (
+                            <button
+                              key={kw}
+                              onClick={() => setPickerKeywordFilter(pickerKeywordFilter === kw ? '' : kw)}
+                              className={`text-xs px-2.5 py-1 rounded-full transition-all ${
+                                pickerKeywordFilter === kw
+                                  ? 'bg-[#0B5A70] text-white shadow-md'
+                                  : 'bg-[#0B5A70]/5 text-[#0B5A70] border border-[#0B5A70]/12 hover:bg-[#0B5A70]/10'
+                              }`}
+                            >
+                              #{kw}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
+
+                    {/* Scrollable list */}
                     <div className="flex-1 overflow-y-auto p-4">
                       {bhajans.length === 0 ? (
                         <div className="text-center py-8">
@@ -5484,42 +5602,120 @@ const App = () => {
                           <p className="text-sm text-gray-600 mt-1">Add bhajans to your library first</p>
                         </div>
                       ) : (
-                        <div className="space-y-2">
-                          {bhajans
-                            .filter(b => !bhajanPickerSearch || 
-                              b.title.toLowerCase().includes(bhajanPickerSearch.toLowerCase()) ||
-                              (b.lyrics && b.lyrics.toLowerCase().includes(bhajanPickerSearch.toLowerCase())))
-                            .map(bhajan => {
-                              const isAdded = programForm.bhajanIds.includes(bhajan.id);
-                              return (
-                                <button
-                                  key={bhajan.id}
-                                  onClick={() => !isAdded && addBhajanToProgram(bhajan.id)}
-                                  disabled={isAdded}
-                                  className={`w-full text-left p-3 rounded-xl border transition-all ${
-                                    isAdded 
-                                      ? 'bg-green-50 border-green-200 opacity-60 cursor-not-allowed'
-                                      : 'bg-white border-[#0B5A70]/10 hover:border-[#0B5A70]/25'
-                                  }`}
-                                >
-                                  <div className="flex items-center justify-between">
-                                    <div className="flex-1 min-w-0">
-                                      <p className="font-semibold text-[#0B5A70] truncate">{bhajan.title}</p>
-                                      <p className="text-xs text-gray-600 truncate">
-                                        {bhajan.deity} • {bhajan.category}
-                                      </p>
+                        <>
+                          {/* Related Bhajans Section - only when no active filters */}
+                          {relatedBhajans.length > 0 && (
+                            <div className="mb-4">
+                              <p className="text-xs font-semibold text-[#E65100] uppercase tracking-wide mb-2 flex items-center gap-1">
+                                <span>✨</span> Suggested based on program keywords
+                              </p>
+                              <div className="space-y-1.5">
+                                {relatedBhajans.map(bhajan => {
+                                  const isAdded = programForm.bhajanIds.includes(bhajan.id);
+                                  const matchedKws = (bhajan.keywords || []).filter(kw => programKeywords.has(kw));
+                                  return (
+                                    <button
+                                      key={`rel-${bhajan.id}`}
+                                      onClick={() => !isAdded && addBhajanToProgram(bhajan.id)}
+                                      disabled={isAdded}
+                                      className={`w-full text-left p-3 rounded-xl border transition-all ${
+                                        isAdded 
+                                          ? 'bg-green-50 border-green-200 opacity-60 cursor-not-allowed'
+                                          : 'bg-[#E65100]/3 border-[#E65100]/15 hover:border-[#E65100]/30'
+                                      }`}
+                                    >
+                                      <div className="flex items-center justify-between">
+                                        <div className="flex-1 min-w-0">
+                                          <p className="font-semibold text-[#0B5A70] truncate text-sm">{bhajan.title}</p>
+                                          <p className="text-xs text-gray-600 truncate">
+                                            {bhajan.deity} • {bhajan.category}
+                                          </p>
+                                          {matchedKws.length > 0 && (
+                                            <div className="flex flex-wrap gap-1 mt-1">
+                                              {matchedKws.slice(0, 3).map(kw => (
+                                                <span key={kw} className="text-[10px] bg-[#E65100]/8 text-[#E65100] px-1.5 py-0.5 rounded-full">
+                                                  #{kw}
+                                                </span>
+                                              ))}
+                                            </div>
+                                          )}
+                                        </div>
+                                        {isAdded ? (
+                                          <span className="text-green-600 font-bold ml-2 text-sm">✓</span>
+                                        ) : (
+                                          <span className="text-[#0B5A70] font-semibold ml-2 text-sm">+ Add</span>
+                                        )}
+                                      </div>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                              <div className="border-b border-[#0B5A70]/8 mt-4 mb-3"></div>
+                            </div>
+                          )}
+
+                          {/* All Bhajans (filtered) */}
+                          <p className="text-xs font-semibold text-[#0B5A70]/60 uppercase tracking-wide mb-2">
+                            {hasActiveFilters ? `${filteredPickerBhajans.length} results` : `All bhajans (${bhajans.length})`}
+                          </p>
+                          {filteredPickerBhajans.length === 0 ? (
+                            <div className="text-center py-6">
+                              <p className="text-sm text-gray-500">No bhajans match your search</p>
+                              <button
+                                onClick={() => {
+                                  setBhajanPickerSearch('');
+                                  setPickerDeityFilter('');
+                                  setPickerCategoryFilter('');
+                                  setPickerKeywordFilter('');
+                                }}
+                                className="text-sm text-[#0B5A70] hover:underline mt-2"
+                              >
+                                Clear all filters
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="space-y-1.5">
+                              {filteredPickerBhajans.map(bhajan => {
+                                const isAdded = programForm.bhajanIds.includes(bhajan.id);
+                                return (
+                                  <button
+                                    key={bhajan.id}
+                                    onClick={() => !isAdded && addBhajanToProgram(bhajan.id)}
+                                    disabled={isAdded}
+                                    className={`w-full text-left p-3 rounded-xl border transition-all ${
+                                      isAdded 
+                                        ? 'bg-green-50 border-green-200 opacity-60 cursor-not-allowed'
+                                        : 'bg-white border-[#0B5A70]/10 hover:border-[#0B5A70]/25'
+                                    }`}
+                                  >
+                                    <div className="flex items-center justify-between">
+                                      <div className="flex-1 min-w-0">
+                                        <p className="font-semibold text-[#0B5A70] truncate text-sm">{bhajan.title}</p>
+                                        <p className="text-xs text-gray-600 truncate">
+                                          {bhajan.deity} • {bhajan.category}
+                                          {bhajan.keywords && bhajan.keywords.length > 0 && (
+                                            <span className="text-[#0B5A70]/40"> • {bhajan.keywords.slice(0, 2).map(k => `#${k}`).join(' ')}</span>
+                                          )}
+                                        </p>
+                                      </div>
+                                      {isAdded ? (
+                                        <span className="text-green-600 font-bold ml-2 text-sm">✓</span>
+                                      ) : (
+                                        <span className="text-[#0B5A70] font-semibold ml-2 text-sm">+ Add</span>
+                                      )}
                                     </div>
-                                    {isAdded && <span className="text-green-600 font-bold ml-2">✓ Added</span>}
-                                  </div>
-                                </button>
-                              );
-                            })}
-                        </div>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </>
                       )}
                     </div>
                   </div>
                 </div>
-              )}
+                );
+              })()}
             </>
           )}
 
