@@ -177,6 +177,7 @@ const App = () => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [splashVisible, setSplashVisible] = useState(true);
+  const [guestMode, setGuestMode] = useState(false);
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
   const [showBrowserWarning, setShowBrowserWarning] = useState(() => {
     // Detect iOS Chrome and suggest Safari
@@ -2586,7 +2587,10 @@ const App = () => {
 
   // Save public bhajan to user's personal library
   const saveToMyLibrary = async (publicBhajan) => {
-    if (!user || !userProfile) return;
+    if (!user || !userProfile) {
+      if (guestMode) { setGuestMode(false); } // redirect to login
+      return;
+    }
     
     // Check if already saved
     if (savedBhajanIds.has(publicBhajan.id)) {
@@ -3645,9 +3649,9 @@ const App = () => {
   }
 
   // ==============================================
-  // MAIN AUTHENTICATED APP
+  // MAIN APP (Authenticated OR Guest)
   // ==============================================
-  if (user && userProfile) {
+  if ((user && userProfile) || guestMode) {
     const currentStep = ONBOARDING_STEPS[onboardingStep];
     
     return (
@@ -4063,18 +4067,34 @@ const App = () => {
                   🔧<span className="hidden sm:inline"> Admin</span>
                 </button>
               )}
-              {userProfile.photoURL && (
+              {guestMode && !user ? (
+                <button
+                  onClick={() => {
+                    setGuestMode(false);
+                    setLoading(false);
+                  }}
+                  className={`font-semibold px-4 py-2 rounded-xl text-sm transition-all ${darkMode ? 'bg-[#0B5A70] text-white hover:bg-[#094a5d]' : 'bg-[#0B5A70] text-white hover:bg-[#094a5d]'}`}
+                >
+                  Sign In
+                </button>
+              ) : (
+              <>
+              {userProfile && userProfile.photoURL && (
                 <img 
                   src={userProfile.photoURL} 
                   alt={userProfile.displayName}
                   className="w-9 h-9 rounded-full border-2 border-[#0B5A70]/30"
                 />
               )}
+              {userProfile && (
               <div className="hidden sm:block">
                 <p className="text-sm font-semibold text-[#0B5A70]">{userProfile.displayName}</p>
                 {userProfile.verified && <span className="text-xs text-[#0B5A70]">✓ Verified</span>}
                 {isAdmin && <span className="text-xs text-purple-600 ml-1">👑 Admin</span>}
               </div>
+              )}
+              </>
+              )}
               <button
                 onClick={() => setDarkMode(!darkMode)}
                 className={`p-2 rounded-lg transition-colors ${darkMode ? 'text-[#E65100] hover:bg-[#1e2e33]' : 'text-[#0B5A70]/50 hover:bg-[#0B5A70]/5'}`}
@@ -4103,6 +4123,7 @@ const App = () => {
                     d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               </button>
+              {user && (
               <button
                 onClick={handleLogout}
                 className="text-[#0B5A70]/60 hover:text-red-600 p-2 rounded-lg hover:bg-red-50"
@@ -4113,6 +4134,7 @@ const App = () => {
                     d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                 </svg>
               </button>
+              )}
             </div>
           </div>
         </header>
@@ -4490,7 +4512,7 @@ const App = () => {
               <div className="flex items-center justify-between mb-4">
                 {/* Compact action bar: back + pill actions (Edit / Delete / View) */}
                 <button
-                  onClick={() => setCurrentView('library')}
+                  onClick={() => { if (guestMode && !user) { setGuestMode(false); } else { setCurrentView('library'); } }}
                   className="text-[#0B5A70] hover:text-[#0B5A70]/80 flex items-center gap-1 text-sm"
                 >
                   ← Back
@@ -5818,7 +5840,7 @@ const App = () => {
                       🌐 Public
                     </button>
                     <button
-                      onClick={() => setCurrentView('library')}
+                      onClick={() => { if (guestMode && !user) { setGuestMode(false); } else { setCurrentView('library'); } }}
                       className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${darkMode ? 'text-gray-400 hover:text-gray-200 hover:bg-[#0B5A70]/10' : 'text-[#0B5A70]/70 hover:text-[#0B5A70] hover:bg-white/50'}`}
                     >
                       📚 My Library
@@ -7586,7 +7608,7 @@ const App = () => {
 
                 <button
                   onClick={() => {
-                    setUser(null);
+                    setGuestMode(true);
                     setLoading(false);
                     setSplashVisible(false);
                     setCurrentView('public-library');
