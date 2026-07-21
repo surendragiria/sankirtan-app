@@ -4050,7 +4050,6 @@ const App = () => {
         {/* FEEDBACK MODAL */}
         {showFeedbackModal && (
           <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4">
-            <div className="bg-[#FFFCF8] roun
           <div className="bg-[#FFFCF8] rounded-3xl shadow-[0_8px_40px_rgba(11,90,112,0.15)] max-w-md w-full overflow-hidden">
               <div className="bg-[#0B5A70] p-6 text-white text-center relative">
                 <button
@@ -7295,8 +7294,7 @@ const App = () => {
                   <label className="block text-sm font-semibold text-[#0B5A70] mb-1">
                     तर्ज़ / धुन (Tune)
                   </label>
-                  <div
-<div className="relative">
+                  <div className="relative">
                     <input
                       id="public-hindi-input-dhun"
                       type="text"
