@@ -1,40 +1,42 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 
 // ==============================================
-// SANKIRTAN SAAS - SESSION 3
+// SANKIRTAN SAAS - SESSION 5
 // Bhajan Se Bhagwan Tak
-// Multi-user platform with Google + Phone Auth
-// CHANGES:
-// 1. Home screen after login = Public Library (was Dashboard),
-//    with a Public ↔ My Library switcher on both library views.
-// 2. "Create Program" + "My Programs" available inside My Library.
-// 3. Onboarding tour auto-plays ONLY on the very first login
-//    (flag stored in Firestore profile + localStorage). Replay it
-//    anytime via the ⓘ button in the header.
-// 4. Add bhajans from Image / PDF / Camera: on-device OCR
-//    (Tesseract.js + pdf.js via CDN) extracts lyrics text into the
-//    Add/Edit form. No files are uploaded - only text is saved to
-//    Firestore, so it works fully within the free Spark plan.
+// CHANGES (Session 5):
+// 1. FIX: Hindi transliteration cache key mismatch (was refetching
+//    Google API on every keystroke; cache now uses 'hi:word' everywhere).
+// 2. FIX: "App Updated!" prompt no longer fires for brand-new users.
+// 3. FIX: Recently Read now reloads when user logs in/out (key change).
+// 4. FIX: Live Performance mode was unreachable (branch ordering) —
+//    moved above the main app branch so it renders again.
+// 5. PERF: Firestore listeners are now the single source of truth
+//    (removed duplicate .get() + onSnapshot double-reads for bhajans,
+//    programs, and public library — halves read quota usage).
+// 6. PERF: User count uses the count() aggregation (1 read vs 1000).
+// 7. PERF: Filtered lists are memoized (no more full-lyrics scanning
+//    on every render).
+// 8. PERF: Full 2.8s splash animation plays once per day; returning
+//    opens get a fast 0.8s splash.
+// 9. PERF: IntersectionObservers no longer tear down on every
+//    "load more" increment.
+// 10. UX: All alert()/window.confirm() replaced with in-app toasts
+//     and a branded ConfirmDialog (no more browser popups).
+// 11. UX: Bottom tab bar on list views (Public / My Library / Programs)
+//     for one-handed navigation.
+// 12. A11y: aria-labels on icon-only buttons, contrast bumps.
+// 13. Security hygiene: removed admin-check console logging.
+//     NOTE: ensure Firestore rules restrict publicBhajans/appConfig
+//     writes and feedback reads to the admin UID — client checks
+//     only hide buttons, they don't protect data.
 // ==============================================
 
 // ==============================================
 // SANKIRTAN WORDMARK COMPONENT (Devanagari)
 // ==============================================
-// संकीर्तन. wordmark in Devanagari — HTML version (not SVG).
-// SVG <text> cannot reliably shape Devanagari conjuncts (र्त, etc.)
-// on iOS Safari. A native HTML <span> uses the browser's proper
-// OpenType shaping engine and renders perfectly everywhere.
-//
-// Color split:  सं = brand teal (#0B5A70)  |  कीर्तन. = brand saffron (#E65100)
-//
-// className controls the wrapper height/width/alignment; the inner
-// text scales via a fontSize map keyed to common Tailwind h-* classes.
 const WORDMARK_FONT = "'Noto Sans Devanagari', 'Mangal', system-ui, sans-serif";
 
 const SankirtanWordmark = ({ className = "" }) => {
-  // Derive font-size from the className height hint.
-  // h-10 (40px) → 28px,  h-12 (48px) → 34px,  h-14 (56px) → 40px,
-  // h-16 (64px) → 46px,  h-20 (80px) → 58px.  Fallback: 34px.
   let fontSize = '34px';
   if (className.includes('h-20'))      fontSize = '58px';
   else if (className.includes('h-16')) fontSize = '46px';
@@ -98,9 +100,9 @@ const DEFAULT_KEYWORDS = [
   'gujarati', 'filmy', 'folk', 'traditional', 'peaceful'
 ];
 
-// Admin user ID (only this user can manage public library)
+// Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.07.20.s4';
+const APP_VERSION = '2026.07.21.s5';
 
 // Onboarding tour steps
 const ONBOARDING_STEPS = [
@@ -142,10 +144,8 @@ const ONBOARDING_STEPS = [
   }
 ];
 
-
 // Fallback Hindi transliteration map (used when API fails)
 const HINDI_FALLBACK_MAP = {
-  // Common bhajan words
   'jai': 'जय', 'shri': 'श्री', 'shree': 'श्री', 'om': 'ॐ', 'aum': 'ॐ',
   'ram': 'राम', 'rama': 'राम', 'krishna': 'कृष्ण', 'krsna': 'कृष्ण',
   'hari': 'हरि', 'hare': 'हरे', 'radha': 'राधा', 'radhe': 'राधे',
@@ -192,9 +192,12 @@ const HINDI_FALLBACK_MAP = {
   'satsang': 'सत्संग', 'jagran': 'जागरण', 'mela': 'मेला',
 };
 
+// Consistent transliteration cache key (SESSION 5 FIX:
+// previously saved as "hi:word" but read as "word" → cache never hit)
+const hiKey = (word) => `hi:${(word || '').toLowerCase()}`;
+
 // ==============================================
 // CSS KEYFRAMES — injected once into <head>
-// Card entrance animation + share toast
 // ==============================================
 if (typeof document !== 'undefined' && !document.getElementById('sankirtan-animations')) {
   const styleEl = document.createElement('style');
@@ -225,8 +228,13 @@ if (typeof document !== 'undefined' && !document.getElementById('sankirtan-anima
     }
     .sk-slide-left  { animation: sk-slide-left-in  0.28s cubic-bezier(0.22,1,0.36,1) both; }
     .sk-slide-right { animation: sk-slide-right-in 0.28s cubic-bezier(0.22,1,0.36,1) both; }
+    @keyframes sk-dialog-in {
+      from { opacity: 0; transform: scale(0.94) translateY(10px); }
+      to   { opacity: 1; transform: scale(1) translateY(0); }
+    }
+    .sk-dialog-animate { animation: sk-dialog-in 0.22s cubic-bezier(0.22,1,0.36,1) both; }
     @media (prefers-reduced-motion: reduce) {
-      .sk-card-animate, .sk-slide-left, .sk-slide-right { animation: none !important; }
+      .sk-card-animate, .sk-slide-left, .sk-slide-right, .sk-dialog-animate { animation: none !important; }
     }
   `;
   document.head.appendChild(styleEl);
@@ -240,24 +248,20 @@ const shareBhajan = async (bhajan) => {
   const shareTitle = bhajan.title || 'Bhajan';
   const lyricsPreview = (bhajan.lyrics || '').trim().substring(0, 300);
   const shareText = `${shareTitle}\n\n${lyricsPreview}${(bhajan.lyrics || '').length > 300 ? '…' : ''}\n\n— Shared from Sankirtan App (sankirtan.app)`;
-  
-  // Try native Web Share API (mobile + some desktop browsers)
+
   if (navigator.share) {
     try {
       await navigator.share({ title: shareTitle, text: shareText });
       return 'shared';
     } catch (err) {
       if (err.name === 'AbortError') return 'cancelled';
-      // Fall through to clipboard
     }
   }
-  
-  // Fallback: copy to clipboard
+
   try {
     await navigator.clipboard.writeText(shareText);
     return 'copied';
   } catch {
-    // Last resort: textarea trick for older browsers
     const ta = document.createElement('textarea');
     ta.value = shareText;
     ta.style.cssText = 'position:fixed;left:-9999px';
@@ -271,34 +275,31 @@ const shareBhajan = async (bhajan) => {
 
 // ==============================================
 // SWIPE HOOK — horizontal swipe detection for reading views
-// Returns { onTouchStart, onTouchEnd, swipeDir }
-// swipeDir = 'left' | 'right' | null (resets after read)
 // ==============================================
 const useSwipe = (onSwipeLeft, onSwipeRight, { threshold = 60, enabled = true } = {}) => {
   const touchStart = useRef(null);
   const touchStartY = useRef(null);
-  
+
   const onTouchStart = useCallback((e) => {
     if (!enabled) return;
     const touch = e.touches[0];
     touchStart.current = touch.clientX;
     touchStartY.current = touch.clientY;
   }, [enabled]);
-  
+
   const onTouchEnd = useCallback((e) => {
     if (!enabled || touchStart.current === null) return;
     const touch = e.changedTouches[0];
     const dx = touch.clientX - touchStart.current;
     const dy = Math.abs(touch.clientY - touchStartY.current);
     touchStart.current = null;
-    
-    // Only fire if horizontal distance > threshold AND mostly horizontal (dx > dy)
+
     if (Math.abs(dx) < threshold || dy > Math.abs(dx) * 0.8) return;
-    
+
     if (dx < 0 && onSwipeLeft) onSwipeLeft();
     if (dx > 0 && onSwipeRight) onSwipeRight();
   }, [enabled, threshold, onSwipeLeft, onSwipeRight]);
-  
+
   return { onTouchStart, onTouchEnd };
 };
 
@@ -310,21 +311,20 @@ const App = () => {
   const [guestMode, setGuestMode] = useState(false);
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
   const [showBrowserWarning, setShowBrowserWarning] = useState(() => {
-    // Detect iOS Chrome and suggest Safari
     const isIOSChrome = /CriOS/.test(navigator.userAgent);
     const dismissed = localStorage.getItem('sankirtan-browser-warning-dismissed');
     return isIOSChrome && !dismissed;
   });
-  
+
   // Onboarding tour state
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [onboardingStep, setOnboardingStep] = useState(0);
-  
+
   // PWA install prompt state
   const [deferredInstallPrompt, setDeferredInstallPrompt] = useState(null);
   const [showInstallPrompt, setShowInstallPrompt] = useState(false);
   const [showIOSInstructions, setShowIOSInstructions] = useState(false);
-  
+
   // Feedback state
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
   const [feedbackText, setFeedbackText] = useState('');
@@ -333,14 +333,14 @@ const App = () => {
   const [feedbackError, setFeedbackError] = useState('');
   const [feedbackList, setFeedbackList] = useState([]);
   const [feedbackListLoading, setFeedbackListLoading] = useState(false);
-  
+
   // Custom config lists (Firestore-based, admin editable)
   const [customDeities, setCustomDeities] = useState([]);
   const [customCategories, setCustomCategories] = useState([]);
   const [customKeywords, setCustomKeywords] = useState([]);
   const [configLoading, setConfigLoading] = useState(false);
   const [newItemInput, setNewItemInput] = useState({ deity: '', category: '', keyword: '' });
-  const [editingItem, setEditingItem] = useState(null); // { type, value }
+  const [editingItem, setEditingItem] = useState(null);
   const [editingValue, setEditingValue] = useState('');
   const [showPhoneLogin, setShowPhoneLogin] = useState(false);
   const [phoneNumber, setPhoneNumber] = useState('');
@@ -361,8 +361,8 @@ const App = () => {
   });
   const [userCount, setUserCount] = useState(0);
 
-  // NEW: My Library states
-  const [currentView, setCurrentView] = useState('public-library'); // HOME = Public Library. Views: 'public-library', 'library', 'bhajan-detail', 'add-bhajan', 'edit-bhajan', 'programs', 'program-detail', 'create-program', 'edit-program', 'live-program', 'public-bhajan-detail', 'admin-panel'
+  // My Library states
+  const [currentView, setCurrentView] = useState('public-library');
   const [scrollPositions, setScrollPositions] = useState({});
   const [bhajans, setBhajans] = useState([]);
   const [selectedBhajan, setSelectedBhajan] = useState(null);
@@ -374,8 +374,8 @@ const App = () => {
   const [bhajansLoading, setBhajansLoading] = useState(false);
   const [bhajanFormError, setBhajanFormError] = useState('');
   const [bhajanFormSaving, setBhajanFormSaving] = useState(false);
-  
-  // NEW: Programs states
+
+  // Programs states
   const [programs, setPrograms] = useState([]);
   const [selectedProgram, setSelectedProgram] = useState(null);
   const [editingProgram, setEditingProgram] = useState(null);
@@ -388,21 +388,20 @@ const App = () => {
   const [pickerDeityFilter, setPickerDeityFilter] = useState('');
   const [pickerCategoryFilter, setPickerCategoryFilter] = useState('');
   const [pickerKeywordFilter, setPickerKeywordFilter] = useState('');
-  
-  // Program form
+
   const [programForm, setProgramForm] = useState({
     name: '',
     date: '',
     venue: '',
-    bhajanIds: [] // ordered list
+    bhajanIds: []
   });
-  
+
   // Live Program Mode states
   const [liveProgramIndex, setLiveProgramIndex] = useState(0);
   const [liveFontSize, setLiveFontSize] = useState(20);
   const [liveWakeLock, setLiveWakeLock] = useState(null);
 
-  // NEW: Public Library states
+  // Public Library states
   const [publicBhajans, setPublicBhajans] = useState([]);
   const [publicLoading, setPublicLoading] = useState(false);
   const [publicSearchQuery, setPublicSearchQuery] = useState('');
@@ -414,16 +413,16 @@ const App = () => {
   const [selectedPublicBhajan, setSelectedPublicBhajan] = useState(null);
   const [savingToLibrary, setSavingToLibrary] = useState(false);
   const [savedBhajanIds, setSavedBhajanIds] = useState(new Set());
-  
-  // NEW: Admin Panel states
+
+  // Admin Panel states
   const [importJsonText, setImportJsonText] = useState('');
   const [importPreview, setImportPreview] = useState(null);
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState({ current: 0, total: 0, message: '' });
   const [importError, setImportError] = useState('');
   const [importSuccess, setImportSuccess] = useState('');
-  
-  // NEW: Manual Add/Edit Public Bhajan states (admin)
+
+  // Manual Add/Edit Public Bhajan states (admin)
   const [showPublicBhajanForm, setShowPublicBhajanForm] = useState(false);
   const [editingPublicBhajan, setEditingPublicBhajan] = useState(null);
   const [publicBhajanForm, setPublicBhajanForm] = useState({
@@ -440,25 +439,14 @@ const App = () => {
   const [publicBhajanFormError, setPublicBhajanFormError] = useState('');
   const [publicBhajanFormSaving, setPublicBhajanFormSaving] = useState(false);
   const [showUpdatePrompt, setShowUpdatePrompt] = useState(false);
-  
-  // Check if current user is admin (with defensive comparison + debug)
+
+  // Check if current user is admin (SESSION 5: debug logging removed —
+  // never advertise the comparison logic in the console)
   const isAdmin = useMemo(() => {
     if (!user || !user.uid) return false;
-    const uid = user.uid.toString().trim();
-    const adminUid = ADMIN_UID.toString().trim();
-    const match = uid === adminUid;
-    if (user) {
-      console.log('👑 Admin check:', {
-        userUid: uid,
-        adminUid: adminUid,
-        userLength: uid.length,
-        adminLength: adminUid.length,
-        match: match
-      });
-    }
-    return match;
+    return user.uid.toString().trim() === ADMIN_UID;
   }, [user]);
-  
+
   // New/Edit bhajan form
   const [bhajanForm, setBhajanForm] = useState({
     title: '',
@@ -472,7 +460,7 @@ const App = () => {
     source: ''
   });
 
-  // NEW: Hindi Typing states
+  // Hindi Typing states
   const [hindiTypingEnabled, setHindiTypingEnabled] = useState(() => {
     try {
       const saved = localStorage.getItem('sankirtan-hindi-typing');
@@ -485,13 +473,16 @@ const App = () => {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [currentWord, setCurrentWord] = useState('');
   const [suggestionsCache, setSuggestionsCache] = useState({});
-  const [activeTypingField, setActiveTypingField] = useState(null); // 'lyrics', 'title', 'dhun'
+  const [activeTypingField, setActiveTypingField] = useState(null);
   const suggestionsAbortRef = useRef(null);
+  // Ref mirror of cache so keydown handlers always see fresh values
+  const suggestionsCacheRef = useRef({});
+  useEffect(() => { suggestionsCacheRef.current = suggestionsCache; }, [suggestionsCache]);
 
   // Voice search states
   const [isListening, setIsListening] = useState(false);
   const speechRecognitionRef = useRef(null);
-  const [speechLang, setSpeechLang] = useState('hi-IN'); // Default: Hindi. Can toggle to 'en-IN'
+  const [speechLang, setSpeechLang] = useState('hi-IN');
 
   // Reading view settings
   const [readingSettings, setReadingSettings] = useState(() => {
@@ -499,7 +490,6 @@ const App = () => {
     try {
       const saved = localStorage.getItem('sankirtan-reading-settings');
       if (saved) {
-        // Merge with defaults so new fields work with older saved settings
         return { ...defaults, ...JSON.parse(saved) };
       }
       return defaults;
@@ -508,25 +498,49 @@ const App = () => {
     }
   });
   const [showReadingSettings, setShowReadingSettings] = useState(false);
-  // Wake lock for reading view - separate from live mode's wake lock
   const [readingWakeLock, setReadingWakeLock] = useState(null);
 
-  // Share toast
-  const [shareToast, setShareToast] = useState(null); // { message, visible }
-  const shareToastTimer = useRef(null);
-  const showShareToast = useCallback((message) => {
-    if (shareToastTimer.current) clearTimeout(shareToastTimer.current);
-    setShareToast({ message, visible: true });
-    shareToastTimer.current = setTimeout(() => {
-      setShareToast(prev => prev ? { ...prev, visible: false } : null);
-      setTimeout(() => setShareToast(null), 400);
-    }, 2200);
+  // ==============================================
+  // TOAST SYSTEM (SESSION 5: generalized from share toast —
+  // now handles success/error notices app-wide, replacing alert())
+  // ==============================================
+  const [toast, setToast] = useState(null); // { message, type: 'success'|'error', visible }
+  const toastTimer = useRef(null);
+  const showToast = useCallback((message, type = 'success') => {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    setToast({ message, type, visible: true });
+    toastTimer.current = setTimeout(() => {
+      setToast(prev => prev ? { ...prev, visible: false } : null);
+      setTimeout(() => setToast(null), 400);
+    }, type === 'error' ? 3500 : 2200);
   }, []);
-  
-  // Swipe animation direction for reading view transitions
-  const [slideDir, setSlideDir] = useState(null); // 'left' | 'right' | null
 
-  // Compact card view - saved to localStorage so users don't have to re-toggle
+  // ==============================================
+  // CONFIRM DIALOG (SESSION 5: replaces window.confirm() —
+  // branded, non-blocking, works properly in installed PWAs)
+  // ==============================================
+  const [confirmDialog, setConfirmDialog] = useState(null);
+  // askConfirm({ title, message, confirmLabel, danger }, onConfirm)
+  const askConfirm = useCallback((opts, onConfirm) => {
+    setConfirmDialog({
+      title: opts.title || 'Are you sure?',
+      message: opts.message || '',
+      confirmLabel: opts.confirmLabel || 'Confirm',
+      danger: opts.danger !== false,
+      onConfirm
+    });
+  }, []);
+  const closeConfirm = useCallback(() => setConfirmDialog(null), []);
+  const runConfirm = useCallback(() => {
+    const fn = confirmDialog && confirmDialog.onConfirm;
+    setConfirmDialog(null);
+    if (fn) fn();
+  }, [confirmDialog]);
+
+  // Swipe animation direction
+  const [slideDir, setSlideDir] = useState(null);
+
+  // Compact card view
   const [compactView, setCompactView] = useState(() => {
     try {
       return localStorage.getItem('sankirtan-compact-view') === 'true';
@@ -538,37 +552,40 @@ const App = () => {
     try { localStorage.setItem('sankirtan-compact-view', compactView.toString()); } catch (e) {}
   }, [compactView]);
 
-  // Branded splash screen - minimum 2.8s so user sees the full animation
-  // (logo fade-in + tagline typewriter + credit line) before main app loads.
+  // ==============================================
+  // SPLASH SCREEN (SESSION 5: full 2.8s animation once per day,
+  // fast 0.8s splash on subsequent opens — big perceived-speed win)
+  // ==============================================
   const [splashFadeOut, setSplashFadeOut] = useState(false);
   useEffect(() => {
-    const SPLASH_MIN_MS = 2800;
+    let showFull = true;
+    try {
+      const lastFullSplash = localStorage.getItem('sankirtan-splash-shown');
+      const today = new Date().toDateString();
+      showFull = lastFullSplash !== today;
+      if (showFull) localStorage.setItem('sankirtan-splash-shown', today);
+    } catch (e) { /* private browsing — default to full */ }
+
+    const SPLASH_MS = showFull ? 2800 : 800;
     const timer = setTimeout(() => {
-      setSplashFadeOut(true); // Start fade-out animation
-      setTimeout(() => setSplashVisible(false), 600); // Remove after fade completes
-    }, SPLASH_MIN_MS);
+      setSplashFadeOut(true);
+      setTimeout(() => setSplashVisible(false), 600);
+    }, SPLASH_MS);
     return () => clearTimeout(timer);
   }, []);
 
-  // Progressive rendering - show first N cards, load more as user scrolls.
-  // Keeps initial DOM small (~20 nodes instead of 175) which speeds up
-  // first paint significantly, especially on lower-end phones.
-
-  // Global ESC key handler — closes the topmost open modal/popup
+  // Debounce searches
   useEffect(() => {
-
-    // Debounce My Library search (200ms)
     const t1 = setTimeout(() => setDebouncedSearchQuery(searchQuery), 200);
     return () => clearTimeout(t1);
   }, [searchQuery]);
 
   useEffect(() => {
-    // Debounce Public Library search (200ms)
     const t2 = setTimeout(() => setDebouncedPublicSearch(publicSearchQuery), 200);
     return () => clearTimeout(t2);
   }, [publicSearchQuery]);
 
-  // Scroll-to-top button — shows after scrolling 600px
+  // Scroll-to-top button
   const [showScrollTop, setShowScrollTop] = useState(false);
   useEffect(() => {
     const handleScroll = () => setShowScrollTop(window.scrollY > 600);
@@ -576,7 +593,10 @@ const App = () => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // Recently Read — track last 5 bhajans opened (localStorage)
+  // ==============================================
+  // RECENTLY READ (SESSION 5 FIX: state now reloads when the
+  // storage key changes — i.e. when user logs in or out)
+  // ==============================================
   const RECENT_KEY = user ? `sankirtan-recent-${user.uid}` : 'sankirtan-recent-guest';
   const [recentlyRead, setRecentlyRead] = useState(() => {
     try {
@@ -584,6 +604,15 @@ const App = () => {
       return raw ? JSON.parse(raw) : [];
     } catch { return []; }
   });
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(RECENT_KEY);
+      setRecentlyRead(raw ? JSON.parse(raw) : []);
+    } catch {
+      setRecentlyRead([]);
+    }
+  }, [RECENT_KEY]);
 
   const trackRecentRead = useCallback((bhajan) => {
     if (!bhajan || !bhajan.id) return;
@@ -595,9 +624,11 @@ const App = () => {
     });
   }, [RECENT_KEY]);
 
+  // Global ESC key handler
   useEffect(() => {
     const handleEsc = (e) => {
       if (e.key !== 'Escape') return;
+      if (confirmDialog) { setConfirmDialog(null); return; }
       if (showBhajanPicker) { setShowBhajanPicker(false); return; }
       if (showReadingSettings) { setShowReadingSettings(false); return; }
       if (showOnboarding) { setShowOnboarding(false); return; }
@@ -605,15 +636,15 @@ const App = () => {
     };
     document.addEventListener('keydown', handleEsc);
     return () => document.removeEventListener('keydown', handleEsc);
-  }, [showBhajanPicker, showReadingSettings, showOnboarding, showPhoneLogin]);
+  }, [confirmDialog, showBhajanPicker, showReadingSettings, showOnboarding, showPhoneLogin]);
+
   const PAGE_SIZE = 20;
   const [publicVisibleCount, setPublicVisibleCount] = useState(PAGE_SIZE);
   const [libraryVisibleCount, setLibraryVisibleCount] = useState(PAGE_SIZE);
   const publicLoadMoreRef = useRef(null);
   const libraryLoadMoreRef = useRef(null);
 
-  // Reset visible count when filters change - so filtering doesn't require
-  // scrolling back down through invisible-but-loaded chunks.
+  // Reset visible count when filters change
   useEffect(() => {
     setPublicVisibleCount(PAGE_SIZE);
   }, [publicSearchQuery, publicFilterDeity, publicFilterCategory, publicFilterKeyword]);
@@ -621,10 +652,11 @@ const App = () => {
     setLibraryVisibleCount(PAGE_SIZE);
   }, [searchQuery, filterDeity, filterCategory, libraryFilterKeyword]);
 
-  // Set up IntersectionObserver for Public Library "load more" sentinel.
-  // When user scrolls the sentinel into view, bump visible count by PAGE_SIZE.
-  // Uses a retry loop to handle the case where the sentinel DOM node
-  // doesn't exist yet when the effect first runs (React hasn't rendered it).
+  // ==============================================
+  // "LOAD MORE" OBSERVERS (SESSION 5: visibleCount removed from
+  // deps — observer now lives for the whole view instead of being
+  // torn down and rebuilt on every increment)
+  // ==============================================
   useEffect(() => {
     if (currentView !== 'public-library') return;
     if (typeof IntersectionObserver === 'undefined') {
@@ -647,7 +679,6 @@ const App = () => {
         }, { rootMargin: '400px' });
         observer.observe(node);
       } else if (attempt < 10) {
-        // Sentinel not in DOM yet - retry after next paint
         retryTimer = setTimeout(() => tryObserve(attempt + 1), 100);
       }
     };
@@ -659,7 +690,7 @@ const App = () => {
       if (observer) observer.disconnect();
       if (retryTimer) clearTimeout(retryTimer);
     };
-  }, [currentView, publicVisibleCount, publicBhajans.length]);
+  }, [currentView, publicBhajans.length]);
 
   useEffect(() => {
     if (currentView !== 'library') return;
@@ -694,7 +725,7 @@ const App = () => {
       if (observer) observer.disconnect();
       if (retryTimer) clearTimeout(retryTimer);
     };
-  }, [currentView, libraryVisibleCount, bhajans.length]);
+  }, [currentView, bhajans.length]);
 
   // Dark mode
   const [darkMode, setDarkMode] = useState(() => {
@@ -705,26 +736,22 @@ const App = () => {
     }
   });
 
-  // OCR / File import states (image, PDF, camera → lyrics text)
+  // OCR / File import states
   const [ocrProcessing, setOcrProcessing] = useState(false);
   const [ocrProgress, setOcrProgress] = useState(0);
   const [ocrMessage, setOcrMessage] = useState('');
   const cameraInputRef = useRef(null);
   const imageInputRef = useRef(null);
   const pdfInputRef = useRef(null);
-
-  // NEW: Refs for public bhajan form OCR inputs
   const publicCameraInputRef = useRef(null);
   const publicImageInputRef = useRef(null);
   const publicPdfInputRef = useRef(null);
-  
+
   // Save Hindi typing preference
   useEffect(() => {
     try {
       localStorage.setItem('sankirtan-hindi-typing', hindiTypingEnabled.toString());
-    } catch (e) {
-      console.log('LocalStorage not available');
-    }
+    } catch (e) {}
   }, [hindiTypingEnabled]);
 
   // Save reading settings
@@ -734,9 +761,7 @@ const App = () => {
     } catch (e) {}
   }, [readingSettings]);
 
-  // Manage the screen wake lock based on the "Keep screen on" toggle.
-  // Only holds the lock while user is actually on a bhajan-reading view -
-  // this prevents draining battery on library / list views.
+  // Reading wake lock
   useEffect(() => {
     const isReadingView = currentView === 'public-bhajan-detail' || currentView === 'bhajan-detail';
     const shouldHoldLock = readingSettings.keepScreenOn && isReadingView;
@@ -744,12 +769,11 @@ const App = () => {
     let currentLock = readingWakeLock;
 
     const acquire = async () => {
-      if (currentLock) return; // Already have one
-      if (!('wakeLock' in navigator)) return; // Unsupported browser
+      if (currentLock) return;
+      if (!('wakeLock' in navigator)) return;
       try {
         const lock = await navigator.wakeLock.request('screen');
         setReadingWakeLock(lock);
-        // If OS drops the lock (backgrounded tab, etc.), clear state
         lock.addEventListener('release', () => {
           setReadingWakeLock(null);
         });
@@ -767,7 +791,6 @@ const App = () => {
     if (shouldHoldLock) acquire();
     else release();
 
-    // Re-acquire when tab becomes visible (browsers auto-release on hide)
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible' && shouldHoldLock) acquire();
     };
@@ -789,59 +812,44 @@ const App = () => {
   // NAVIGATION WITH HISTORY (browser back support)
   // ==============================================
   const previousViewRef = useRef('public-library');
-  
-  // Track view changes - push to browser history when view changes
+
   useEffect(() => {
     if (currentView !== previousViewRef.current) {
-      // Save scroll position of previous view
       setScrollPositions(prev => ({
         ...prev,
         [previousViewRef.current]: window.scrollY
       }));
-      
-      // Push new view to browser history
+
       window.history.pushState({ view: currentView }, '', window.location.pathname);
-      
-      // Scroll to top for new view (unless coming back from browser back)
+
       if (!window.__sankirtanBackNav) {
-        // Instant scroll to top for forward navigation
         window.scrollTo(0, 0);
       } else {
-        // Restore scroll position when going BACK
-        // Use requestAnimationFrame + multiple attempts to wait for DOM to render
         const savedScroll = scrollPositions[currentView] || 0;
-        
+
         if (savedScroll > 0) {
-          // Multiple restoration attempts to handle slow rendering (large lists)
           const restoreScroll = () => {
             window.scrollTo({ top: savedScroll, behavior: 'instant' });
           };
-          
-          // Try immediately
           restoreScroll();
-          // Try after first paint
           requestAnimationFrame(() => {
             restoreScroll();
-            // Try after second paint (when list has rendered)
             requestAnimationFrame(() => {
               restoreScroll();
-              // Final attempt after 100ms for very slow devices
               setTimeout(restoreScroll, 100);
-              // One more attempt after 300ms as fallback
               setTimeout(restoreScroll, 300);
             });
           });
         }
-        
+
         window.__sankirtanBackNav = false;
       }
-      
+
       previousViewRef.current = currentView;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentView]);
-  
-  // Handle browser back button
+
   useEffect(() => {
     const handlePopState = (event) => {
       window.__sankirtanBackNav = true;
@@ -851,22 +859,16 @@ const App = () => {
         setCurrentView('public-library');
       }
     };
-    
+
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  // Handle online/offline status
+  // Online/offline status
   useEffect(() => {
-    const handleOnline = () => {
-      console.log('✅ Back online');
-      setIsOffline(false);
-    };
-    const handleOffline = () => {
-      console.log('⚠️ Went offline');
-      setIsOffline(true);
-    };
-    
+    const handleOnline = () => setIsOffline(false);
+    const handleOffline = () => setIsOffline(true);
+
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
     return () => {
@@ -876,12 +878,16 @@ const App = () => {
   }, []);
 
   // ==============================================
-  // VERSION CHECK - Prompt on new deployment
+  // VERSION CHECK (SESSION 5 FIX: null-guard so brand-new users
+  // don't see "App Updated!" on their very first visit)
   // ==============================================
   useEffect(() => {
     try {
       const savedVersion = localStorage.getItem('sankirtan-app-version');
-      if (savedVersion !== APP_VERSION) {
+      if (savedVersion === null) {
+        // First-ever visit — silently record version, no prompt
+        localStorage.setItem('sankirtan-app-version', APP_VERSION);
+      } else if (savedVersion !== APP_VERSION) {
         setShowUpdatePrompt(true);
       }
     } catch (e) {
@@ -900,32 +906,27 @@ const App = () => {
   // PWA INSTALL PROMPT
   // ==============================================
   useEffect(() => {
-    // Check if user already dismissed or app is already installed
     const alreadyDismissed = localStorage.getItem('sankirtan-install-dismissed');
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
     const isIOSStandalone = window.navigator.standalone === true;
-    
+
     if (alreadyDismissed || isStandalone || isIOSStandalone) {
-      console.log('ℹ️ Install prompt: not shown (already installed or dismissed)');
       return;
     }
-    
-    // Listen for Android/Desktop install event
+
     const handleBeforeInstallPrompt = (e) => {
       e.preventDefault();
       setDeferredInstallPrompt(e);
-      // Show our custom prompt after user has used app for 30 seconds
       setTimeout(() => {
         setShowInstallPrompt(true);
       }, 30000);
     };
-    
+
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-    
-    // For iOS Safari, show manual instructions after 30 seconds
+
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
     const isSafari = /Safari/.test(navigator.userAgent) && !/CriOS|FxiOS/.test(navigator.userAgent);
-    
+
     if (isIOS && isSafari && !isIOSStandalone) {
       const timer = setTimeout(() => {
         setShowIOSInstructions(true);
@@ -935,17 +936,16 @@ const App = () => {
         window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
       };
     }
-    
+
     return () => {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
     };
   }, []);
-  
+
   const handleInstallApp = async () => {
     if (deferredInstallPrompt) {
       deferredInstallPrompt.prompt();
       const { outcome } = await deferredInstallPrompt.userChoice;
-      console.log(`Install prompt outcome: ${outcome}`);
       if (outcome === 'accepted') {
         localStorage.setItem('sankirtan-install-dismissed', 'installed');
       }
@@ -953,7 +953,7 @@ const App = () => {
       setShowInstallPrompt(false);
     }
   };
-  
+
   const dismissInstallPrompt = () => {
     localStorage.setItem('sankirtan-install-dismissed', 'true');
     setShowInstallPrompt(false);
@@ -968,17 +968,17 @@ const App = () => {
       setFeedbackError('Please write your feedback');
       return;
     }
-    
+
     if (feedbackText.trim().length < 5) {
       setFeedbackError('Feedback too short. Please write at least 5 characters.');
       return;
     }
-    
+
     try {
       setFeedbackSubmitting(true);
       setFeedbackError('');
       const db = window.firebase.firestore();
-      
+
       await db.collection('feedback').add({
         text: feedbackText.trim(),
         userId: user.uid,
@@ -988,12 +988,10 @@ const App = () => {
         createdAt: window.firebase.firestore.FieldValue.serverTimestamp(),
         status: 'new'
       });
-      
-      console.log('✅ Feedback submitted');
+
       setFeedbackSuccess(true);
       setFeedbackText('');
-      
-      // Auto-close after 2 seconds
+
       setTimeout(() => {
         setShowFeedbackModal(false);
         setFeedbackSuccess(false);
@@ -1005,7 +1003,7 @@ const App = () => {
       setFeedbackSubmitting(false);
     }
   };
-  
+
   const loadFeedbackList = async () => {
     if (!isAdmin) return;
     try {
@@ -1016,33 +1014,35 @@ const App = () => {
       snapshot.forEach((doc) => {
         list.push({ id: doc.id, ...doc.data() });
       });
-      // Sort newest first
       list.sort((a, b) => {
         const timeA = a.createdAt?.seconds || 0;
         const timeB = b.createdAt?.seconds || 0;
         return timeB - timeA;
       });
       setFeedbackList(list);
-      console.log(`✅ Loaded ${list.length} feedback items`);
     } catch (error) {
       console.error('Error loading feedback:', error);
     } finally {
       setFeedbackListLoading(false);
     }
   };
-  
-  const deleteFeedback = async (feedbackId) => {
+
+  const deleteFeedback = (feedbackId) => {
     if (!isAdmin) return;
-    if (!window.confirm('Delete this feedback?')) return;
-    try {
-      const db = window.firebase.firestore();
-      await db.collection('feedback').doc(feedbackId).delete();
-      setFeedbackList(prev => prev.filter(f => f.id !== feedbackId));
-      console.log('✅ Feedback deleted');
-    } catch (error) {
-      console.error('Error deleting feedback:', error);
-      alert('Could not delete: ' + error.message);
-    }
+    askConfirm(
+      { title: 'Delete Feedback?', message: 'This feedback item will be permanently removed.', confirmLabel: '🗑️ Delete' },
+      async () => {
+        try {
+          const db = window.firebase.firestore();
+          await db.collection('feedback').doc(feedbackId).delete();
+          setFeedbackList(prev => prev.filter(f => f.id !== feedbackId));
+          showToast('Feedback deleted');
+        } catch (error) {
+          console.error('Error deleting feedback:', error);
+          showToast('Could not delete: ' + error.message, 'error');
+        }
+      }
+    );
   };
 
   // ==============================================
@@ -1053,16 +1053,13 @@ const App = () => {
       setConfigLoading(true);
       const db = window.firebase.firestore();
       const configDoc = await db.collection('appConfig').doc('lists').get();
-      
+
       if (configDoc.exists) {
         const data = configDoc.data();
         setCustomDeities(data.deities || []);
         setCustomCategories(data.categories || []);
         setCustomKeywords(data.keywords || []);
-        console.log('✅ Config lists loaded');
       } else {
-        // First-time seed: Initialize Firestore with defaults so admin can edit them
-        console.log('ℹ️ First-time seed of config lists...');
         if (isAdmin) {
           const seedData = {
             deities: DEITY_OPTIONS.map(d => d.value),
@@ -1076,7 +1073,6 @@ const App = () => {
           setCustomDeities(seedData.deities);
           setCustomCategories(seedData.categories);
           setCustomKeywords(seedData.keywords);
-          console.log('✅ Seeded config lists with defaults');
         }
       }
     } catch (error) {
@@ -1085,128 +1081,121 @@ const App = () => {
       setConfigLoading(false);
     }
   };
-  
+
   const addConfigItem = async (type, value) => {
     if (!isAdmin) return;
     const trimmed = value.trim();
     if (!trimmed) return;
-    
-    // Get current list
+
     const current = type === 'deity' ? customDeities
                   : type === 'category' ? customCategories
                   : customKeywords;
-    
-    // Check for duplicates (case-insensitive)
+
     const existing = current.map(s => s.toLowerCase());
     if (existing.includes(trimmed.toLowerCase())) {
-      alert(`"${trimmed}" already exists!`);
+      showToast(`"${trimmed}" already exists!`, 'error');
       return;
     }
-    
+
     try {
       const db = window.firebase.firestore();
       const configRef = db.collection('appConfig').doc('lists');
-      const fieldName = type === 'deity' ? 'deities' 
+      const fieldName = type === 'deity' ? 'deities'
                       : type === 'category' ? 'categories'
                       : 'keywords';
-      
+
       const newList = [...current, trimmed];
-      
+
       await configRef.set({
         [fieldName]: newList,
         updatedAt: window.firebase.firestore.FieldValue.serverTimestamp(),
         updatedBy: user.uid
       }, { merge: true });
-      
+
       if (type === 'deity') setCustomDeities(newList);
       else if (type === 'category') setCustomCategories(newList);
       else setCustomKeywords(newList);
-      
+
       setNewItemInput(prev => ({ ...prev, [type]: '' }));
-      
-      console.log(`✅ Added ${type}: ${trimmed}`);
+      showToast(`Added ${type}: ${trimmed}`);
     } catch (error) {
       console.error(`Error adding ${type}:`, error);
-      alert('Could not add: ' + error.message);
+      showToast('Could not add: ' + error.message, 'error');
     }
   };
-  
+
   const editConfigItem = async (type, oldValue, newValue) => {
     if (!isAdmin) return;
     const trimmed = newValue.trim();
     if (!trimmed || trimmed === oldValue) return;
-    
-    // Check for duplicates
+
     const current = type === 'deity' ? customDeities
                   : type === 'category' ? customCategories
                   : customKeywords;
     const existing = current.filter(s => s !== oldValue).map(s => s.toLowerCase());
     if (existing.includes(trimmed.toLowerCase())) {
-      alert(`"${trimmed}" already exists!`);
+      showToast(`"${trimmed}" already exists!`, 'error');
       return;
     }
-    
-    // Check usage - can only rename if not in use OR user confirms
-    const fieldName = type === 'deity' ? 'deity' 
+
+    const fieldName = type === 'deity' ? 'deity'
                     : type === 'category' ? 'category'
                     : null;
-    
+
     let usageInfo = { publicUsage: 0, personalUsage: 0 };
-    
+
     if (fieldName) {
       usageInfo.publicUsage = publicBhajans.filter(b => b[fieldName] === oldValue).length;
       usageInfo.personalUsage = bhajans.filter(b => b[fieldName] === oldValue).length;
     } else {
-      // Keywords
       usageInfo.publicUsage = publicBhajans.filter(b => (b.keywords || []).includes(oldValue)).length;
       usageInfo.personalUsage = bhajans.filter(b => (b.keywords || []).includes(oldValue)).length;
     }
-    
+
     const totalUsage = usageInfo.publicUsage + usageInfo.personalUsage;
-    
+
     if (totalUsage > 0) {
-      alert(`Cannot rename "${oldValue}"\n\n${totalUsage} bhajan${totalUsage !== 1 ? 's' : ''} still use this ${type}.\n(${usageInfo.publicUsage} public + ${usageInfo.personalUsage} personal)\n\nUpdate those bhajans first, then rename.`);
+      showToast(`Cannot rename "${oldValue}" — ${totalUsage} bhajan${totalUsage !== 1 ? 's' : ''} still use it. Update those first.`, 'error');
       return;
     }
-    
+
     try {
       const db = window.firebase.firestore();
       const configRef = db.collection('appConfig').doc('lists');
-      const firestoreField = type === 'deity' ? 'deities' 
+      const firestoreField = type === 'deity' ? 'deities'
                             : type === 'category' ? 'categories'
                             : 'keywords';
-      
+
       const newList = current.map(item => item === oldValue ? trimmed : item);
-      
+
       await configRef.set({
         [firestoreField]: newList,
         updatedAt: window.firebase.firestore.FieldValue.serverTimestamp(),
         updatedBy: user.uid
       }, { merge: true });
-      
+
       if (type === 'deity') setCustomDeities(newList);
       else if (type === 'category') setCustomCategories(newList);
       else setCustomKeywords(newList);
-      
+
       setEditingItem(null);
       setEditingValue('');
-      
-      console.log(`✅ Renamed ${type}: ${oldValue} → ${trimmed}`);
+      showToast(`Renamed to "${trimmed}"`);
     } catch (error) {
       console.error(`Error renaming ${type}:`, error);
-      alert('Could not rename: ' + error.message);
+      showToast('Could not rename: ' + error.message, 'error');
     }
   };
-  
-  const deleteConfigItem = async (type, value) => {
+
+  const deleteConfigItem = (type, value) => {
     if (!isAdmin) return;
-    
-    const fieldName = type === 'deity' ? 'deity' 
+
+    const fieldName = type === 'deity' ? 'deity'
                     : type === 'category' ? 'category'
                     : null;
-    
+
     let usageInfo = { publicUsage: 0, personalUsage: 0 };
-    
+
     if (fieldName) {
       usageInfo.publicUsage = publicBhajans.filter(b => b[fieldName] === value).length;
       usageInfo.personalUsage = bhajans.filter(b => b[fieldName] === value).length;
@@ -1214,48 +1203,50 @@ const App = () => {
       usageInfo.publicUsage = publicBhajans.filter(b => (b.keywords || []).includes(value)).length;
       usageInfo.personalUsage = bhajans.filter(b => (b.keywords || []).includes(value)).length;
     }
-    
+
     const totalUsage = usageInfo.publicUsage + usageInfo.personalUsage;
-    
+
     if (totalUsage > 0) {
-      alert(`Cannot delete "${value}"\n\n${totalUsage} bhajan${totalUsage !== 1 ? 's' : ''} still use this ${type}.\n(${usageInfo.publicUsage} public + ${usageInfo.personalUsage} personal)\n\nRemove from those bhajans first.`);
+      showToast(`Cannot delete "${value}" — ${totalUsage} bhajan${totalUsage !== 1 ? 's' : ''} still use it. Remove it from those first.`, 'error');
       return;
     }
-    
-    if (!window.confirm(`Delete "${value}"?`)) return;
-    
-    try {
-      const db = window.firebase.firestore();
-      const configRef = db.collection('appConfig').doc('lists');
-      const firestoreField = type === 'deity' ? 'deities' 
-                            : type === 'category' ? 'categories'
-                            : 'keywords';
-      
-      const current = type === 'deity' ? customDeities
-                    : type === 'category' ? customCategories
-                    : customKeywords;
-      
-      const newList = current.filter(item => item !== value);
-      
-      await configRef.set({
-        [firestoreField]: newList,
-        updatedAt: window.firebase.firestore.FieldValue.serverTimestamp(),
-        updatedBy: user.uid
-      }, { merge: true });
-      
-      if (type === 'deity') setCustomDeities(newList);
-      else if (type === 'category') setCustomCategories(newList);
-      else setCustomKeywords(newList);
-      
-      console.log(`✅ Deleted ${type}: ${value}`);
-    } catch (error) {
-      console.error(`Error deleting ${type}:`, error);
-      alert('Could not delete: ' + error.message);
-    }
+
+    askConfirm(
+      { title: `Delete "${value}"?`, message: `This ${type} will be removed from the lists for all users.`, confirmLabel: '🗑️ Delete' },
+      async () => {
+        try {
+          const db = window.firebase.firestore();
+          const configRef = db.collection('appConfig').doc('lists');
+          const firestoreField = type === 'deity' ? 'deities'
+                                : type === 'category' ? 'categories'
+                                : 'keywords';
+
+          const current = type === 'deity' ? customDeities
+                        : type === 'category' ? customCategories
+                        : customKeywords;
+
+          const newList = current.filter(item => item !== value);
+
+          await configRef.set({
+            [firestoreField]: newList,
+            updatedAt: window.firebase.firestore.FieldValue.serverTimestamp(),
+            updatedBy: user.uid
+          }, { merge: true });
+
+          if (type === 'deity') setCustomDeities(newList);
+          else if (type === 'category') setCustomCategories(newList);
+          else setCustomKeywords(newList);
+
+          showToast(`Deleted ${type}: ${value}`);
+        } catch (error) {
+          console.error(`Error deleting ${type}:`, error);
+          showToast('Could not delete: ' + error.message, 'error');
+        }
+      }
+    );
   };
-  
-  // Combined lists (uses Firestore data if available, else defaults)
-  // Once admin visits admin panel, Firestore gets seeded and becomes source of truth
+
+  // Combined lists
   const allDeityOptions = customDeities.length > 0
     ? customDeities.map(name => ({ value: name, emoji: '🕉️' }))
     : DEITY_OPTIONS;
@@ -1272,15 +1263,13 @@ const App = () => {
       finishOnboarding();
     }
   };
-  
+
   const previousOnboardingStep = () => {
     if (onboardingStep > 0) {
       setOnboardingStep(onboardingStep - 1);
     }
   };
-  
-  // Mark the tour as seen: locally (this device) AND on the user's
-  // Firestore profile (so it never auto-pops again on any device/login).
+
   const markOnboardingCompleted = () => {
     localStorage.setItem('sankirtan-onboarding-completed', 'true');
     setUserProfile(prev => (prev ? { ...prev, hasSeenOnboarding: true } : prev));
@@ -1301,7 +1290,7 @@ const App = () => {
     setShowOnboarding(false);
     setOnboardingStep(0);
   };
-  
+
   const skipOnboarding = () => {
     markOnboardingCompleted();
     setShowOnboarding(false);
@@ -1340,40 +1329,30 @@ const App = () => {
           window.firebase.initializeApp(firebaseConfig);
         }
 
-        // Set persistence to LOCAL — users stay logged in even after closing browser
-        // Users only need to login once until they explicitly logout
         try {
           await window.firebase.auth().setPersistence(
             window.firebase.auth.Auth.Persistence.LOCAL
           );
-          console.log('✅ Auth persistence set to LOCAL (permanent login until logout)');
         } catch (persistErr) {
           console.log('Persistence setting failed:', persistErr.message);
         }
 
-        // Enable Firestore offline persistence + long polling fallback
-        // (helps with QUIC/network issues)
         try {
           if (!window._firestoreConfigured) {
             const db = window.firebase.firestore();
-            
-            // Only set long polling (which auto-disables QUIC)
-            // Note: Cannot use experimentalForceLongPolling with autoDetect
+
             db.settings({
-              experimentalAutoDetectLongPolling: true,  // Auto-detects when needed
+              experimentalAutoDetectLongPolling: true,
               merge: true
             });
-            
-            // Enable offline persistence (cached data works offline)
-            // Skip in Chrome due to IndexedDB storage issues
+
             const isChrome = /Chrome/.test(navigator.userAgent) && !/Edg/.test(navigator.userAgent);
             const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
             const skipPersistence = isChrome && isIOS;
-            
+
             if (!skipPersistence) {
               try {
                 await db.enablePersistence({ synchronizeTabs: true });
-                console.log('✅ Firestore offline persistence enabled');
               } catch (persistErr) {
                 if (persistErr.code === 'failed-precondition') {
                   console.log('Multiple tabs open, persistence enabled in first tab only');
@@ -1381,21 +1360,18 @@ const App = () => {
                   console.log('Browser does not support persistence');
                 }
               }
-            } else {
-              console.log('ℹ️ Skipping persistence in iOS Chrome (uses direct network)');
             }
-            
+
             window._firestoreConfigured = true;
           }
         } catch (configErr) {
           console.warn('Firestore config error:', configErr);
         }
 
-        // Handle redirect result (for signInWithRedirect fallback)
         try {
           const result = await window.firebase.auth().getRedirectResult();
           if (result && result.user) {
-            console.log('✅ Redirect sign-in successful:', result.user.email);
+            console.log('✅ Redirect sign-in successful');
           }
         } catch (redirectError) {
           console.log('No redirect result:', redirectError.message);
@@ -1403,20 +1379,16 @@ const App = () => {
 
         window.firebase.auth().onAuthStateChanged(async (firebaseUser) => {
           if (firebaseUser) {
-            console.log('👤 User logged in:', firebaseUser.email || firebaseUser.phoneNumber);
             setUser(firebaseUser);
-            // Load profile in background (non-blocking) - user sees dashboard immediately
-            loadUserProfile(firebaseUser); // No await!
+            loadUserProfile(firebaseUser); // non-blocking
           } else {
-            console.log('👤 No user logged in');
             setUser(null);
             setUserProfile(null);
             setBhajans([]);
           }
           setLoading(false);
         });
-        
-        // Safety timeout: never stay in loading state more than 8 seconds
+
         setTimeout(() => {
           setLoading(false);
         }, 8000);
@@ -1433,7 +1405,9 @@ const App = () => {
   }, []);
 
   // ==============================================
-  // LOAD USER'S BHAJANS (Real-time)
+  // LOAD USER'S BHAJANS (SESSION 5: onSnapshot is now the single
+  // source of truth — the duplicate .get() has been removed, halving
+  // Firestore reads. A one-time .get() runs only if the listener errors.)
   // ==============================================
   useEffect(() => {
     if (!user) {
@@ -1445,11 +1419,10 @@ const App = () => {
     const db = window.firebase.firestore();
     const bhajansRef = db.collection('users').doc(user.uid).collection('bhajans');
 
-    // CACHE HYDRATION: Show cached bhajans instantly (<50ms) while
-    // fresh data loads from Firestore in background. On repeat visits
-    // the user sees their library immediately instead of a spinner.
+    // CACHE HYDRATION: instant paint from localStorage while
+    // Firestore's listener delivers cached-then-fresh data.
     const CACHE_KEY = `sankirtan-my-bhajans-${user.uid}`;
-    const CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
+    const CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
     try {
       const raw = localStorage.getItem(CACHE_KEY);
       if (raw) {
@@ -1458,76 +1431,57 @@ const App = () => {
         if (cached.list && cached.list.length > 0 && !isStale) {
           setBhajans(cached.list);
           setBhajansLoading(false);
-          console.log(`📦 My Library: hydrated ${cached.list.length} bhajans from cache`);
         }
       }
-    } catch (e) {
-      console.warn('My Library cache hydration failed:', e);
-    }
+    } catch (e) { /* non-fatal */ }
 
     const saveCache = (list) => {
       try {
         localStorage.setItem(CACHE_KEY, JSON.stringify({ list, savedAt: Date.now() }));
-      } catch (e) { /* quota exceeded - non-fatal */ }
+      } catch (e) { /* quota exceeded — non-fatal */ }
     };
 
-    // Load with .get() first (reliable across networks)
-    const loadBhajans = async () => {
-      try {
-        const snapshot = await bhajansRef.get();
-        const bhajanList = [];
-        snapshot.forEach((doc) => {
-          bhajanList.push({ id: doc.id, ...doc.data() });
-        });
-        // Sort in JS
-        bhajanList.sort((a, b) => {
-          const timeA = a.createdAt?.seconds || 0;
-          const timeB = b.createdAt?.seconds || 0;
-          return timeB - timeA;
-        });
-        setBhajans(bhajanList);
-        setBhajansLoading(false);
-        saveCache(bhajanList);
-        console.log(`✅ Loaded ${bhajanList.length} bhajans`);
-      } catch (error) {
-        console.error('Error loading bhajans:', error);
-        setBhajansLoading(false);
-      }
+    const sortAndSet = (snapshot) => {
+      const bhajanList = [];
+      snapshot.forEach((doc) => {
+        bhajanList.push({ id: doc.id, ...doc.data() });
+      });
+      bhajanList.sort((a, b) => {
+        const timeA = a.createdAt?.seconds || 0;
+        const timeB = b.createdAt?.seconds || 0;
+        return timeB - timeA;
+      });
+      setBhajans(bhajanList);
+      setBhajansLoading(false);
+      saveCache(bhajanList);
     };
-    
-    loadBhajans();
-    
-    // Real-time updates (optional, may fail on some networks)
+
     let unsubscribe = () => {};
     try {
-      unsubscribe = bhajansRef
-        .onSnapshot(
-          (snapshot) => {
-            const bhajanList = [];
-            snapshot.forEach((doc) => {
-              bhajanList.push({ id: doc.id, ...doc.data() });
-            });
-            bhajanList.sort((a, b) => {
-              const timeA = a.createdAt?.seconds || 0;
-              const timeB = b.createdAt?.seconds || 0;
-              return timeB - timeA;
-            });
-            setBhajans(bhajanList);
-            saveCache(bhajanList);
-          },
-          (error) => {
-            console.log('Bhajans real-time error (using cached):', error.message);
+      unsubscribe = bhajansRef.onSnapshot(
+        sortAndSet,
+        async (error) => {
+          // Listener failed (rare network configs) — one-time .get() fallback
+          console.log('Bhajans listener error, trying one-time fetch:', error.message);
+          try {
+            const snapshot = await bhajansRef.get();
+            sortAndSet(snapshot);
+          } catch (getErr) {
+            console.error('Bhajans fallback fetch failed:', getErr);
+            setBhajansLoading(false);
           }
-        );
+        }
+      );
     } catch (e) {
       console.log('Could not set up bhajans listener');
+      setBhajansLoading(false);
     }
 
     return () => unsubscribe();
   }, [user]);
 
   // ==============================================
-  // LOAD USER'S PROGRAMS (Real-time)
+  // LOAD USER'S PROGRAMS (SESSION 5: same snapshot-only pattern)
   // ==============================================
   useEffect(() => {
     if (!user) {
@@ -1539,7 +1493,6 @@ const App = () => {
     const db = window.firebase.firestore();
     const programsRef = db.collection('users').doc(user.uid).collection('programs');
 
-    // CACHE HYDRATION for programs
     const PROG_CACHE_KEY = `sankirtan-programs-${user.uid}`;
     try {
       const raw = localStorage.getItem(PROG_CACHE_KEY);
@@ -1548,7 +1501,6 @@ const App = () => {
         if (cached.list && cached.list.length > 0 && cached.savedAt && (Date.now() - cached.savedAt) < 24 * 60 * 60 * 1000) {
           setPrograms(cached.list);
           setProgramsLoading(false);
-          console.log(`📦 Programs: hydrated ${cached.list.length} from cache`);
         }
       }
     } catch (e) { /* non-fatal */ }
@@ -1559,60 +1511,47 @@ const App = () => {
       } catch (e) { /* quota exceeded */ }
     };
 
-    const loadPrograms = async () => {
-      try {
-        const snapshot = await programsRef.get();
-        const programList = [];
-        snapshot.forEach((doc) => {
-          programList.push({ id: doc.id, ...doc.data() });
-        });
-        programList.sort((a, b) => {
-          const timeA = a.createdAt?.seconds || 0;
-          const timeB = b.createdAt?.seconds || 0;
-          return timeB - timeA;
-        });
-        setPrograms(programList);
-        setProgramsLoading(false);
-        saveProgramsCache(programList);
-        console.log(`✅ Loaded ${programList.length} programs`);
-      } catch (error) {
-        console.error('Error loading programs:', error);
-        setProgramsLoading(false);
-      }
+    const sortAndSet = (snapshot) => {
+      const programList = [];
+      snapshot.forEach((doc) => {
+        programList.push({ id: doc.id, ...doc.data() });
+      });
+      programList.sort((a, b) => {
+        const timeA = a.createdAt?.seconds || 0;
+        const timeB = b.createdAt?.seconds || 0;
+        return timeB - timeA;
+      });
+      setPrograms(programList);
+      setProgramsLoading(false);
+      saveProgramsCache(programList);
     };
-    
-    loadPrograms();
-    
+
     let unsubscribe = () => {};
     try {
-      unsubscribe = programsRef
-        .onSnapshot(
-          (snapshot) => {
-            const programList = [];
-            snapshot.forEach((doc) => {
-              programList.push({ id: doc.id, ...doc.data() });
-            });
-            programList.sort((a, b) => {
-              const timeA = a.createdAt?.seconds || 0;
-              const timeB = b.createdAt?.seconds || 0;
-              return timeB - timeA;
-            });
-            setPrograms(programList);
-            saveProgramsCache(programList);
-          },
-          (error) => {
-            console.log('Programs real-time error:', error.message);
+      unsubscribe = programsRef.onSnapshot(
+        sortAndSet,
+        async (error) => {
+          console.log('Programs listener error, trying one-time fetch:', error.message);
+          try {
+            const snapshot = await programsRef.get();
+            sortAndSet(snapshot);
+          } catch (getErr) {
+            console.error('Programs fallback fetch failed:', getErr);
+            setProgramsLoading(false);
           }
-        );
+        }
+      );
     } catch (e) {
       console.log('Could not set up programs listener');
+      setProgramsLoading(false);
     }
 
     return () => unsubscribe();
   }, [user]);
 
   // ==============================================
-  // LOAD PUBLIC LIBRARY BHAJANS
+  // LOAD PUBLIC LIBRARY BHAJANS (SESSION 5: snapshot-only —
+  // removed the .get() + retry-chain that ran alongside the listener)
   // ==============================================
   useEffect(() => {
     if (!user && !guestMode) {
@@ -1624,14 +1563,8 @@ const App = () => {
     const db = window.firebase.firestore();
     const publicRef = db.collection('publicBhajans');
 
-    // CACHE HYDRATION: Show cached bhajans instantly while fresh data loads
-    // in background. Cache is a JSON string in localStorage with:
-    //   { list: [...bhajans], savedAt: timestamp }
-    // On subsequent visits users see content in <100ms instead of waiting
-    // for a network round-trip. Fresh data replaces cache silently once it
-    // arrives.
     const CACHE_KEY = 'sankirtan-public-bhajans-cache';
-    const CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
+    const CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
     try {
       const raw = localStorage.getItem(CACHE_KEY);
       if (raw) {
@@ -1640,102 +1573,49 @@ const App = () => {
         if (cached.list && cached.list.length > 0 && !isStale) {
           setPublicBhajans(cached.list);
           setPublicLoading(false);
-          console.log(`📦 Hydrated ${cached.list.length} bhajans from cache (age: ${Math.round((Date.now() - cached.savedAt) / 1000)}s)`);
         }
       }
-    } catch (e) {
-      console.warn('Cache hydration failed, continuing with network fetch:', e);
-    }
+    } catch (e) { /* non-fatal */ }
 
-    // Save fresh list to cache (called after successful loads)
     const saveCache = (list) => {
       try {
-        localStorage.setItem(CACHE_KEY, JSON.stringify({
-          list,
-          savedAt: Date.now()
-        }));
-      } catch (e) {
-        // Quota exceeded / private browsing - non-fatal, just skip cache
-        console.warn('Cache save failed (non-fatal):', e);
-      }
+        localStorage.setItem(CACHE_KEY, JSON.stringify({ list, savedAt: Date.now() }));
+      } catch (e) { /* non-fatal */ }
     };
 
-    // Simple, reliable fetch - default source (network first, cache fallback)
-    const loadPublicBhajans = async () => {
-      try {
-        const snapshot = await publicRef.get();
-        const list = [];
-        snapshot.forEach((doc) => {
-          list.push({ id: doc.id, ...doc.data() });
-        });
-
-        list.sort((a, b) => {
-          const timeA = a.createdAt?.seconds || 0;
-          const timeB = b.createdAt?.seconds || 0;
-          return timeB - timeA;
-        });
-
-        setPublicBhajans(list);
-        setPublicLoading(false);
-        saveCache(list);
-        console.log(`✅ Loaded ${list.length} public bhajans from network`);
-      } catch (error) {
-        console.error('Error loading public bhajans:', error);
-        setPublicLoading(false);
-        
-        // Retry with exponential backoff
-        [2000, 5000, 10000].forEach((delay, idx) => {
-          setTimeout(async () => {
-            try {
-              const snapshot = await publicRef.get();
-              const list = [];
-              snapshot.forEach((doc) => {
-                list.push({ id: doc.id, ...doc.data() });
-              });
-              list.sort((a, b) => {
-                const timeA = a.createdAt?.seconds || 0;
-                const timeB = b.createdAt?.seconds || 0;
-                return timeB - timeA;
-              });
-              if (list.length > 0) {
-                setPublicBhajans(list);
-                saveCache(list);
-                console.log(`✅ Retry ${idx + 1}: Loaded ${list.length} public bhajans`);
-              }
-            } catch (retryErr) {
-              console.error(`Retry ${idx + 1} failed:`, retryErr);
-            }
-          }, delay);
-        });
-      }
+    const sortAndSet = (snapshot) => {
+      const list = [];
+      snapshot.forEach((doc) => {
+        list.push({ id: doc.id, ...doc.data() });
+      });
+      list.sort((a, b) => {
+        const timeA = a.createdAt?.seconds || 0;
+        const timeB = b.createdAt?.seconds || 0;
+        return timeB - timeA;
+      });
+      setPublicBhajans(list);
+      setPublicLoading(false);
+      saveCache(list);
     };
-    
-    loadPublicBhajans();
-    
-    // Also set up real-time listener (bonus for updates)
+
     let unsubscribe = () => {};
     try {
       unsubscribe = publicRef.onSnapshot(
-        (snapshot) => {
-          const list = [];
-          snapshot.forEach((doc) => {
-            list.push({ id: doc.id, ...doc.data() });
-          });
-          list.sort((a, b) => {
-            const timeA = a.createdAt?.seconds || 0;
-            const timeB = b.createdAt?.seconds || 0;
-            return timeB - timeA;
-          });
-          setPublicBhajans(list);
-          setPublicLoading(false);
-          saveCache(list);
-        },
-        (error) => {
-          console.log('Real-time listener error (using cached data):', error.message);
+        sortAndSet,
+        async (error) => {
+          console.log('Public listener error, trying one-time fetch:', error.message);
+          try {
+            const snapshot = await publicRef.get();
+            sortAndSet(snapshot);
+          } catch (getErr) {
+            console.error('Public fallback fetch failed:', getErr);
+            setPublicLoading(false);
+          }
         }
       );
     } catch (listenerErr) {
-      console.log('Could not set up real-time listener:', listenerErr.message);
+      console.log('Could not set up public listener:', listenerErr.message);
+      setPublicLoading(false);
     }
 
     return () => unsubscribe();
@@ -1747,8 +1627,7 @@ const App = () => {
       setSavedBhajanIds(new Set());
       return;
     }
-    
-    // Find bhajans that were saved from public library
+
     const saved = new Set();
     bhajans.forEach(b => {
       if (b.savedFromPublicId) {
@@ -1762,9 +1641,8 @@ const App = () => {
   // USER PROFILE MANAGEMENT
   // ==============================================
   const loadUserProfile = async (firebaseUser, retryCount = 0) => {
-    const MAX_RETRIES = 2; // Reduced from 3
-    
-    // Show minimal profile IMMEDIATELY (better perceived speed)
+    const MAX_RETRIES = 2;
+
     if (retryCount === 0) {
       setUserProfile({
         uid: firebaseUser.uid,
@@ -1772,47 +1650,38 @@ const App = () => {
         displayName: firebaseUser.displayName || 'User',
         photoURL: firebaseUser.photoURL,
         stats: { bhajanCount: 0, publicBhajanCount: 0, followerCount: 0, followingCount: 0 },
-        _loading: true // Flag to indicate this is minimal
+        _loading: true
       });
     }
-    
+
     try {
       const db = window.firebase.firestore();
-      
-      // Try to load from Firestore (with shorter timeout via retry)
+
       let userDoc;
       try {
         userDoc = await db.collection('users').doc(firebaseUser.uid).get({ source: 'default' });
       } catch (fetchErr) {
-        console.log('Trying cache fallback...');
         try {
           userDoc = await db.collection('users').doc(firebaseUser.uid).get({ source: 'cache' });
         } catch (cacheErr) {
-          throw fetchErr; // Re-throw original error
+          throw fetchErr;
         }
       }
-      
+
       if (userDoc.exists) {
         const profile = userDoc.data();
         setUserProfile(profile);
-        console.log('✅ Profile loaded:', profile.displayName);
-        
-        // Load custom deity/category/keyword lists in background
+
         loadConfigLists();
-        
-        // Show onboarding tour ONLY if never seen before - checks both
-        // this device (localStorage) and the account profile (Firestore),
-        // so it never auto-pops up again on any login. Users can always
-        // replay it manually via the ⓘ button in the header.
+
         const hasSeenTour = localStorage.getItem('sankirtan-onboarding-completed');
         if (!hasSeenTour && !profile.hasSeenOnboarding) {
           setTimeout(() => {
             setShowOnboarding(true);
             setOnboardingStep(0);
-          }, 800); // Small delay so the home screen renders first
+          }, 800);
         }
       } else {
-        console.log('🆕 New user - setup profile');
         setProfileForm({
           displayName: firebaseUser.displayName || '',
           bio: '',
@@ -1825,31 +1694,34 @@ const App = () => {
       }
     } catch (error) {
       console.error(`Profile load failed (attempt ${retryCount + 1}):`, error.message);
-      
-      // Reduced retries to 2 instead of 3 (faster failure detection)
+
       if (retryCount < MAX_RETRIES) {
-        const delayMs = 1500; // Fixed 1.5s (not exponential)
-        console.log(`Retrying in ${delayMs}ms...`);
         setTimeout(() => {
           loadUserProfile(firebaseUser, retryCount + 1);
-        }, delayMs);
+        }, 1500);
       } else {
-        // Use minimal profile (already set) - user can still browse app
-        console.warn('Using minimal profile - user can browse cached content');
         setUserProfile(prev => ({
           ...prev,
-          _loading: false, // Done trying
+          _loading: false,
           _minimal: true
         }));
       }
     }
   };
 
+  // SESSION 5: count() aggregation — 1 billed read instead of
+  // reading up to 1,000 user documents on every app open
   const fetchUserCount = async () => {
     try {
       const db = window.firebase.firestore();
-      const snapshot = await db.collection('users').limit(1000).get();
-      setUserCount(snapshot.size);
+      try {
+        const countSnap = await db.collection('users').count().get();
+        setUserCount(countSnap.data().count);
+      } catch (aggErr) {
+        // Older SDK without aggregation support — light fallback
+        const snapshot = await db.collection('users').limit(200).get();
+        setUserCount(snapshot.size);
+      }
     } catch (error) {
       console.log('Could not fetch user count:', error);
       setUserCount(1);
@@ -1865,7 +1737,7 @@ const App = () => {
     try {
       setAuthLoading(true);
       const db = window.firebase.firestore();
-      
+
       const profileData = {
         uid: user.uid,
         email: user.email || null,
@@ -1900,9 +1772,7 @@ const App = () => {
       setUserProfile(profileData);
       setShowProfileSetup(false);
       setAuthError('');
-      console.log('✅ Profile saved');
-      
-      // Show onboarding for brand new users
+
       const hasSeenTour = localStorage.getItem('sankirtan-onboarding-completed');
       if (!hasSeenTour) {
         setTimeout(() => {
@@ -1919,12 +1789,7 @@ const App = () => {
   };
 
   // ==============================================
-  // OCR / FILE IMPORT (Image, PDF, Camera → Lyrics text)
-  // Text is extracted ON THE USER'S DEVICE (Tesseract.js + pdf.js
-  // loaded from CDN on demand). No files are uploaded or stored
-  // anywhere - only the extracted text is saved to Firestore,
-  // exactly like typed lyrics. Storage impact: negligible, fully
-  // within the free Firebase Spark plan.
+  // OCR / FILE IMPORT (unchanged from Session 4)
   // ==============================================
   const loadScriptOnce = (src, globalName) => {
     return new Promise((resolve, reject) => {
@@ -1966,7 +1831,6 @@ const App = () => {
         ? prev.lyrics.trim() + '\n\n' + text
         : text;
       let title = prev.title;
-      // Suggest a title from the first line if the title is still empty
       if (!title.trim()) {
         const firstLine = text.split('\n').map(l => l.trim()).find(l => l.length >= 3) || '';
         title = firstLine.slice(0, 60);
@@ -1977,7 +1841,6 @@ const App = () => {
     return true;
   };
 
-  // Downscale large photos so OCR runs faster and more accurately
   const fileToOptimizedDataUrl = (file, maxDim = 1800) => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -2001,7 +1864,6 @@ const App = () => {
   };
 
   const ocrImageSource = async (imageSource, sourceLabel) => {
-    // Check if Tesseract is already loaded (subsequent uses)
     const isFirstUse = !window.Tesseract;
     if (isFirstUse) {
       setOcrMessage('📥 Downloading OCR engine (~2 MB, one-time only). Next time will be instant...');
@@ -2009,13 +1871,10 @@ const App = () => {
     }
     await loadScriptOnce('https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js', 'Tesseract');
 
-    // Check if language files are cached (Tesseract stores them in browser)
-    // Language files are ~15-20 MB total for Hindi + English
     const langModelsCached = localStorage.getItem('sankirtan-tesseract-langs-cached');
 
     const result = await window.Tesseract.recognize(imageSource, 'hin+eng', {
       logger: (m) => {
-        // Detailed status messages so users know what's happening
         if (m.status === 'recognizing text') {
           const pct = Math.round((m.progress || 0) * 100);
           setOcrProgress(pct);
@@ -2040,7 +1899,6 @@ const App = () => {
       }
     });
 
-    // Mark language models as cached for next time
     if (!langModelsCached) {
       try { localStorage.setItem('sankirtan-tesseract-langs-cached', 'true'); } catch (e) {}
     }
@@ -2077,28 +1935,23 @@ const App = () => {
       const buffer = await file.arrayBuffer();
       const pdf = await window.pdfjsLib.getDocument({ data: buffer }).promise;
       const PAGE_LIMIT = 10;
-      const maxPages = Math.min(pdf.numPages, PAGE_LIMIT); // safety cap
+      const maxPages = Math.min(pdf.numPages, PAGE_LIMIT);
 
-      // Warn user if PDF has more pages than we'll process (silent truncation is bad UX)
       if (pdf.numPages > PAGE_LIMIT) {
         setOcrMessage('⚠️ PDF has ' + pdf.numPages + ' pages. Processing first ' + PAGE_LIMIT + ' only. To import more, split the PDF or upload the rest separately.');
-        // Give user a moment to read the warning
         await new Promise(r => setTimeout(r, 2500));
       }
 
       let extracted = '';
 
-      // 1) Try embedded text first (digital PDFs)
       for (let p = 1; p <= maxPages; p++) {
         setOcrMessage('📄 Reading page ' + p + ' of ' + maxPages + '...');
         const page = await pdf.getPage(p);
         const content = await page.getTextContent();
         extracted += content.items.map(it => it.str).join(' ') + '\n\n';
-        // Explicitly clean up page to free memory
         try { page.cleanup && page.cleanup(); } catch (e) {}
       }
 
-      // 2) Scanned PDF (no embedded text) → OCR each page image
       if (cleanupExtractedText(extracted).length < 10) {
         extracted = '';
         for (let p = 1; p <= maxPages; p++) {
@@ -2113,9 +1966,6 @@ const App = () => {
           const dataUrl = canvas.toDataURL('image/png');
           extracted += (await ocrImageSource(dataUrl, 'page ' + p)) + '\n\n';
 
-          // MEMORY FIX: Explicitly release canvas + page memory before next iteration.
-          // Without this, mobile browsers accumulate ~15 MB per page and can crash on
-          // multi-page scanned PDFs. Setting canvas dimensions to 0 releases GPU/CPU memory.
           try {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             canvas.width = 0;
@@ -2125,7 +1975,6 @@ const App = () => {
         }
       }
 
-      // Release the PDF document itself
       try { pdf.destroy && pdf.destroy(); } catch (e) {}
 
       applyExtractedText(extracted, 'PDF', formSetter);
@@ -2139,23 +1988,18 @@ const App = () => {
 
   // ==============================================
   // VOICE SEARCH (Web Speech API)
-  // Uses live transcription (interim results) on browsers that support it well.
-  // Falls back to single-shot recognition on iOS Safari where interim results
-  // are unreliable. Hindi is the default language.
   // ==============================================
   const startVoiceSearch = (targetField) => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
-      alert('Voice search is not supported in this browser. Please use Chrome or Safari.');
+      showToast('Voice search is not supported in this browser. Please use Chrome or Safari.', 'error');
       return;
     }
-    // Second tap = stop current listening
     if (isListening && speechRecognitionRef.current) {
       try { speechRecognitionRef.current.stop(); } catch (e) {}
       return;
     }
 
-    // Detect iOS Safari - interim results are flaky there, use single-shot
     const ua = navigator.userAgent;
     const isIOS = /iPad|iPhone|iPod/.test(ua) && !window.MSStream;
     const isIOSSafari = isIOS && /^((?!chrome|android).)*safari/i.test(ua);
@@ -2164,18 +2008,15 @@ const App = () => {
     speechRecognitionRef.current = recognition;
 
     if (isIOSSafari) {
-      // Graceful fallback: single utterance, no interim results
       recognition.continuous = false;
       recognition.interimResults = false;
     } else {
-      // Live transcription: keeps going, shows partial results as you speak
       recognition.continuous = true;
       recognition.interimResults = true;
     }
     recognition.lang = speechLang;
     recognition.maxAlternatives = 1;
 
-    // Track transcripts across multiple result events (live mode fires many)
     let finalTranscript = '';
 
     recognition.onstart = () => setIsListening(true);
@@ -2186,17 +2027,14 @@ const App = () => {
     recognition.onerror = (e) => {
       console.error('Speech error:', e.error);
       setIsListening(false);
-      // "no-speech" is normal (user didn't say anything), don't alarm them
       if (e.error && e.error !== 'no-speech' && e.error !== 'aborted') {
-        // Only alert for unexpected errors
         if (e.error === 'not-allowed') {
-          alert('Microphone access blocked. Please allow microphone in browser settings.');
+          showToast('Microphone access blocked. Please allow microphone in browser settings.', 'error');
         }
       }
     };
     recognition.onresult = (e) => {
       let interimTranscript = '';
-      // Walk through all results in this event
       for (let i = e.resultIndex; i < e.results.length; i++) {
         const transcript = e.results[i][0].transcript;
         if (e.results[i].isFinal) {
@@ -2205,7 +2043,6 @@ const App = () => {
           interimTranscript += transcript;
         }
       }
-      // Show final + interim combined so user sees live typing effect
       const display = (finalTranscript + interimTranscript).trim();
       if (targetField === 'library') setSearchQuery(display);
       else if (targetField === 'public') setPublicSearchQuery(display);
@@ -2219,7 +2056,7 @@ const App = () => {
     }
   };
 
-// ==============================================
+  // ==============================================
   // BHAJAN CRUD OPERATIONS
   // ==============================================
   const openAddBhajan = () => {
@@ -2273,7 +2110,7 @@ const App = () => {
       setBhajanFormSaving(true);
       setBhajanFormError('');
       const db = window.firebase.firestore();
-      
+
       const bhajanData = {
         title: bhajanForm.title.trim(),
         lyrics: bhajanForm.lyrics.trim(),
@@ -2295,29 +2132,25 @@ const App = () => {
       const bhajansRef = db.collection('users').doc(user.uid).collection('bhajans');
 
       if (editingBhajan) {
-        // Update existing
         await bhajansRef.doc(editingBhajan.id).update(bhajanData);
-        console.log('✅ Bhajan updated');
-        // Return to detail view
         setSelectedBhajan({ ...editingBhajan, ...bhajanData });
         setCurrentView('bhajan-detail');
+        showToast('💾 Changes saved');
       } else {
-        // Create new
         bhajanData.createdAt = window.firebase.firestore.FieldValue.serverTimestamp();
-        const docRef = await bhajansRef.add(bhajanData);
-        console.log('✅ Bhajan created:', docRef.id);
-        
-        // Update user's bhajan count
+        await bhajansRef.add(bhajanData);
+
         await db.collection('users').doc(user.uid).update({
           'stats.bhajanCount': window.firebase.firestore.FieldValue.increment(1)
         });
-        
+
         setUserProfile(prev => ({
           ...prev,
           stats: { ...prev.stats, bhajanCount: (prev.stats?.bhajanCount || 0) + 1 }
         }));
-        
+
         setCurrentView('library');
+        showToast(`✅ "${bhajanData.title}" added to your library`);
       }
     } catch (error) {
       console.error('Error saving bhajan:', error);
@@ -2327,40 +2160,44 @@ const App = () => {
     }
   };
 
-  const deleteBhajan = async (bhajan) => {
-    if (!window.confirm(`Delete "${bhajan.title}"? This cannot be undone.`)) {
-      return;
-    }
+  // SESSION 5: browser confirm() → branded ConfirmDialog
+  const deleteBhajan = (bhajan) => {
+    askConfirm(
+      {
+        title: 'Delete Bhajan?',
+        message: `"${bhajan.title}" will be permanently deleted from your library. This cannot be undone.`,
+        confirmLabel: '🗑️ Delete'
+      },
+      async () => {
+        try {
+          const db = window.firebase.firestore();
+          await db.collection('users').doc(user.uid).collection('bhajans').doc(bhajan.id).delete();
 
-    try {
-      const db = window.firebase.firestore();
-      await db.collection('users').doc(user.uid).collection('bhajans').doc(bhajan.id).delete();
-      
-      // Update stats
-      await db.collection('users').doc(user.uid).update({
-        'stats.bhajanCount': window.firebase.firestore.FieldValue.increment(-1)
-      });
-      
-      setUserProfile(prev => ({
-        ...prev,
-        stats: { ...prev.stats, bhajanCount: Math.max(0, (prev.stats?.bhajanCount || 0) - 1) }
-      }));
-      
-      console.log('✅ Bhajan deleted');
-      setCurrentView('library');
-      setSelectedBhajan(null);
-    } catch (error) {
-      console.error('Error deleting bhajan:', error);
-      alert('Could not delete: ' + error.message);
-    }
+          await db.collection('users').doc(user.uid).update({
+            'stats.bhajanCount': window.firebase.firestore.FieldValue.increment(-1)
+          });
+
+          setUserProfile(prev => ({
+            ...prev,
+            stats: { ...prev.stats, bhajanCount: Math.max(0, (prev.stats?.bhajanCount || 0) - 1) }
+          }));
+
+          setCurrentView('library');
+          setSelectedBhajan(null);
+          showToast('Bhajan deleted');
+        } catch (error) {
+          console.error('Error deleting bhajan:', error);
+          showToast('Could not delete: ' + error.message, 'error');
+        }
+      }
+    );
   };
 
   const openBhajanDetail = async (bhajan) => {
     setSelectedBhajan(bhajan);
     setCurrentView('bhajan-detail');
     trackRecentRead(bhajan);
-    
-    // Increment view count
+
     try {
       const db = window.firebase.firestore();
       await db.collection('users').doc(user.uid).collection('bhajans').doc(bhajan.id).update({
@@ -2374,101 +2211,96 @@ const App = () => {
 
   // ==============================================
   // HINDI TYPING - GOOGLE INPUT TOOLS API
+  // (SESSION 5 FIX: cache key is now hiKey(word) = "hi:word"
+  // consistently for reads AND writes — previously reads used the
+  // bare word so the cache never hit and every keystroke refetched)
   // ==============================================
   const fetchGoogleSuggestions = async (word) => {
     if (!word || word.length < 1) {
       setTransliterationSuggestions([]);
       return;
     }
-    
-    const lowerWord = word.toLowerCase();
-    
-    // Check cache first
-    if (suggestionsCache[lowerWord]) {
-      setTransliterationSuggestions(suggestionsCache[lowerWord]);
+
+    const cacheKey = hiKey(word);
+
+    // Check cache first — now actually hits!
+    if (suggestionsCacheRef.current[cacheKey]) {
+      setTransliterationSuggestions(suggestionsCacheRef.current[cacheKey]);
       return;
     }
-    
-    // Abort any pending request
+
     if (suggestionsAbortRef.current && suggestionsAbortRef.current.abort) {
       try {
         suggestionsAbortRef.current.abort();
       } catch (e) {}
     }
-    
+
     const controller = new AbortController();
     suggestionsAbortRef.current = controller;
-    
+
     try {
-      // Always use Hindi transliteration. The user's Hindi ON/OFF toggle
-      // controls whether transliteration runs at all - if they're typing
-      // English, they turn the toggle off in the form.
-      const langCode = 'hi';
-      
-      const url = `https://inputtools.google.com/request?text=${encodeURIComponent(word)}&itc=${langCode}-t-i0-und&num=5&cp=0&cs=1&ie=utf-8&oe=utf-8`;
+      const url = `https://inputtools.google.com/request?text=${encodeURIComponent(word)}&itc=hi-t-i0-und&num=5&cp=0&cs=1&ie=utf-8&oe=utf-8`;
       const response = await fetch(url, { signal: controller.signal });
       const data = await response.json();
-      
+
       if (data && data[0] === 'SUCCESS' && data[1] && data[1][0] && data[1][0][1]) {
         const suggestions = data[1][0][1].slice(0, 5);
         setTransliterationSuggestions(suggestions);
-        setSuggestionsCache(prev => ({ ...prev, [`${langCode}:${lowerWord}`]: suggestions }));
+        setSuggestionsCache(prev => ({ ...prev, [cacheKey]: suggestions }));
       } else {
-        // Fallback to local map (only for Hindi)
-        if (langCode === 'hi') {
-          const fallback = HINDI_FALLBACK_MAP[lowerWord];
-          setTransliterationSuggestions(fallback ? [fallback] : []);
-        } else {
-          setTransliterationSuggestions([]);
+        const fallback = HINDI_FALLBACK_MAP[word.toLowerCase()];
+        setTransliterationSuggestions(fallback ? [fallback] : []);
+        if (fallback) {
+          setSuggestionsCache(prev => ({ ...prev, [cacheKey]: [fallback] }));
         }
       }
     } catch (err) {
       if (err.name !== 'AbortError') {
-        console.log('Transliteration API error, using fallback');
-        const fallback = HINDI_FALLBACK_MAP[lowerWord];
+        const fallback = HINDI_FALLBACK_MAP[word.toLowerCase()];
         setTransliterationSuggestions(fallback ? [fallback] : []);
       }
     }
   };
-  
-  // Handle keyboard events (space/enter/period converts word)
+
+  // Shared lookup used by all keydown/input handlers
+  const getCachedSuggestions = (word) => {
+    const lowerWord = word.toLowerCase();
+    return suggestionsCacheRef.current[hiKey(lowerWord)] ||
+      (HINDI_FALLBACK_MAP[lowerWord] ? [HINDI_FALLBACK_MAP[lowerWord]] : null);
+  };
+
   const handleHindiKeyDown = (e, fieldName) => {
     if (!hindiTypingEnabled) return;
     if (e.key !== ' ' && e.key !== 'Enter' && e.key !== '.') return;
-    
+
     const target = e.target;
     const cursorPos = target.selectionStart;
     const value = target.value;
-    
-    // Find word boundaries
+
     let wordStart = cursorPos - 1;
     while (wordStart > 0 && value[wordStart - 1] !== ' ' && value[wordStart - 1] !== '\n') {
       wordStart--;
     }
     const currentWordText = value.substring(wordStart, cursorPos);
-    
-    // Only convert if word looks like English (ASCII letters only)
+
     if (!currentWordText || !/^[a-zA-Z]+$/.test(currentWordText)) {
       setShowSuggestions(false);
       return;
     }
-    
-    const lowerWord = currentWordText.toLowerCase();
-    const cachedSuggestions = suggestionsCache[lowerWord] || 
-      (HINDI_FALLBACK_MAP[lowerWord] ? [HINDI_FALLBACK_MAP[lowerWord]] : null);
-    
+
+    const cachedSuggestions = getCachedSuggestions(currentWordText);
+
     if (cachedSuggestions && cachedSuggestions.length > 0) {
       e.preventDefault();
       const replacement = cachedSuggestions[0];
       const separator = e.key === '.' ? '.' : (e.key === 'Enter' ? '\n' : ' ');
       const newValue = value.substring(0, wordStart) + replacement + separator + value.substring(cursorPos);
-      
+
       setBhajanForm(prev => ({ ...prev, [fieldName]: newValue }));
-      
+
       setShowSuggestions(false);
       setCurrentWord('');
-      
-      // Restore cursor
+
       setTimeout(() => {
         const newCursor = wordStart + replacement.length + 1;
         target.selectionStart = newCursor;
@@ -2478,59 +2310,45 @@ const App = () => {
       setShowSuggestions(false);
     }
   };
-  
-  // Track current word for suggestions
-  // ALSO handles auto-conversion on Android (which doesn't fire keydown for space)
+
   const handleHindiInput = (e, fieldName) => {
     const value = e.target.value;
     const oldValue = bhajanForm[fieldName] || '';
-    
-    // Detect if a space was JUST typed (Android compatibility)
-    const spaceJustTyped = value.length > oldValue.length && 
+
+    const spaceJustTyped = value.length > oldValue.length &&
                            (value.endsWith(' ') || value.endsWith('\n') || value.endsWith('.')) &&
                            !oldValue.endsWith(value.slice(-1));
-    
+
     setBhajanForm(prev => ({ ...prev, [fieldName]: value }));
-    
+
     if (!hindiTypingEnabled) {
       setShowSuggestions(false);
       return;
     }
-    
+
     const cursorPos = e.target.selectionStart;
-    
-    // If space was just typed, try to auto-convert the previous word
+
     if (spaceJustTyped) {
-      const separator = value.slice(-1); // space, newline, or period
+      const separator = value.slice(-1);
       const beforeSeparator = value.slice(0, -1);
-      
-      // Find the last word before separator
+
       let wordStart = beforeSeparator.length;
       while (wordStart > 0 && beforeSeparator[wordStart - 1] !== ' ' && beforeSeparator[wordStart - 1] !== '\n') {
         wordStart--;
       }
       const lastWord = beforeSeparator.substring(wordStart);
-      
-      // Only convert if it's English letters
+
       if (lastWord && /^[a-zA-Z]+$/.test(lastWord)) {
-        const lowerWord = lastWord.toLowerCase();
-        // Always Hindi transliteration when Hindi typing is on
-        const langCode = 'hi';
-        
-        const cachedSuggestions = suggestionsCache[`${langCode}:${lowerWord}`] ||
-          suggestionsCache[lowerWord] ||
-          (HINDI_FALLBACK_MAP[lowerWord] ? [HINDI_FALLBACK_MAP[lowerWord]] : null);
-        
+        const cachedSuggestions = getCachedSuggestions(lastWord);
+
         if (cachedSuggestions && cachedSuggestions.length > 0) {
-          // Auto-replace with top suggestion
           const replacement = cachedSuggestions[0];
           const newValue = beforeSeparator.substring(0, wordStart) + replacement + separator;
-          
+
           setBhajanForm(prev => ({ ...prev, [fieldName]: newValue }));
           setShowSuggestions(false);
           setCurrentWord('');
-          
-          // Restore cursor to end
+
           setTimeout(() => {
             const target = e.target;
             const newCursor = wordStart + replacement.length + 1;
@@ -2540,29 +2358,27 @@ const App = () => {
           return;
         }
       }
-      
+
       setShowSuggestions(false);
       setCurrentWord('');
       return;
     }
-    
-    // Normal typing - fetch suggestions for current word
+
     let wordStart = cursorPos;
     while (wordStart > 0 && value[wordStart - 1] !== ' ' && value[wordStart - 1] !== '\n') {
       wordStart--;
     }
     const wordText = value.substring(wordStart, cursorPos);
-    
+
     if (wordText && /^[a-zA-Z]+$/.test(wordText) && wordText.length >= 1) {
       setCurrentWord(wordText);
       setActiveTypingField(fieldName);
-      
-      // Debounced fetch
+
       if (suggestionsAbortRef.current && suggestionsAbortRef.current._timerId) {
         clearTimeout(suggestionsAbortRef.current._timerId);
       }
       const timerId = setTimeout(() => fetchGoogleSuggestions(wordText), 200);
-      suggestionsAbortRef.current = { 
+      suggestionsAbortRef.current = {
         _timerId: timerId,
         abort: () => clearTimeout(timerId)
       };
@@ -2572,29 +2388,25 @@ const App = () => {
       setCurrentWord('');
     }
   };
-  
-  // Apply a suggestion (tap on chip)
-  // Uses onMouseDown/onTouchStart with preventDefault to avoid losing focus
+
   const applySuggestion = (suggestion, fieldName) => {
     const fieldElement = document.getElementById(`hindi-input-${fieldName}`);
     if (!fieldElement) return;
-    
+
     const cursorPos = fieldElement.selectionStart;
     const value = fieldElement.value;
-    
+
     let wordStart = cursorPos;
     while (wordStart > 0 && value[wordStart - 1] !== ' ' && value[wordStart - 1] !== '\n') {
       wordStart--;
     }
-    
-    // Add space after suggestion for natural flow
+
     const newValue = value.substring(0, wordStart) + suggestion + ' ' + value.substring(cursorPos);
     setBhajanForm(prev => ({ ...prev, [fieldName]: newValue }));
-    
+
     setShowSuggestions(false);
     setCurrentWord('');
-    
-    // Restore focus and cursor position AFTER React re-render
+
     requestAnimationFrame(() => {
       fieldElement.focus();
       const newCursor = wordStart + suggestion.length + 1;
@@ -2609,7 +2421,7 @@ const App = () => {
     const value = e.target.value;
     const oldValue = publicBhajanForm[fieldName] || '';
 
-    const spaceJustTyped = value.length > oldValue.length && 
+    const spaceJustTyped = value.length > oldValue.length &&
                            (value.endsWith(' ') || value.endsWith('\n') || value.endsWith('.')) &&
                            !oldValue.endsWith(value.slice(-1));
 
@@ -2633,13 +2445,7 @@ const App = () => {
       const lastWord = beforeSeparator.substring(wordStart);
 
       if (lastWord && /^[a-zA-Z]+$/.test(lastWord)) {
-        const lowerWord = lastWord.toLowerCase();
-        // Always Hindi transliteration when Hindi typing is on
-        const langCode = 'hi';
-
-        const cachedSuggestions = suggestionsCache[`${langCode}:${lowerWord}`] ||
-          suggestionsCache[lowerWord] ||
-          (HINDI_FALLBACK_MAP[lowerWord] ? [HINDI_FALLBACK_MAP[lowerWord]] : null);
+        const cachedSuggestions = getCachedSuggestions(lastWord);
 
         if (cachedSuggestions && cachedSuggestions.length > 0) {
           const replacement = cachedSuggestions[0];
@@ -2678,7 +2484,7 @@ const App = () => {
         clearTimeout(suggestionsAbortRef.current._timerId);
       }
       const timerId = setTimeout(() => fetchGoogleSuggestions(wordText), 200);
-      suggestionsAbortRef.current = { 
+      suggestionsAbortRef.current = {
         _timerId: timerId,
         abort: () => clearTimeout(timerId)
       };
@@ -2708,9 +2514,7 @@ const App = () => {
       return;
     }
 
-    const lowerWord = currentWordText.toLowerCase();
-    const cachedSuggestions = suggestionsCache[lowerWord] || 
-      (HINDI_FALLBACK_MAP[lowerWord] ? [HINDI_FALLBACK_MAP[lowerWord]] : null);
+    const cachedSuggestions = getCachedSuggestions(currentWordText);
 
     if (cachedSuggestions && cachedSuggestions.length > 0) {
       e.preventDefault();
@@ -2773,24 +2577,21 @@ const App = () => {
     setCurrentView('public-bhajan-detail');
   };
 
-  // Save public bhajan to user's personal library
   const saveToMyLibrary = async (publicBhajan) => {
     if (!user || !userProfile) {
-      if (guestMode) { setGuestMode(false); } // redirect to login
+      if (guestMode) { setGuestMode(false); }
       return;
     }
-    
-    // Check if already saved
+
     if (savedBhajanIds.has(publicBhajan.id)) {
-      alert('You already have this bhajan in your library!');
+      showToast('Already in your library!', 'error');
       return;
     }
-    
+
     try {
       setSavingToLibrary(true);
       const db = window.firebase.firestore();
-      
-      // Create a copy in user's library
+
       const bhajanData = {
         title: publicBhajan.title || '',
         lyrics: publicBhajan.lyrics || '',
@@ -2804,70 +2605,95 @@ const App = () => {
         ownerName: userProfile.displayName,
         visibility: 'private',
         viewCount: 0,
-        savedFromPublicId: publicBhajan.id, // Track source
+        savedFromPublicId: publicBhajan.id,
         createdAt: window.firebase.firestore.FieldValue.serverTimestamp(),
         updatedAt: window.firebase.firestore.FieldValue.serverTimestamp(),
         lastActive: window.firebase.firestore.FieldValue.serverTimestamp()
       };
-      
-      // Save to user's collection
+
       await db.collection('users').doc(user.uid).collection('bhajans').add(bhajanData);
-      
-      // Update user's bhajan count
+
       await db.collection('users').doc(user.uid).update({
         'stats.bhajanCount': window.firebase.firestore.FieldValue.increment(1)
       });
-      
+
       setUserProfile(prev => ({
         ...prev,
         stats: { ...prev.stats, bhajanCount: (prev.stats?.bhajanCount || 0) + 1 }
       }));
-      
-      // Track that we saved it
+
       setSavedBhajanIds(prev => new Set([...prev, publicBhajan.id]));
-      
-      // Update public bhajan save count (best effort)
+
       try {
         await db.collection('publicBhajans').doc(publicBhajan.id).update({
           saveCount: window.firebase.firestore.FieldValue.increment(1)
         });
-      } catch (e) {
-        console.log('Could not update save count (not admin)');
-      }
-      
-      alert(`✅ "${publicBhajan.title}" added to your library!`);
-      console.log('✅ Bhajan saved to library');
+      } catch (e) { /* not admin — expected */ }
+
+      showToast(`✅ "${publicBhajan.title}" added to your library!`);
     } catch (error) {
       console.error('Error saving bhajan:', error);
-      alert('Could not save: ' + error.message);
+      showToast('Could not save: ' + error.message, 'error');
     } finally {
       setSavingToLibrary(false);
     }
   };
 
-  // Filter public bhajans
-  const filteredPublicBhajans = publicBhajans.filter(bhajan => {
-    if (debouncedPublicSearch) {
-      const q = debouncedPublicSearch.toLowerCase();
-      const matches = 
-        (bhajan.title && bhajan.title.toLowerCase().includes(q)) ||
-        (bhajan.lyrics && bhajan.lyrics.toLowerCase().includes(q)) ||
-        (bhajan.dhun && bhajan.dhun.toLowerCase().includes(q)) ||
-        (bhajan.keywords && bhajan.keywords.some(k => k.toLowerCase().includes(q)));
-      if (!matches) return false;
-    }
-    if (publicFilterDeity && bhajan.deity !== publicFilterDeity) return false;
-    if (publicFilterCategory && bhajan.category !== publicFilterCategory) return false;
-    if (publicFilterKeyword && (!bhajan.keywords || !bhajan.keywords.includes(publicFilterKeyword))) return false;
-    return true;
-  });
+  // ==============================================
+  // MEMOIZED FILTERED LISTS (SESSION 5: previously ran full-lyrics
+  // .toLowerCase().includes() on every single render)
+  // ==============================================
+  const filteredPublicBhajans = useMemo(() => {
+    const q = debouncedPublicSearch.toLowerCase();
+    return publicBhajans.filter(bhajan => {
+      if (q) {
+        const matches =
+          (bhajan.title && bhajan.title.toLowerCase().includes(q)) ||
+          (bhajan.lyrics && bhajan.lyrics.toLowerCase().includes(q)) ||
+          (bhajan.dhun && bhajan.dhun.toLowerCase().includes(q)) ||
+          (bhajan.keywords && bhajan.keywords.some(k => k.toLowerCase().includes(q)));
+        if (!matches) return false;
+      }
+      if (publicFilterDeity && bhajan.deity !== publicFilterDeity) return false;
+      if (publicFilterCategory && bhajan.category !== publicFilterCategory) return false;
+      if (publicFilterKeyword && (!bhajan.keywords || !bhajan.keywords.includes(publicFilterKeyword))) return false;
+      return true;
+    });
+  }, [publicBhajans, debouncedPublicSearch, publicFilterDeity, publicFilterCategory, publicFilterKeyword]);
+
+  const filteredBhajans = useMemo(() => {
+    const q = debouncedSearchQuery.toLowerCase();
+    return bhajans.filter(bhajan => {
+      if (q) {
+        const matches =
+          (bhajan.title && bhajan.title.toLowerCase().includes(q)) ||
+          (bhajan.lyrics && bhajan.lyrics.toLowerCase().includes(q)) ||
+          (bhajan.dhun && bhajan.dhun.toLowerCase().includes(q)) ||
+          (bhajan.keywords && bhajan.keywords.some(k => k.toLowerCase().includes(q)));
+        if (!matches) return false;
+      }
+      if (filterDeity && bhajan.deity !== filterDeity) return false;
+      if (filterCategory && bhajan.category !== filterCategory) return false;
+      if (libraryFilterKeyword && (!bhajan.keywords || !bhajan.keywords.includes(libraryFilterKeyword))) return false;
+      return true;
+    });
+  }, [bhajans, debouncedSearchQuery, filterDeity, filterCategory, libraryFilterKeyword]);
+
+  const filteredPrograms = useMemo(() => {
+    if (!programSearchQuery) return programs;
+    const q = programSearchQuery.toLowerCase();
+    return programs.filter(program =>
+      (program.name && program.name.toLowerCase().includes(q)) ||
+      (program.venue && program.venue.toLowerCase().includes(q))
+    );
+  }, [programs, programSearchQuery]);
 
   // ==============================================
   // ADMIN PANEL FUNCTIONS
   // ==============================================
   const openAdminPanel = () => {
     if (!isAdmin) {
-      alert('Access denied. Admin only.');
+      showToast('Access denied. Admin only.', 'error');
       return;
     }
     setCurrentView('admin-panel');
@@ -2875,28 +2701,24 @@ const App = () => {
     setImportPreview(null);
     setImportError('');
     setImportSuccess('');
-    // Auto-load feedback list
     loadFeedbackList();
-    // Load config lists (deities/categories/keywords)
     loadConfigLists();
   };
 
-  // Parse JSON and show preview
   const previewImport = () => {
     setImportError('');
     setImportSuccess('');
-    
+
     if (!importJsonText.trim()) {
       setImportError('Please paste JSON content first');
       return;
     }
-    
+
     try {
       const parsed = JSON.parse(importJsonText);
-      
-      // Handle different possible structures
+
       let bhajanArray = [];
-      
+
       if (Array.isArray(parsed)) {
         bhajanArray = parsed;
       } else if (parsed.bhajans && Array.isArray(parsed.bhajans)) {
@@ -2904,18 +2726,16 @@ const App = () => {
       } else if (parsed.data && Array.isArray(parsed.data)) {
         bhajanArray = parsed.data;
       } else if (typeof parsed === 'object') {
-        // Maybe it's an object of bhajans
-        bhajanArray = Object.values(parsed).filter(v => 
+        bhajanArray = Object.values(parsed).filter(v =>
           v && typeof v === 'object' && (v.title || v.lyrics)
         );
       }
-      
+
       if (bhajanArray.length === 0) {
         setImportError('No bhajans found in the JSON. Please check the format.');
         return;
       }
-      
-      // Helper: parse keywords (string OR array)
+
       const parseKeywords = (kw) => {
         if (!kw) return [];
         if (Array.isArray(kw)) return kw.filter(k => k && typeof k === 'string').map(k => k.trim()).filter(k => k);
@@ -2924,8 +2744,7 @@ const App = () => {
         }
         return [];
       };
-      
-      // Normalize each bhajan
+
       const normalized = bhajanArray.map((b, idx) => {
         return {
           _originalIndex: idx,
@@ -2938,8 +2757,8 @@ const App = () => {
           keywords: parseKeywords(b.keywords || b.tags),
           source: (b.source || b.sourceUrl || b.url || b.link || '').toString().trim()
         };
-      }).filter(b => b.title && b.lyrics); // Only keep valid bhajans
-      
+      }).filter(b => b.title && b.lyrics);
+
       setImportPreview({
         total: bhajanArray.length,
         valid: normalized.length,
@@ -2951,11 +2770,10 @@ const App = () => {
     }
   };
 
-  // Normalize deity name to match our options
   const normalizeDeity = (deity) => {
     if (!deity) return 'Others';
     const d = deity.toString().toLowerCase().trim();
-    
+
     if (d.includes('babos')) return 'Babosa';
     if (d.includes('krishn') || d.includes('kanhaiy') || d.includes('kanha')) return 'Krishna';
     if (d.includes('mata') || d.includes('devi') || d.includes('amba') || d.includes('durg')) return 'Mata Ji';
@@ -2973,20 +2791,18 @@ const App = () => {
     if (d.includes('jain')) return 'Jain';
     if (d.includes('nirgun')) return 'Nirgun';
     if (d.includes('desh')) return 'Deshbhakti';
-    
-    // Match exact options
+
     const validOptions = ['Babosa', 'Krishna', 'Mata Ji', 'Hanuman', 'Rama', 'Shiv', 'Ramdev', 'Ganesh', 'Bhairav', 'Saibaba', 'Vishnu', 'Buddha', 'Mahavir', 'Guru Nanak', 'Jain', 'Nirgun', 'Deshbhakti', 'Others'];
     const found = validOptions.find(o => o.toLowerCase() === d);
     if (found) return found;
-    
+
     return 'Others';
   };
 
-  // Normalize category
   const normalizeCategory = (cat) => {
     if (!cat) return 'Bhajan';
     const c = cat.toString().toLowerCase().trim();
-    
+
     if (c.includes('arti') || c.includes('aarti')) return 'Arti';
     if (c.includes('parody')) return 'Parody';
     if (c.includes('quwal') || c.includes('qawwal')) return 'Quwali';
@@ -2997,109 +2813,119 @@ const App = () => {
     if (c.includes('mantra')) return 'Mantra';
     if (c.includes('chalisa')) return 'Chalisa';
     if (c.includes('bhajan')) return 'Bhajan';
-    
+
     return 'Bhajan';
   };
 
-  // Bulk import bhajans in batches
-  const executeImport = async () => {
+  const executeImport = () => {
     if (!importPreview || !importPreview.bhajans) return;
     if (!isAdmin) {
-      alert('Access denied. Admin only.');
+      showToast('Access denied. Admin only.', 'error');
       return;
     }
-    
-    if (!window.confirm(`Import ${importPreview.valid} bhajans to Public Library? This cannot be easily undone.`)) {
-      return;
-    }
-    
-    try {
-      setImporting(true);
-      setImportError('');
-      setImportSuccess('');
-      setImportProgress({ current: 0, total: importPreview.valid, message: 'Starting import...' });
-      
-      const db = window.firebase.firestore();
-      const batchSize = 25;
-      let successCount = 0;
-      let errorCount = 0;
-      
-      for (let i = 0; i < importPreview.bhajans.length; i += batchSize) {
-        const batch = db.batch();
-        const chunk = importPreview.bhajans.slice(i, i + batchSize);
-        
-        chunk.forEach((bhajan) => {
-          const docRef = db.collection('publicBhajans').doc();
-          batch.set(docRef, {
-            title: bhajan.title,
-            lyrics: bhajan.lyrics,
-            deity: bhajan.deity,
-            category: bhajan.category,
-            dhun: bhajan.dhun,
-            scale: bhajan.scale,
-            keywords: bhajan.keywords || [],
-            source: bhajan.source,
-            saveCount: 0,
-            viewCount: 0,
-            addedByUid: user.uid,
-            createdAt: window.firebase.firestore.FieldValue.serverTimestamp(),
-            updatedAt: window.firebase.firestore.FieldValue.serverTimestamp()
-          });
-        });
-        
+
+    askConfirm(
+      {
+        title: 'Import Bhajans?',
+        message: `${importPreview.valid} bhajans will be added to the Public Library for all users. This cannot be easily undone.`,
+        confirmLabel: `✅ Import ${importPreview.valid}`,
+        danger: false
+      },
+      async () => {
         try {
-          await batch.commit();
-          successCount += chunk.length;
-          setImportProgress({
-            current: successCount,
-            total: importPreview.valid,
-            message: `Imported ${successCount} of ${importPreview.valid}...`
-          });
+          setImporting(true);
+          setImportError('');
+          setImportSuccess('');
+          setImportProgress({ current: 0, total: importPreview.valid, message: 'Starting import...' });
+
+          const db = window.firebase.firestore();
+          const batchSize = 25;
+          let successCount = 0;
+          let errorCount = 0;
+
+          for (let i = 0; i < importPreview.bhajans.length; i += batchSize) {
+            const batch = db.batch();
+            const chunk = importPreview.bhajans.slice(i, i + batchSize);
+
+            chunk.forEach((bhajan) => {
+              const docRef = db.collection('publicBhajans').doc();
+              batch.set(docRef, {
+                title: bhajan.title,
+                lyrics: bhajan.lyrics,
+                deity: bhajan.deity,
+                category: bhajan.category,
+                dhun: bhajan.dhun,
+                scale: bhajan.scale,
+                keywords: bhajan.keywords || [],
+                source: bhajan.source,
+                saveCount: 0,
+                viewCount: 0,
+                addedByUid: user.uid,
+                createdAt: window.firebase.firestore.FieldValue.serverTimestamp(),
+                updatedAt: window.firebase.firestore.FieldValue.serverTimestamp()
+              });
+            });
+
+            try {
+              await batch.commit();
+              successCount += chunk.length;
+              setImportProgress({
+                current: successCount,
+                total: importPreview.valid,
+                message: `Imported ${successCount} of ${importPreview.valid}...`
+              });
+            } catch (error) {
+              console.error('Batch error:', error);
+              errorCount += chunk.length;
+            }
+          }
+
+          if (errorCount === 0) {
+            setImportSuccess(`✅ Successfully imported ${successCount} bhajans to Public Library!`);
+          } else {
+            setImportSuccess(`⚠️ Imported ${successCount} bhajans. ${errorCount} failed.`);
+          }
+
+          setImportProgress({ current: 0, total: 0, message: '' });
+          setImportJsonText('');
+          setImportPreview(null);
+
         } catch (error) {
-          console.error('Batch error:', error);
-          errorCount += chunk.length;
+          console.error('Import error:', error);
+          setImportError('Import failed: ' + error.message);
+        } finally {
+          setImporting(false);
         }
       }
-      
-      if (errorCount === 0) {
-        setImportSuccess(`✅ Successfully imported ${successCount} bhajans to Public Library!`);
-      } else {
-        setImportSuccess(`⚠️ Imported ${successCount} bhajans. ${errorCount} failed.`);
-      }
-      
-      setImportProgress({ current: 0, total: 0, message: '' });
-      setImportJsonText('');
-      setImportPreview(null);
-      
-    } catch (error) {
-      console.error('Import error:', error);
-      setImportError('Import failed: ' + error.message);
-    } finally {
-      setImporting(false);
-    }
+    );
   };
 
-  // Delete a public bhajan (admin only)
-  const deletePublicBhajan = async (bhajan) => {
+  const deletePublicBhajan = (bhajan) => {
     if (!isAdmin) {
-      alert('Access denied. Admin only.');
+      showToast('Access denied. Admin only.', 'error');
       return;
     }
-    if (!window.confirm(`Delete public bhajan "${bhajan.title}"? This affects all users.`)) {
-      return;
-    }
-    try {
-      const db = window.firebase.firestore();
-      await db.collection('publicBhajans').doc(bhajan.id).delete();
-      console.log('✅ Public bhajan deleted');
-      if (selectedPublicBhajan && selectedPublicBhajan.id === bhajan.id) {
-        setCurrentView('public-library');
-        setSelectedPublicBhajan(null);
+    askConfirm(
+      {
+        title: 'Delete Public Bhajan?',
+        message: `"${bhajan.title}" will be removed from the Public Library for ALL users.`,
+        confirmLabel: '🗑️ Delete for Everyone'
+      },
+      async () => {
+        try {
+          const db = window.firebase.firestore();
+          await db.collection('publicBhajans').doc(bhajan.id).delete();
+          if (selectedPublicBhajan && selectedPublicBhajan.id === bhajan.id) {
+            setCurrentView('public-library');
+            setSelectedPublicBhajan(null);
+          }
+          showToast('Public bhajan deleted');
+        } catch (error) {
+          console.error('Error deleting public bhajan:', error);
+          showToast('Could not delete: ' + error.message, 'error');
+        }
       }
-    } catch (error) {
-      console.error('Error deleting public bhajan:', error);
-      alert('Could not delete: ' + error.message);
-    }
+    );
   };
 
   // ==============================================
@@ -3172,20 +2998,17 @@ const App = () => {
       };
 
       if (editingPublicBhajan) {
-        // Update existing
         await db.collection('publicBhajans').doc(editingPublicBhajan.id).update(bhajanData);
-        console.log('✅ Public bhajan updated');
-        // Update selected if it's the one being viewed
         if (selectedPublicBhajan && selectedPublicBhajan.id === editingPublicBhajan.id) {
           setSelectedPublicBhajan({ ...editingPublicBhajan, ...bhajanData });
         }
+        showToast('💾 Public bhajan updated');
       } else {
-        // Create new
         bhajanData.saveCount = 0;
         bhajanData.viewCount = 0;
         bhajanData.createdAt = window.firebase.firestore.FieldValue.serverTimestamp();
         await db.collection('publicBhajans').add(bhajanData);
-        console.log('✅ Public bhajan created');
+        showToast(`✅ "${bhajanData.title}" added to Public Library`);
       }
 
       setShowPublicBhajanForm(false);
@@ -3229,7 +3052,7 @@ const App = () => {
     setCurrentView('programs');
     setProgramSearchQuery('');
   };
-  
+
   const openCreateProgram = () => {
     setProgramForm({
       name: '',
@@ -3240,14 +3063,13 @@ const App = () => {
     setProgramFormError('');
     setEditingProgram(null);
     setCurrentView('create-program');
-    // Auto-open bhajan picker so user can start adding immediately
     setShowBhajanPicker(true);
     setBhajanPickerSearch('');
     setPickerDeityFilter('');
     setPickerCategoryFilter('');
     setPickerKeywordFilter('');
   };
-  
+
   const openEditProgram = (program) => {
     setProgramForm({
       name: program.name || '',
@@ -3259,23 +3081,23 @@ const App = () => {
     setEditingProgram(program);
     setCurrentView('edit-program');
   };
-  
+
   const openProgramDetail = (program) => {
     setSelectedProgram(program);
     setCurrentView('program-detail');
   };
-  
+
   const saveProgram = async () => {
     if (!programForm.name.trim()) {
       setProgramFormError('Please enter a program name');
       return;
     }
-    
+
     try {
       setProgramFormSaving(true);
       setProgramFormError('');
       const db = window.firebase.firestore();
-      
+
       const programData = {
         name: programForm.name.trim(),
         date: programForm.date.trim(),
@@ -3287,19 +3109,19 @@ const App = () => {
         updatedAt: window.firebase.firestore.FieldValue.serverTimestamp(),
         lastActive: window.firebase.firestore.FieldValue.serverTimestamp()
       };
-      
+
       const programsRef = db.collection('users').doc(user.uid).collection('programs');
-      
+
       if (editingProgram) {
         await programsRef.doc(editingProgram.id).update(programData);
-        console.log('✅ Program updated');
         setSelectedProgram({ ...editingProgram, ...programData });
         setCurrentView('program-detail');
+        showToast('💾 Program updated');
       } else {
         programData.createdAt = window.firebase.firestore.FieldValue.serverTimestamp();
-        const docRef = await programsRef.add(programData);
-        console.log('✅ Program created:', docRef.id);
+        await programsRef.add(programData);
         setCurrentView('programs');
+        showToast(`✅ Program "${programData.name}" created`);
       }
     } catch (error) {
       console.error('Error saving program:', error);
@@ -3308,25 +3130,29 @@ const App = () => {
       setProgramFormSaving(false);
     }
   };
-  
-  const deleteProgram = async (program) => {
-    if (!window.confirm(`Delete program "${program.name}"? This cannot be undone.`)) {
-      return;
-    }
-    
-    try {
-      const db = window.firebase.firestore();
-      await db.collection('users').doc(user.uid).collection('programs').doc(program.id).delete();
-      console.log('✅ Program deleted');
-      setCurrentView('programs');
-      setSelectedProgram(null);
-    } catch (error) {
-      console.error('Error deleting program:', error);
-      alert('Could not delete: ' + error.message);
-    }
+
+  const deleteProgram = (program) => {
+    askConfirm(
+      {
+        title: 'Delete Program?',
+        message: `"${program.name}" and its setlist will be permanently deleted. Your bhajans stay in your library.`,
+        confirmLabel: '🗑️ Delete'
+      },
+      async () => {
+        try {
+          const db = window.firebase.firestore();
+          await db.collection('users').doc(user.uid).collection('programs').doc(program.id).delete();
+          setCurrentView('programs');
+          setSelectedProgram(null);
+          showToast('Program deleted');
+        } catch (error) {
+          console.error('Error deleting program:', error);
+          showToast('Could not delete: ' + error.message, 'error');
+        }
+      }
+    );
   };
-  
-  // Add bhajan to program form
+
   const addBhajanToProgram = (bhajanId) => {
     if (!programForm.bhajanIds.includes(bhajanId)) {
       setProgramForm(prev => ({
@@ -3337,14 +3163,14 @@ const App = () => {
     setShowBhajanPicker(false);
     setBhajanPickerSearch('');
   };
-  
+
   const removeBhajanFromProgram = (bhajanId) => {
     setProgramForm(prev => ({
       ...prev,
       bhajanIds: prev.bhajanIds.filter(id => id !== bhajanId)
     }));
   };
-  
+
   const moveBhajanUp = (index) => {
     if (index <= 0) return;
     setProgramForm(prev => {
@@ -3353,7 +3179,7 @@ const App = () => {
       return { ...prev, bhajanIds: newIds };
     });
   };
-  
+
   const moveBhajanDown = (index) => {
     setProgramForm(prev => {
       if (index >= prev.bhajanIds.length - 1) return prev;
@@ -3362,63 +3188,50 @@ const App = () => {
       return { ...prev, bhajanIds: newIds };
     });
   };
-  
-  // Helper: get bhajan by ID
+
   const getBhajanById = (id) => bhajans.find(b => b.id === id);
-  
-  // Filter programs
-  const filteredPrograms = programs.filter(program => {
-    if (!programSearchQuery) return true;
-    const q = programSearchQuery.toLowerCase();
-    return (program.name && program.name.toLowerCase().includes(q)) ||
-           (program.venue && program.venue.toLowerCase().includes(q));
-  });
-  
+
   // ==============================================
   // LIVE PROGRAM MODE
   // ==============================================
   const startLiveProgram = async (program) => {
     if (!program.bhajanIds || program.bhajanIds.length === 0) {
-      alert('This program has no bhajans! Add some first.');
+      showToast('This program has no bhajans! Add some first.', 'error');
       return;
     }
     setSelectedProgram(program);
     setLiveProgramIndex(0);
     setCurrentView('live-program');
-    
-    // Try to enable screen wake lock
+
     try {
       if ('wakeLock' in navigator) {
         const wakeLock = await navigator.wakeLock.request('screen');
         setLiveWakeLock(wakeLock);
-        console.log('✅ Screen wake lock enabled');
       }
     } catch (error) {
       console.log('Wake lock not available:', error);
     }
   };
-  
+
   const exitLiveProgram = async () => {
-    // Release wake lock
     if (liveWakeLock) {
       try {
         await liveWakeLock.release();
         setLiveWakeLock(null);
-        console.log('✅ Wake lock released');
       } catch (error) {
         console.log('Error releasing wake lock:', error);
       }
     }
     setCurrentView('program-detail');
   };
-  
+
   const liveNext = () => {
     if (selectedProgram && liveProgramIndex < selectedProgram.bhajanIds.length - 1) {
       setLiveProgramIndex(liveProgramIndex + 1);
       window.scrollTo(0, 0);
     }
   };
-  
+
   const livePrev = () => {
     if (liveProgramIndex > 0) {
       setLiveProgramIndex(liveProgramIndex - 1);
@@ -3426,26 +3239,8 @@ const App = () => {
     }
   };
 
-  // Filter bhajans based on search and filters
-  const filteredBhajans = bhajans.filter(bhajan => {
-    if (debouncedSearchQuery) {
-      const q = debouncedSearchQuery.toLowerCase();
-      const matches = 
-        (bhajan.title && bhajan.title.toLowerCase().includes(q)) ||
-        (bhajan.lyrics && bhajan.lyrics.toLowerCase().includes(q)) ||
-        (bhajan.dhun && bhajan.dhun.toLowerCase().includes(q)) ||
-        (bhajan.keywords && bhajan.keywords.some(k => k.toLowerCase().includes(q)));
-      if (!matches) return false;
-    }
-    if (filterDeity && bhajan.deity !== filterDeity) return false;
-    if (filterCategory && bhajan.category !== filterCategory) return false;
-    if (libraryFilterKeyword && (!bhajan.keywords || !bhajan.keywords.includes(libraryFilterKeyword))) return false;
-    return true;
-  });
-
   // ==============================================
   // SWIPE NAVIGATION — next/prev bhajan in reading view
-  // Works in both public and my-library detail views.
   // ==============================================
   const navigateBhajan = useCallback((direction, isPublic) => {
     const list = isPublic ? filteredPublicBhajans : filteredBhajans;
@@ -3468,7 +3263,6 @@ const App = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [filteredPublicBhajans, filteredBhajans, selectedPublicBhajan, selectedBhajan, trackRecentRead]);
 
-  // Swipe handlers for detail views
   const publicSwipe = useSwipe(
     () => navigateBhajan('next', true),
     () => navigateBhajan('prev', true),
@@ -3483,9 +3277,9 @@ const App = () => {
   // Share handler with toast feedback
   const handleShareBhajan = useCallback(async (bhajan) => {
     const result = await shareBhajan(bhajan);
-    if (result === 'copied') showShareToast('📋 Lyrics copied to clipboard!');
-    else if (result === 'shared') showShareToast('✓ Shared successfully!');
-  }, [showShareToast]);
+    if (result === 'copied') showToast('📋 Lyrics copied to clipboard!');
+    else if (result === 'shared') showToast('✓ Shared successfully!');
+  }, [showToast]);
 
   // ==============================================
   // AUTHENTICATION - GOOGLE
@@ -3494,19 +3288,16 @@ const App = () => {
     try {
       setAuthLoading(true);
       setAuthError('');
-      
+
       const provider = new window.firebase.auth.GoogleAuthProvider();
       provider.setCustomParameters({ prompt: 'select_account' });
-      
+
       try {
-        // Try popup method first (better UX)
         await window.firebase.auth().signInWithPopup(provider);
-        console.log('✅ Google sign-in successful (popup)');
       } catch (popupError) {
         console.warn('Popup failed, trying redirect:', popupError);
-        
-        // If popup blocked or has issues, use redirect
-        if (popupError.code === 'auth/popup-blocked' || 
+
+        if (popupError.code === 'auth/popup-blocked' ||
             popupError.code === 'auth/popup-closed-by-user' ||
             popupError.code === 'auth/cancelled-popup-request' ||
             popupError.message?.includes('Cross-Origin')) {
@@ -3542,9 +3333,7 @@ const App = () => {
       }
       window.recaptchaVerifier = new window.firebase.auth.RecaptchaVerifier('recaptcha-container', {
         size: 'invisible',
-        callback: () => {
-          console.log('✅ reCAPTCHA verified');
-        }
+        callback: () => {}
       });
     } catch (error) {
       console.error('reCAPTCHA setup error:', error);
@@ -3560,19 +3349,18 @@ const App = () => {
     try {
       setAuthLoading(true);
       setAuthError('');
-      
+
       const formattedPhone = phoneNumber.startsWith('+') ? phoneNumber : `+91${phoneNumber}`;
-      
+
       setupRecaptcha();
-      
+
       const confirmation = await window.firebase.auth().signInWithPhoneNumber(
         formattedPhone,
         window.recaptchaVerifier
       );
-      
+
       setConfirmationResult(confirmation);
       setOtpSent(true);
-      console.log('✅ OTP sent to', formattedPhone);
     } catch (error) {
       console.error('OTP send error:', error);
       if (error.code === 'auth/billing-not-enabled') {
@@ -3596,10 +3384,9 @@ const App = () => {
     try {
       setAuthLoading(true);
       setAuthError('');
-      
+
       await confirmationResult.confirm(otpCode);
-      console.log('✅ Phone verification successful');
-      
+
       setOtpCode('');
       setOtpSent(false);
       setPhoneNumber('');
@@ -3627,17 +3414,86 @@ const App = () => {
       setOtpSent(false);
       setPhoneNumber('');
       setOtpCode('');
-      console.log('👋 Logged out');
     } catch (error) {
       console.error('Logout error:', error);
     }
   };
 
   // ==============================================
+  // SHARED UI FRAGMENTS (rendered inside branches below)
+  // ==============================================
+
+  // ConfirmDialog — branded replacement for window.confirm()
+  const confirmDialogJsx = confirmDialog && (
+    <div
+      onClick={closeConfirm}
+      className="fixed inset-0 bg-black/60 z-[110] flex items-center justify-center p-4"
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className={`sk-dialog-animate rounded-3xl shadow-[0_8px_40px_rgba(11,90,112,0.2)] max-w-sm w-full overflow-hidden ${darkMode ? 'bg-[#162226] text-gray-100' : 'bg-[#FFFCF8]'}`}
+        role="alertdialog"
+        aria-modal="true"
+        aria-label={confirmDialog.title}
+      >
+        <div className={`p-5 text-white text-center ${confirmDialog.danger ? 'bg-gradient-to-br from-red-500 to-red-600' : 'bg-[#0B5A70]'}`}>
+          <div className="text-4xl mb-1">{confirmDialog.danger ? '⚠️' : '🤔'}</div>
+          <h3 className="text-xl font-bold">{confirmDialog.title}</h3>
+        </div>
+        <div className="p-5">
+          {confirmDialog.message && (
+            <p className={`text-sm leading-relaxed mb-5 text-center ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+              {confirmDialog.message}
+            </p>
+          )}
+          <div className="flex gap-3">
+            <button
+              onClick={closeConfirm}
+              className={`flex-1 font-semibold py-3 rounded-xl transition-colors ${darkMode ? 'bg-[#1e2e33] text-gray-200 hover:bg-[#243940]' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={runConfirm}
+              className={`flex-1 text-white font-bold py-3 rounded-xl shadow-lg transition-all ${confirmDialog.danger ? 'bg-red-500 hover:bg-red-600' : 'bg-[#0B5A70] hover:bg-[#094a5d]'}`}
+            >
+              {confirmDialog.confirmLabel}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  // Toast — success (teal) / error (red)
+  const toastJsx = toast && (
+    <div
+      className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[105] pointer-events-none px-4 max-w-full"
+      style={{
+        animation: toast.visible
+          ? 'sk-toast-in 0.3s cubic-bezier(0.22,1,0.36,1) both'
+          : 'sk-toast-out 0.3s ease-in both'
+      }}
+      role="status"
+      aria-live="polite"
+    >
+      <div className={`px-5 py-3 rounded-2xl shadow-lg text-sm font-semibold text-center ${
+        toast.type === 'error'
+          ? 'bg-red-600 text-white shadow-[0_4px_20px_rgba(220,38,38,0.35)]'
+          : darkMode
+            ? 'bg-[#1e2e33] text-gray-100 border border-[#0B5A70]/20'
+            : 'bg-[#0B5A70] text-white shadow-[0_4px_20px_rgba(11,90,112,0.3)]'
+      }`}>
+        {toast.message}
+      </div>
+    </div>
+  );
+
+  // Bottom tab bar visibility — only on top-level list views
+  const showTabBar = ['public-library', 'library', 'programs'].includes(currentView);
+
+  // ==============================================
   // BRANDED SPLASH SCREEN
-  // Shows on every app open with animated brand identity.
-  // Minimum 2.8s display so users see the full animation
-  // sequence: logo → tagline typewriter → credit line glow.
   // ==============================================
   if (loading || splashVisible) {
     return (
@@ -3677,7 +3533,6 @@ const App = () => {
         `}</style>
 
         <div className="text-center max-w-sm mx-auto">
-          {/* Logo with scale+fade entrance */}
           <div
             style={{
               animation: 'splashLogoIn 0.8s ease-out forwards',
@@ -3687,7 +3542,6 @@ const App = () => {
             <SankirtanWordmark className="h-16 sm:h-20 w-auto mx-auto" />
           </div>
 
-          {/* Tagline in Devanagari with letter-spacing entrance */}
           <p
             style={{
               fontFamily: "'Noto Sans Devanagari', system-ui, sans-serif",
@@ -3700,7 +3554,6 @@ const App = () => {
             भजन से भगवान तक
           </p>
 
-          {/* Decorative divider */}
           <div className="flex justify-center mt-4">
             <div
               style={{
@@ -3713,7 +3566,6 @@ const App = () => {
             />
           </div>
 
-          {/* Credit line with Babosa Bhagwan glow */}
           <div
             style={{
               animation: 'splashCreditIn 0.7s ease-out 1.6s forwards',
@@ -3721,10 +3573,10 @@ const App = () => {
             }}
             className="mt-5"
           >
-            <p className="text-[#0B5A70]/50 text-xs sm:text-sm leading-relaxed">
+            <p className="text-[#0B5A70]/60 text-xs sm:text-sm leading-relaxed">
               Founded for the Bhajan Community
             </p>
-            <p className="text-[#0B5A70]/50 text-xs sm:text-sm mt-1 flex items-center justify-center gap-1.5">
+            <p className="text-[#0B5A70]/60 text-xs sm:text-sm mt-1 flex items-center justify-center gap-1.5">
               <span
                 style={{ animation: 'splashPrayerPulse 2s ease-in-out 2s infinite' }}
               >
@@ -3743,7 +3595,6 @@ const App = () => {
             </p>
           </div>
 
-          {/* Spinner appears last */}
           <div
             className="mt-8"
             style={{
@@ -3827,7 +3678,7 @@ const App = () => {
 
               <div className="pt-2 border-t border-[#0B5A70]/8">
                 <p className="text-xs text-gray-500 mb-2">📱 Social & Contact (optional)</p>
-                
+
                 <div className="space-y-2">
                   <input
                     type="text"
@@ -3881,42 +3732,232 @@ const App = () => {
   }
 
   // ==============================================
+  // LIVE PROGRAM MODE (Fullscreen)
+  // SESSION 5 FIX: this branch now comes BEFORE the main app branch.
+  // Previously it was unreachable — the main branch returned first
+  // for all authenticated users, so Live Mode showed a blank main.
+  // ==============================================
+  if (user && userProfile && currentView === 'live-program' && selectedProgram) {
+    const currentBhajanId = selectedProgram.bhajanIds[liveProgramIndex];
+    const currentBhajan = getBhajanById(currentBhajanId);
+    const totalBhajans = selectedProgram.bhajanIds.length;
+
+    if (!currentBhajan) {
+      return (
+        <div className="min-h-screen bg-[#FFF8F0] p-4 flex items-center justify-center">
+          <div className="text-center">
+            <p className="text-lg text-[#0B5A70] mb-4">⚠️ This bhajan is not available</p>
+            <p className="text-sm text-gray-600 mb-4">It may have been deleted from your library</p>
+            <button
+              onClick={exitLiveProgram}
+              className="bg-[#0B5A70] hover:bg-[#094a5d] text-white px-4 py-2 rounded-xl"
+            >
+              Exit Live Mode
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="min-h-screen bg-[#FFF8F0]">
+        {confirmDialogJsx}
+        {toastJsx}
+        {/* Live Header */}
+        <div className="bg-[#FFF8F0]/95 backdrop-blur-md sticky top-0 z-40 border-b border-[#0B5A70]/10">
+          <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
+            <button
+              onClick={exitLiveProgram}
+              className="text-red-600 hover:text-red-800 font-semibold flex items-center gap-1 text-sm"
+              aria-label="Exit live mode"
+            >
+              ✕ Exit Live
+            </button>
+            <div className="text-center flex-1 mx-4">
+              <p className="text-xs text-[#0B5A70]/60 font-semibold">🎤 LIVE PROGRAM</p>
+              <p className="text-sm font-bold text-[#0B5A70] truncate">{selectedProgram.name}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-xs text-gray-500">Bhajan</p>
+              <p className="text-lg font-bold text-[#E65100]">{liveProgramIndex + 1} / {totalBhajans}</p>
+            </div>
+          </div>
+
+          {/* Font Size Controls */}
+          <div className="max-w-4xl mx-auto px-4 pb-2 flex items-center justify-center gap-2">
+            <button
+              onClick={() => setLiveFontSize(Math.max(14, liveFontSize - 2))}
+              className="w-8 h-8 rounded-lg bg-[#0B5A70]/8 hover:bg-[#0B5A70]/15 text-[#0B5A70] font-bold"
+              title="Decrease font"
+              aria-label="Decrease font size"
+            >
+              A−
+            </button>
+            <span className="text-xs text-gray-500 min-w-[40px] text-center">{liveFontSize}px</span>
+            <button
+              onClick={() => setLiveFontSize(Math.min(40, liveFontSize + 2))}
+              className="w-8 h-8 rounded-lg bg-[#0B5A70]/8 hover:bg-[#0B5A70]/15 text-[#0B5A70] font-bold"
+              title="Increase font"
+              aria-label="Increase font size"
+            >
+              A+
+            </button>
+            {liveWakeLock && (
+              <span className="ml-2 text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded-full">
+                🔦 Screen On
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Bhajan Content */}
+        <div className="max-w-4xl mx-auto px-4 py-6 pb-24">
+          <h1 className="text-3xl md:text-4xl font-bold text-[#0B5A70] mb-3">
+            {currentBhajan.title}
+          </h1>
+
+          {currentBhajan.dhun && (
+            <div className="bg-[#0B5A70]/5 border-l-4 border-[#E65100]/40 p-3 rounded-r-lg mb-4">
+              <p className="text-sm text-[#E65100]">
+                <span className="font-semibold">तर्ज़ / धुन:</span> {currentBhajan.dhun}
+              </p>
+            </div>
+          )}
+
+          <div className="flex flex-wrap gap-2 mb-6">
+            <span className="bg-[#0B5A70]/8 text-[#0B5A70] px-3 py-1 rounded-full text-sm font-semibold">
+              {currentBhajan.deity}
+            </span>
+            {currentBhajan.scale && (
+              <span className="bg-purple-50 text-purple-700 px-3 py-1 rounded-full text-sm font-semibold">
+                🎵 {currentBhajan.scale}
+              </span>
+            )}
+          </div>
+
+          <div className={`rounded-2xl shadow-[0_2px_12px_rgba(11,90,112,0.06)] p-6 md:p-8 ${darkMode ? 'bg-[#162226] border border-[#0B5A70]/15' : 'bg-[#FFFCF8] border border-[#0B5A70]/8'}`}>
+            <div className="flex justify-end mb-2">
+              <button
+                onClick={() => setShowReadingSettings(true)}
+                className={`p-2 rounded-lg text-sm font-semibold flex items-center gap-1 transition-colors ${darkMode ? 'bg-[#1e2e33] text-gray-300 hover:bg-[#0B5A70]/20' : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15'}`}
+                title="Reading view options"
+                aria-label="Reading view options"
+              >
+                ⚙️ View
+              </button>
+            </div>
+            <pre
+              className={`whitespace-pre-wrap leading-relaxed ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}
+              style={{
+                fontSize: `${Math.max(readingSettings.fontSize, liveFontSize)}px`,
+                fontFamily: readingSettings.fontFamily,
+                lineHeight: readingSettings.lineHeight,
+                textAlign: readingSettings.textAlign
+              }}
+            >
+              {currentBhajan.lyrics}
+            </pre>
+          </div>
+        </div>
+
+        {/* Bottom Navigation Bar (live mode) */}
+        <div className="fixed bottom-0 left-0 right-0 bg-[#FFF8F0]/95 backdrop-blur-md border-t border-[#0B5A70]/10 shadow-2xl z-40">
+          <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
+            <button
+              onClick={livePrev}
+              disabled={liveProgramIndex === 0}
+              className="flex-1 bg-[#0B5A70]/8 hover:bg-[#0B5A70]/15 disabled:opacity-30 disabled:cursor-not-allowed text-[#0B5A70] font-bold py-3 rounded-xl flex items-center justify-center gap-2"
+              aria-label="Previous bhajan"
+            >
+              ← Previous
+            </button>
+            <div className="text-center min-w-[80px]">
+              <p className="text-xs text-gray-500">Bhajan</p>
+              <p className="text-lg font-bold text-[#E65100]">{liveProgramIndex + 1} / {totalBhajans}</p>
+            </div>
+            <button
+              onClick={liveNext}
+              disabled={liveProgramIndex >= totalBhajans - 1}
+              className="flex-1 bg-[#0B5A70] hover:bg-[#094a5d] disabled:opacity-30 disabled:cursor-not-allowed text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2"
+              aria-label="Next bhajan"
+            >
+              Next →
+            </button>
+          </div>
+        </div>
+
+        {/* Reading settings modal is reachable from live mode too */}
+        {showReadingSettings && (
+          <div onClick={() => setShowReadingSettings(false)} className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4">
+            <div onClick={(e) => e.stopPropagation()} className={`rounded-3xl shadow-[0_8px_40px_rgba(11,90,112,0.15)] max-w-sm w-full overflow-hidden ${darkMode ? 'bg-[#162226] text-gray-100' : 'bg-[#FFFCF8]'}`}>
+              <div className={`p-6 text-center ${darkMode ? 'bg-[#1e2e33]' : 'bg-[#0B5A70]'} text-white`}>
+                <div className="text-5xl mb-2">📖</div>
+                <h3 className="text-2xl font-bold">Reading View</h3>
+              </div>
+              <div className="p-6 space-y-5">
+                <div>
+                  <div className="flex justify-between mb-1">
+                    <label className="text-sm font-semibold">Font Size</label>
+                    <span className="text-sm">{readingSettings.fontSize}px</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="14"
+                    max="40"
+                    step="1"
+                    value={readingSettings.fontSize}
+                    onChange={(e) => setReadingSettings(prev => ({ ...prev, fontSize: parseInt(e.target.value) }))}
+                    className="w-full accent-[#0B5A70]"
+                  />
+                </div>
+                <button
+                  onClick={() => setShowReadingSettings(false)}
+                  className="w-full bg-[#0B5A70] hover:bg-[#094a5d] text-white font-bold py-3 rounded-xl shadow-lg"
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ==============================================
   // MAIN APP (Authenticated OR Guest)
   // ==============================================
   if ((user && userProfile) || guestMode) {
     const currentStep = ONBOARDING_STEPS[onboardingStep];
-    
+
     return (
       <div className={`min-h-screen ${darkMode ? 'bg-[#0f1a1c] text-gray-100' : 'bg-[#FFF8F0]'}`}>
-        {/* ==============================================
-            ONBOARDING TOUR MODAL
-            ============================================== */}
+        {confirmDialogJsx}
+        {toastJsx}
+
+        {/* ONBOARDING TOUR MODAL */}
         {showOnboarding && currentStep && (
           <div onClick={() => { setShowOnboarding(false); }} className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4">
             <div onClick={(e) => e.stopPropagation()} className="bg-[#FFFCF8] rounded-3xl shadow-[0_8px_40px_rgba(11,90,112,0.15)] max-w-md w-full overflow-hidden">
-              {/* Header with gradient */}
               <div className="bg-[#0B5A70] p-6 text-white text-center relative">
-                {/* Skip button */}
                 <button
                   onClick={skipOnboarding}
                   className="absolute top-3 right-3 text-white/80 hover:text-white text-sm font-semibold bg-white/20 hover:bg-white/30 px-3 py-1 rounded-full"
                 >
                   Skip Tour
                 </button>
-                
-                {/* Big emoji */}
+
                 <div className="text-6xl mb-3 mt-2 animate-bounce">
                   {currentStep.emoji}
                 </div>
-                
-                {/* Step indicator */}
+
                 <div className="flex justify-center gap-2 mb-4">
                   {ONBOARDING_STEPS.map((_, idx) => (
                     <div
                       key={idx}
                       className={`h-1.5 rounded-full transition-all ${
-                        idx === onboardingStep 
-                          ? 'w-8 bg-white' 
+                        idx === onboardingStep
+                          ? 'w-8 bg-white'
                           : idx < onboardingStep
                             ? 'w-4 bg-white/60'
                             : 'w-4 bg-white/30'
@@ -3924,13 +3965,12 @@ const App = () => {
                     />
                   ))}
                 </div>
-                
+
                 <p className="text-xs text-white/80">
                   Step {onboardingStep + 1} of {ONBOARDING_STEPS.length}
                 </p>
               </div>
-              
-              {/* Content */}
+
               <div className="p-6 text-center">
                 <h3 className="text-2xl font-bold text-[#0B5A70] mb-3">
                   {currentStep.title}
@@ -3938,8 +3978,7 @@ const App = () => {
                 <p className="text-gray-700 leading-relaxed text-base mb-6">
                   {currentStep.description}
                 </p>
-                
-                {/* Action buttons */}
+
                 <div className="flex gap-3">
                   {onboardingStep > 0 && (
                     <button
@@ -3956,8 +3995,7 @@ const App = () => {
                     {onboardingStep === ONBOARDING_STEPS.length - 1 ? "Let's Start! 🚀" : 'Next →'}
                   </button>
                 </div>
-                
-                {/* Skip link on later steps */}
+
                 {onboardingStep > 0 && onboardingStep < ONBOARDING_STEPS.length - 1 && (
                   <button
                     onClick={skipOnboarding}
@@ -3970,10 +4008,8 @@ const App = () => {
             </div>
           </div>
         )}
-        
-        {/* ==============================================
-            APP UPDATE PROMPT
-            ============================================== */}
+
+        {/* APP UPDATE PROMPT */}
         {showUpdatePrompt && (
           <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4">
             <div className="bg-[#FFFCF8] rounded-3xl shadow-[0_8px_40px_rgba(11,90,112,0.15)] max-w-md w-full overflow-hidden">
@@ -3989,11 +4025,15 @@ const App = () => {
                 <ul className="text-sm text-gray-700 space-y-2 mb-6">
                   <li className="flex items-start gap-2">
                     <span className="text-[#0B5A70] font-bold">✓</span>
-                    <span>Google Hindi typing now works in Public Library add/edit forms</span>
+                    <span>New bottom tab bar — switch between Public, My Library & Programs with one tap</span>
                   </li>
                   <li className="flex items-start gap-2">
                     <span className="text-[#0B5A70] font-bold">✓</span>
-                    <span>You will now see this prompt every time the app is updated on GitHub</span>
+                    <span>Hindi typing is now faster (smarter caching)</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-[#0B5A70] font-bold">✓</span>
+                    <span>Faster app opening & smoother confirmations</span>
                   </li>
                 </ul>
                 <button
@@ -4007,17 +4047,16 @@ const App = () => {
           </div>
         )}
 
-                {/* ==============================================
-            FEEDBACK MODAL
-            ============================================== */}
+        {/* FEEDBACK MODAL */}
         {showFeedbackModal && (
           <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4">
-            <div className="bg-[#FFFCF8] rounded-3xl shadow-[0_8px_40px_rgba(11,90,112,0.15)] max-w-md w-full overflow-hidden">
-              {/* Header */}
+            <div className="bg-[#FFFCF8] roun
+          <div className="bg-[#FFFCF8] rounded-3xl shadow-[0_8px_40px_rgba(11,90,112,0.15)] max-w-md w-full overflow-hidden">
               <div className="bg-[#0B5A70] p-6 text-white text-center relative">
                 <button
                   onClick={() => setShowFeedbackModal(false)}
                   className="absolute top-3 right-3 text-white/80 hover:text-white text-2xl leading-none w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center"
+                  aria-label="Close feedback"
                 >
                   ×
                 </button>
@@ -4027,11 +4066,9 @@ const App = () => {
                   Your thoughts help us improve Sankirtan
                 </p>
               </div>
-              
-              {/* Content */}
+
               <div className="p-6">
                 {feedbackSuccess ? (
-                  // Success message
                   <div className="text-center py-6">
                     <div className="text-6xl mb-3">🙏</div>
                     <h4 className="text-xl font-bold text-[#0B5A70] mb-2">Thank You!</h4>
@@ -4060,17 +4097,17 @@ const App = () => {
                     <div className="text-right text-xs text-gray-500 mt-1">
                       {feedbackText.length}/1000
                     </div>
-                    
+
                     {feedbackError && (
                       <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
                         ⚠️ {feedbackError}
                       </div>
                     )}
-                    
+
                     <div className="mt-4 p-3 bg-[#0B5A70]/5 rounded-lg text-xs text-[#0B5A70]">
                       💡 Your name & email will be included so we can follow up if needed.
                     </div>
-                    
+
                     <div className="flex gap-3 mt-5">
                       <button
                         onClick={() => setShowFeedbackModal(false)}
@@ -4092,10 +4129,8 @@ const App = () => {
             </div>
           </div>
         )}
-        
-        {/* ==============================================
-            READING SETTINGS MODAL
-            ============================================== */}
+
+        {/* READING SETTINGS MODAL */}
         {showReadingSettings && (
           <div onClick={() => setShowReadingSettings(false)} className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4">
             <div onClick={(e) => e.stopPropagation()} className={`rounded-3xl shadow-[0_8px_40px_rgba(11,90,112,0.15)] max-w-sm w-full overflow-hidden ${darkMode ? 'bg-[#162226] text-gray-100' : 'bg-[#FFFCF8]'}`}>
@@ -4105,7 +4140,6 @@ const App = () => {
                 <p className="text-sm opacity-90 mt-1">Comfortable lyrics reading</p>
               </div>
               <div className="p-6 space-y-5">
-                {/* Font Size */}
                 <div>
                   <div className="flex justify-between mb-1">
                     <label className="text-sm font-semibold">Font Size</label>
@@ -4122,7 +4156,6 @@ const App = () => {
                   />
                 </div>
 
-                {/* Reading Mode toggle - larger font + tighter alignment for focused reading */}
                 <div className={`flex items-center justify-between p-3 rounded-xl ${darkMode ? 'bg-[#1e2e33]' : 'bg-[#0B5A70]/5'}`}>
                   <div>
                     <div className="text-sm font-semibold">Reading Mode</div>
@@ -4131,8 +4164,6 @@ const App = () => {
                   <button
                     onClick={() => setReadingSettings(prev => {
                       const on = !prev.readingMode;
-                      // When enabling reading mode, bump font size + center-align.
-                      // When disabling, keep whatever they had.
                       return on
                         ? { ...prev, readingMode: true, fontSize: Math.max(prev.fontSize, 24), textAlign: 'center', lineHeight: 2.0 }
                         : { ...prev, readingMode: false };
@@ -4146,7 +4177,6 @@ const App = () => {
                   </button>
                 </div>
 
-                {/* Keep Screen On toggle - uses Wake Lock API */}
                 <div className={`flex items-center justify-between p-3 rounded-xl ${darkMode ? 'bg-[#1e2e33]' : 'bg-[#0B5A70]/5'}`}>
                   <div>
                     <div className="text-sm font-semibold">Keep Screen On</div>
@@ -4179,11 +4209,9 @@ const App = () => {
           </div>
         )}
 
-        {/* ==============================================
-            PWA INSTALL PROMPT (Android/Desktop)
-            ============================================== */}
+        {/* PWA INSTALL PROMPT (Android/Desktop) */}
         {showInstallPrompt && deferredInstallPrompt && (
-          <div className="fixed bottom-4 left-4 right-4 md:left-auto md:max-w-md z-50">
+          <div className="fixed bottom-20 left-4 right-4 md:left-auto md:max-w-md z-50">
             <div className="bg-[#FFFCF8] rounded-2xl shadow-[0_8px_40px_rgba(11,90,112,0.15)] border border-[#0B5A70]/15 p-5">
               <div className="flex items-start gap-3">
                 <div className="text-4xl">🕉️</div>
@@ -4211,12 +4239,10 @@ const App = () => {
             </div>
           </div>
         )}
-        
-        {/* ==============================================
-            iOS SAFARI INSTALL INSTRUCTIONS
-            ============================================== */}
+
+        {/* iOS SAFARI INSTALL INSTRUCTIONS */}
         {showIOSInstructions && (
-          <div className="fixed bottom-4 left-4 right-4 md:left-auto md:max-w-md z-50">
+          <div className="fixed bottom-20 left-4 right-4 md:left-auto md:max-w-md z-50">
             <div className="bg-[#FFFCF8] rounded-2xl shadow-[0_8px_40px_rgba(11,90,112,0.15)] border border-[#0B5A70]/15 p-5">
               <div className="flex items-start gap-3">
                 <div className="text-4xl">🕉️</div>
@@ -4246,7 +4272,7 @@ const App = () => {
             </div>
           </div>
         )}
-        
+
         {/* Offline Indicator Banner */}
         {isOffline && (
           <div className="bg-red-500 text-white px-4 py-2 text-center text-sm font-semibold sticky top-0 z-50 shadow-md">
@@ -4256,7 +4282,7 @@ const App = () => {
             </span>
           </div>
         )}
-        
+
         {/* iOS Chrome Warning Banner */}
         {showBrowserWarning && (
           <div className="bg-[#0B5A70] text-white px-4 py-3 text-center text-sm sticky top-0 z-50 shadow-md">
@@ -4274,8 +4300,9 @@ const App = () => {
             </span>
           </div>
         )}
-        
-        {/* Header */}
+
+        {/* Header — SESSION 5: navigation moved to bottom tab bar;
+            header now carries only branding + utility actions */}
         <header className={`sticky top-0 z-40 border-b ${darkMode ? 'bg-[#0f1a1c] border-[#0B5A70]/15' : 'bg-[#FFF8F0]/95 backdrop-blur-md border-[#0B5A70]/10'}`}>
           <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
             <button
@@ -4283,9 +4310,6 @@ const App = () => {
               className="hover:opacity-80 transition-opacity"
               aria-label="Sankirtan — go to Public Library"
             >
-              {/* Wordmark: 'sankirtan.' as SVG paths. Tagline appears
-                  on login/splash screens instead. h-10 (40px) on mobile,
-                  h-12 (48px) on desktop. Auto-scales width per viewBox. */}
               <SankirtanWordmark className="h-10 sm:h-12 w-auto" />
             </button>
 
@@ -4295,6 +4319,7 @@ const App = () => {
                   onClick={openAdminPanel}
                   className="flex items-center gap-1 bg-purple-100 hover:bg-purple-200 text-purple-700 text-xs font-semibold px-2 sm:px-3 py-1.5 rounded-lg"
                   title="Admin Panel"
+                  aria-label="Open admin panel"
                 >
                   🔧<span className="hidden sm:inline"> Admin</span>
                 </button>
@@ -4305,15 +4330,15 @@ const App = () => {
                     setGuestMode(false);
                     setLoading(false);
                   }}
-                  className={`font-semibold px-4 py-2 rounded-xl text-sm transition-all ${darkMode ? 'bg-[#0B5A70] text-white hover:bg-[#094a5d]' : 'bg-[#0B5A70] text-white hover:bg-[#094a5d]'}`}
+                  className="font-semibold px-4 py-2 rounded-xl text-sm transition-all bg-[#0B5A70] text-white hover:bg-[#094a5d]"
                 >
                   Sign In
                 </button>
               ) : (
               <>
               {userProfile && userProfile.photoURL && (
-                <img 
-                  src={userProfile.photoURL} 
+                <img
+                  src={userProfile.photoURL}
                   alt={userProfile.displayName}
                   className="w-9 h-9 rounded-full border-2 border-[#0B5A70]/30"
                 />
@@ -4329,8 +4354,9 @@ const App = () => {
               )}
               <button
                 onClick={() => setDarkMode(!darkMode)}
-                className={`p-2 rounded-lg transition-colors ${darkMode ? 'text-[#E65100] hover:bg-[#1e2e33]' : 'text-[#0B5A70]/50 hover:bg-[#0B5A70]/5'}`}
+                className={`p-2 rounded-lg transition-colors ${darkMode ? 'text-[#E65100] hover:bg-[#1e2e33]' : 'text-[#0B5A70]/60 hover:bg-[#0B5A70]/5'}`}
                 title={darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+                aria-label={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
               >
                 {darkMode ? (
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -4349,9 +4375,10 @@ const App = () => {
                 }}
                 className="text-[#0B5A70] hover:text-[#0B5A70]/80 p-2 rounded-lg hover:bg-[#0B5A70]/5"
                 title="Show Tour"
+                aria-label="Show app tour"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" 
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
                     d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               </button>
@@ -4360,9 +4387,10 @@ const App = () => {
                 onClick={handleLogout}
                 className="text-[#0B5A70]/60 hover:text-red-600 p-2 rounded-lg hover:bg-red-50"
                 title="Logout"
+                aria-label="Logout"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" 
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
                     d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                 </svg>
               </button>
@@ -4371,59 +4399,31 @@ const App = () => {
           </div>
         </header>
 
-        {/* Main Content - Switch between views */}
-        <main className="max-w-6xl mx-auto px-4 py-6">
-          
+        {/* Main Content — pb-24 when tab bar is visible so content
+            never hides behind the fixed bottom bar */}
+        <main className={`max-w-6xl mx-auto px-4 py-6 ${showTabBar ? 'pb-28' : ''}`}>
+
           {/* ==============================================
               MY LIBRARY VIEW
               ============================================== */}
           {currentView === 'library' && (
             <>
-              {/* Library Header with Public/Personal Switcher */}
               <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-                <div className="flex items-center gap-3 flex-wrap">
-                  {/* Public ↔ Personal library switcher */}
-                  <div className={`inline-flex rounded-xl p-1 border ${darkMode ? 'bg-[#1e2e33] border-[#0B5A70]/20' : 'bg-[#0B5A70]/10 border-[#0B5A70]/20'}`}>
-                    <button
-                      onClick={openPublicLibrary}
-                      className={`px-3 py-1.5 rounded-lg text-sm font-bold transition-all ${darkMode ? 'text-gray-400 hover:text-gray-200 hover:bg-[#0B5A70]/10' : 'text-[#0B5A70]/70 hover:text-[#0B5A70] hover:bg-white/50'}`}
-                    >
-                      🌐 Public
-                    </button>
-                    <button
-                      className={`px-3 py-1.5 rounded-lg text-sm font-bold shadow-sm ${darkMode ? 'bg-[#0B5A70]/30 text-gray-100' : 'bg-white text-[#0B5A70] border border-[#0B5A70]/15'}`}
-                    >
-                      📚 My Library
-                    </button>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <button
-                    onClick={openPrograms}
-                    className={`border font-semibold px-3 py-2 rounded-xl text-sm flex items-center gap-1 ${darkMode ? 'bg-[#162226] border-[#0B5A70]/15 text-gray-200 hover:border-[#0B5A70]/30' : 'bg-[#FFFCF8] border-[#0B5A70]/15 hover:border-[#0B5A70]/40 text-[#0B5A70]'}`}
-                    title="View and manage your programs / setlists"
-                  >
-                    🎵 Programs ({programs.length})
-                  </button>
-                  <button
-                    onClick={openAddBhajan}
-                    className="bg-[#0B5A70] hover:bg-[#094a5d] text-white font-semibold px-4 py-2 rounded-xl shadow-md flex items-center gap-2 text-sm"
-                  >
-                    <span className="text-lg">+</span> Add Bhajan
-                  </button>
-                </div>
+                <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-[#0B5A70]/70'}`}>
+                  {bhajans.length} bhajan{bhajans.length === 1 ? '' : 's'} in your collection
+                </p>
+                <button
+                  onClick={openAddBhajan}
+                  className="bg-[#0B5A70] hover:bg-[#094a5d] text-white font-semibold px-4 py-2 rounded-xl shadow-md flex items-center gap-2 text-sm"
+                >
+                  <span className="text-lg">+</span> Add Bhajan
+                </button>
               </div>
 
-              {/* Tiny count line replaces the "📚 My Library" heading - tab already indicates page.
-                  Shown as a small helper text so users still see how many bhajans they have. */}
-              <p className={`text-xs mb-3 ${darkMode ? 'text-gray-400' : 'text-[#0B5A70]/60'}`}>
-                {bhajans.length} bhajan{bhajans.length === 1 ? '' : 's'} in your collection
-              </p>
-
-              {/* Recently Read - last 5 bhajans opened */}
+              {/* Recently Read */}
               {recentlyRead.length > 0 && !searchQuery && !filterDeity && !filterCategory && !libraryFilterKeyword && (
                 <div className="mb-4">
-                  <p className={`text-xs font-semibold uppercase tracking-wide mb-2 ${darkMode ? 'text-gray-500' : 'text-[#0B5A70]/50'}`}>
+                  <p className={`text-xs font-semibold uppercase tracking-wide mb-2 ${darkMode ? 'text-gray-500' : 'text-[#0B5A70]/60'}`}>
                     🕐 Recently Read
                   </p>
                   <div className="flex gap-2 overflow-x-auto pb-2" style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
@@ -4449,7 +4449,7 @@ const App = () => {
                 </div>
               )}
 
-              {/* Search Bar - voice language toggle sits inline with mic */}
+              {/* Search Bar */}
               <div className="mb-4">
                 <div className="relative">
                   <input
@@ -4457,6 +4457,7 @@ const App = () => {
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="🔍 Search bhajans (title, lyrics, keywords)..."
+                    aria-label="Search my library"
                     className={`w-full px-4 py-3 pr-24 border rounded-xl focus:ring-4 outline-none ${
                       darkMode
                         ? 'bg-[#162226] border-[#0B5A70]/15 text-gray-100 focus:ring-[#0B5A70]/20 focus:border-[#0B5A70]/30'
@@ -4471,6 +4472,7 @@ const App = () => {
                         : 'bg-white text-gray-600 border-gray-300 hover:border-[#0B5A70]/20'
                     }`}
                     title={`Voice input: ${speechLang === 'hi-IN' ? 'Hindi' : 'English'}`}
+                    aria-label={`Voice input language: ${speechLang === 'hi-IN' ? 'Hindi' : 'English'}. Tap to switch.`}
                   >
                     {speechLang === 'hi-IN' ? 'HI' : 'EN'}
                   </button>
@@ -4480,25 +4482,19 @@ const App = () => {
                       isListening
                         ? 'bg-red-500 text-white animate-pulse'
                         : darkMode
-                          ? 'text-[#0B5A70]/40 hover:text-[#0B5A70]/70 hover:bg-[#1e2e33]'
-                          : 'text-[#0B5A70]/40 hover:text-[#0B5A70] hover:bg-[#0B5A70]/5'
+                          ? 'text-[#0B5A70]/60 hover:text-[#0B5A70]/80 hover:bg-[#1e2e33]'
+                          : 'text-[#0B5A70]/60 hover:text-[#0B5A70] hover:bg-[#0B5A70]/5'
                     }`}
                     title={isListening ? 'Listening...' : 'Voice search'}
+                    aria-label={isListening ? 'Stop voice search' : 'Start voice search'}
                   >
-                    {isListening ? (
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-                      </svg>
-                    ) : (
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-                      </svg>
-                    )}
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                    </svg>
                   </button>
                 </div>
               </div>
 
-              {/* Clear filters link */}
               {(searchQuery || filterDeity || filterCategory || libraryFilterKeyword) && (
                 <div className="flex justify-end mb-1">
                   <button
@@ -4515,11 +4511,12 @@ const App = () => {
                 </div>
               )}
 
-              {/* Filters - single row: Deity | Category | Keyword. Active filters highlighted. */}
+              {/* Filters */}
               <div className="flex flex-wrap gap-2 mb-3">
                 <select
                   value={filterDeity}
                   onChange={(e) => setFilterDeity(e.target.value)}
+                  aria-label="Filter by deity"
                   className={`flex-1 min-w-[110px] px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none text-sm transition-all ${darkMode ? 'bg-[#162226] text-gray-200' : 'bg-[#FFFCF8]'} ${
                     filterDeity
                       ? `border-[#0B5A70]/50 ring-2 ring-[#0B5A70]/10 font-semibold ${darkMode ? 'text-white' : 'text-[#0B5A70]'}`
@@ -4535,6 +4532,7 @@ const App = () => {
                 <select
                   value={filterCategory}
                   onChange={(e) => setFilterCategory(e.target.value)}
+                  aria-label="Filter by category"
                   className={`flex-1 min-w-[110px] px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none text-sm transition-all ${darkMode ? 'bg-[#162226] text-gray-200' : 'bg-[#FFFCF8]'} ${
                     filterCategory
                       ? `border-[#0B5A70]/50 ring-2 ring-[#0B5A70]/10 font-semibold ${darkMode ? 'text-white' : 'text-[#0B5A70]'}`
@@ -4550,6 +4548,7 @@ const App = () => {
                 <select
                   value={libraryFilterKeyword}
                   onChange={(e) => setLibraryFilterKeyword(e.target.value)}
+                  aria-label="Filter by keyword"
                   className={`flex-1 min-w-[110px] px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none text-sm transition-all ${darkMode ? 'bg-[#162226] text-gray-200' : 'bg-[#FFFCF8]'} ${
                     libraryFilterKeyword
                       ? `border-[#0B5A70]/50 ring-2 ring-[#0B5A70]/10 font-semibold ${darkMode ? 'text-white' : 'text-[#0B5A70]'}`
@@ -4563,8 +4562,7 @@ const App = () => {
                 </select>
               </div>
 
-              {/* Quick Keywords - top 4 chips only. Full keyword list is
-                  available in the "All Keywords" dropdown in the filters row above. */}
+              {/* Quick Keywords */}
               <div className="mb-6 flex flex-wrap gap-2 items-center">
                 {allKeywordOptions.slice(0, 4).map(kw => (
                   <button
@@ -4581,7 +4579,7 @@ const App = () => {
                 ))}
               </div>
 
-              {/* Bhajans List - skeleton loaders while data loads */}
+              {/* Bhajans List */}
               {bhajansLoading ? (
                 <div className={compactView ? 'space-y-2' : 'grid grid-cols-1 md:grid-cols-2 gap-4'}>
                   {[...Array(6)].map((_, i) => (
@@ -4638,20 +4636,21 @@ const App = () => {
                 </div>
               ) : (
                 <>
-                  {/* View density toggle */}
                   <div className="flex justify-end mb-2">
                     <div className="inline-flex bg-[#0B5A70]/5 rounded-lg p-0.5 border border-[#0B5A70]/10">
                       <button
                         onClick={() => setCompactView(false)}
-                        className={`px-2 py-1 rounded text-xs font-semibold transition-colors ${!compactView ? 'bg-white text-[#0B5A70] shadow' : 'text-[#0B5A70]/50 hover:text-[#0B5A70]'}`}
+                        className={`px-2 py-1 rounded text-xs font-semibold transition-colors ${!compactView ? 'bg-white text-[#0B5A70] shadow' : 'text-[#0B5A70]/60 hover:text-[#0B5A70]'}`}
                         title="Full card view"
+                        aria-label="Full card view"
                       >
                         ▤ Full
                       </button>
                       <button
                         onClick={() => setCompactView(true)}
-                        className={`px-2 py-1 rounded text-xs font-semibold transition-colors ${compactView ? 'bg-white text-[#0B5A70] shadow' : 'text-[#0B5A70]/50 hover:text-[#0B5A70]'}`}
+                        className={`px-2 py-1 rounded text-xs font-semibold transition-colors ${compactView ? 'bg-white text-[#0B5A70] shadow' : 'text-[#0B5A70]/60 hover:text-[#0B5A70]'}`}
                         title="Compact list view"
+                        aria-label="Compact list view"
                       >
                         ☰ Compact
                       </button>
@@ -4659,8 +4658,7 @@ const App = () => {
                   </div>
 
                 <div className={compactView ? 'space-y-2' : 'grid grid-cols-1 md:grid-cols-2 gap-4'}>
-                  {filteredBhajans.slice(0, libraryVisibleCount).map(bhajan => {
-                    // COMPACT VIEW
+                  {filteredBhajans.slice(0, libraryVisibleCount).map((bhajan, cardIndex) => {
                     if (compactView) {
                       return (
                         <button
@@ -4680,8 +4678,6 @@ const App = () => {
                       );
                     }
 
-                    // FULL CARD VIEW
-                    const cardIndex = filteredBhajans.slice(0, libraryVisibleCount).indexOf(bhajan);
                     return (
                       <button
                         key={bhajan.id}
@@ -4715,8 +4711,6 @@ const App = () => {
                           )}
                         </div>
 
-                        {/* Same defensive lyrics preview treatment as Public
-                            Library - trim + max-height prevents card stretching. */}
                         <p className={`text-sm line-clamp-3 mb-2 whitespace-pre-line max-h-16 overflow-hidden ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
                           {(bhajan.lyrics || '').trim()}
                         </p>
@@ -4738,7 +4732,6 @@ const App = () => {
                   })}
                 </div>
 
-                {/* Load more sentinel */}
                 {libraryVisibleCount < filteredBhajans.length && (
                   <div ref={libraryLoadMoreRef} className="text-center py-6">
                     <div className="inline-flex items-center gap-2 text-xs text-[#0B5A70]/60">
@@ -4774,9 +4767,7 @@ const App = () => {
               onTouchStart={librarySwipe.onTouchStart}
               onTouchEnd={librarySwipe.onTouchEnd}
             >
-              {/* Detail Header */}
               <div className="flex items-center justify-between mb-4">
-                {/* Compact action bar: back + pill actions (Edit / Delete / Share / View) */}
                 <button
                   onClick={() => { if (guestMode && !user) { setGuestMode(false); } else { setCurrentView('library'); } }}
                   className="text-[#0B5A70] hover:text-[#0B5A70]/80 flex items-center gap-1 text-sm"
@@ -4813,12 +4804,10 @@ const App = () => {
                 </div>
               </div>
 
-              {/* Bhajan Content */}
               <div
                 key={selectedBhajan.id}
                 className={`rounded-2xl shadow-[0_2px_12px_rgba(11,90,112,0.06)] p-6 md:p-8 mb-4 ${darkMode ? 'bg-[#162226] border border-[#0B5A70]/15' : 'bg-[#FFFCF8] border border-[#0B5A70]/8'} ${slideDir === 'left' ? 'sk-slide-left' : slideDir === 'right' ? 'sk-slide-right' : ''}`}
               >
-                {/* Title (smaller, max 2 lines) - View button already in action bar above */}
                 <h1
                   className={`text-xl md:text-2xl font-bold mb-3 line-clamp-2 ${darkMode ? 'text-amber-100' : 'text-[#0B5A70]'}`}
                   title={selectedBhajan.title}
@@ -4834,10 +4823,6 @@ const App = () => {
                   </div>
                 )}
 
-                {/* Scale / Raag - compact single-line display. Shows the scale
-                    when set; otherwise a small "+ Add Scale" affordance that
-                    opens the edit form. Kept small so it doesn't reintroduce
-                    the clutter of the old badges strip. */}
                 <div className="mb-4 flex items-center gap-2">
                   {selectedBhajan.scale ? (
                     <button
@@ -4859,12 +4844,12 @@ const App = () => {
                 </div>
 
                 <div className={`border-t pt-4 ${darkMode ? 'border-[#0B5A70]/15' : 'border-[#0B5A70]/8'}`}>
-                  {/* Quick font size adjust */}
                   <div className="flex items-center justify-end gap-1 mb-2">
                     <button
                       onClick={() => setReadingSettings(prev => ({ ...prev, fontSize: Math.max(14, prev.fontSize - 2) }))}
                       className={`px-2 py-1 rounded-md text-xs font-semibold transition-colors ${darkMode ? 'bg-[#1e2e33] hover:bg-[#0B5A70]/20 text-gray-200' : 'bg-[#0B5A70]/5 hover:bg-[#0B5A70]/10 text-[#0B5A70] border border-[#0B5A70]/12'}`}
                       title="Decrease font size"
+                      aria-label="Decrease font size"
                     >
                       Aa−
                     </button>
@@ -4873,6 +4858,7 @@ const App = () => {
                       onClick={() => setReadingSettings(prev => ({ ...prev, fontSize: Math.min(40, prev.fontSize + 2) }))}
                       className={`px-2 py-1 rounded-md text-xs font-semibold transition-colors ${darkMode ? 'bg-[#1e2e33] hover:bg-[#0B5A70]/20 text-gray-200' : 'bg-[#0B5A70]/5 hover:bg-[#0B5A70]/10 text-[#0B5A70] border border-[#0B5A70]/12'}`}
                       title="Increase font size"
+                      aria-label="Increase font size"
                     >
                       Aa+
                     </button>
@@ -4905,7 +4891,7 @@ const App = () => {
 
                 {selectedBhajan.source && (
                   <div className="mt-4 pt-4 border-t border-[#0B5A70]/8">
-                    <a
+                    
                       href={selectedBhajan.source}
                       target="_blank"
                       rel="noopener noreferrer"
@@ -4917,8 +4903,7 @@ const App = () => {
                 )}
               </div>
 
-              {/* Related Bhajans - compact cards BELOW the main bhajan card.
-                  Auto-generated from shared keywords. No toggle — just shows up. */}
+              {/* Related Bhajans */}
               {selectedBhajan.keywords && selectedBhajan.keywords.length > 0 && (() => {
                 const relKws = new Set(selectedBhajan.keywords);
                 const related = bhajans
@@ -4942,6 +4927,7 @@ const App = () => {
                           key={b.id}
                           onClick={() => {
                             setSelectedBhajan(b);
+                            trackRecentRead(b);
                             window.scrollTo({ top: 0, behavior: 'smooth' });
                           }}
                           className={`w-full text-left rounded-xl p-3 border transition-all flex items-center gap-3 ${darkMode ? 'bg-[#162226] border-[#0B5A70]/15 hover:border-[#0B5A70]/30' : 'bg-[#FFFCF8] border-[#0B5A70]/8 shadow-[0_1px_4px_rgba(11,90,112,0.04)] hover:border-[#0B5A70]/25 hover:shadow-[0_2px_8px_rgba(11,90,112,0.10)]'}`}
@@ -4974,6 +4960,7 @@ const App = () => {
                     <button
                       onClick={() => navigateBhajan('prev', false)}
                       className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold transition-all max-w-[45%] ${darkMode ? 'text-gray-300 hover:bg-[#1e2e33]' : 'text-[#0B5A70] hover:bg-[#0B5A70]/5'}`}
+                      aria-label="Previous bhajan"
                     >
                       <span className="flex-shrink-0">‹</span>
                       <span className="truncate">{prevB.title}</span>
@@ -4982,6 +4969,7 @@ const App = () => {
                     <button
                       onClick={() => navigateBhajan('next', false)}
                       className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold transition-all max-w-[45%] text-right ${darkMode ? 'text-gray-300 hover:bg-[#1e2e33]' : 'text-[#0B5A70] hover:bg-[#0B5A70]/5'}`}
+                      aria-label="Next bhajan"
                     >
                       <span className="truncate">{nextB.title}</span>
                       <span className="flex-shrink-0">›</span>
@@ -5060,10 +5048,6 @@ const App = () => {
                             {idx === 0 && '⭐ '}{suggestion}
                           </button>
                         ))}
-                        {/* English fallback - keeps the original English word.
-                            Useful for proper nouns (Krishna, Radha) and bilingual titles
-                            (कृष्ण भजन / Krishna Bhajan). Styled subtly so it doesn't
-                            compete with Hindi options; positioned last as an escape hatch. */}
                         <button
                           type="button"
                           onMouseDown={(e) => {
@@ -5160,10 +5144,6 @@ const App = () => {
                             {idx === 0 && '⭐ '}{suggestion}
                           </button>
                         ))}
-                        {/* English fallback - keeps the original English word.
-                            Useful for proper nouns (Krishna, Radha) and bilingual titles
-                            (कृष्ण भजन / Krishna Bhajan). Styled subtly so it doesn't
-                            compete with Hindi options; positioned last as an escape hatch. */}
                         <button
                           type="button"
                           onMouseDown={(e) => {
@@ -5217,14 +5197,13 @@ const App = () => {
                       {hindiTypingEnabled ? '🇮🇳 हिंदी ON' : '🔤 Hindi OFF'}
                     </button>
                   </div>
-                  
-                  {/* Add lyrics from Image / PDF / Camera (on-device OCR - no files uploaded) */}
+
+                  {/* OCR import block */}
                   <div className="mb-3 p-3 bg-[#0B5A70]/5 border border-[#0B5A70]/12 rounded-xl">
                     <p className="text-xs font-semibold text-[#0B5A70] mb-2">
                       📥 Auto-fill lyrics from a photo, PDF, or camera — text is read on your device, nothing is uploaded or stored as a file
                     </p>
 
-                    {/* First-time warning about OCR engine download */}
                     {!localStorage.getItem('sankirtan-tesseract-langs-cached') && !ocrProcessing && (
                       <div className="mb-2 p-2 bg-[#E65100]/5 border border-[#E65100]/20 rounded-lg text-xs text-[#0B5A70]">
                         ⚠️ <strong>First-time use:</strong> The OCR engine (~15 MB) will download once and be cached. Please use WiFi if possible.
@@ -5258,7 +5237,6 @@ const App = () => {
                       </button>
                     </div>
 
-                    {/* Hidden file inputs */}
                     <input
                       ref={cameraInputRef}
                       type="file"
@@ -5328,7 +5306,7 @@ const App = () => {
                       </p>
                     </div>
                   )}
-                  
+
                   <div className="relative">
                     <textarea
                       id="hindi-input-lyrics"
@@ -5342,8 +5320,7 @@ const App = () => {
                       placeholder={hindiTypingEnabled ? "Type: jai shri babosa (press space to convert)" : "भजन के बोल यहाँ लिखें..."}
                       style={{ lineHeight: '1.8' }}
                     />
-                    
-                    {/* Hindi Suggestions Popup - positioned above textarea */}
+
                     {hindiTypingEnabled && showSuggestions && activeTypingField === 'lyrics' && transliterationSuggestions.length > 0 && (
                       <div className="absolute bottom-full left-0 right-0 mb-2 bg-[#FFFCF8] border border-[#0B5A70]/15 rounded-xl shadow-[0_8px_30px_rgba(11,90,112,0.18)] p-2 flex flex-wrap gap-2 items-center z-30">
                         <span className="text-xs text-gray-500 mr-1">
@@ -5371,10 +5348,6 @@ const App = () => {
                             {idx === 0 && '⭐ '}{suggestion}
                           </button>
                         ))}
-                        {/* English fallback - keeps the original English word.
-                            Useful for proper nouns (Krishna, Radha) and bilingual titles
-                            (कृष्ण भजन / Krishna Bhajan). Styled subtly so it doesn't
-                            compete with Hindi options; positioned last as an escape hatch. */}
                         <button
                           type="button"
                           onMouseDown={(e) => {
@@ -5437,14 +5410,12 @@ const App = () => {
                   />
                 </div>
 
-                {/* Error Message */}
                 {bhajanFormError && (
                   <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
                     ⚠️ {bhajanFormError}
                   </div>
                 )}
 
-                {/* Save Button */}
                 <div className="flex gap-3">
                   <button
                     onClick={saveBhajan}
@@ -5476,37 +5447,29 @@ const App = () => {
           {currentView === 'programs' && (
             <>
               <div className="flex items-center justify-between mb-4">
-                <button
-                  onClick={() => setCurrentView('public-library')}
-                  className="text-[#0B5A70] hover:text-[#0B5A70]/80 flex items-center gap-1 text-sm"
-                >
-                  ← Dashboard
-                </button>
+                <div>
+                  <h2 className="text-2xl font-bold text-[#0B5A70]">🎵 Programs & Setlists</h2>
+                  <p className="text-sm text-[#0B5A70]/70">Your live performance programs ({programs.length})</p>
+                </div>
                 <button
                   onClick={openCreateProgram}
                   className="bg-[#0B5A70] hover:bg-[#094a5d] text-white font-semibold px-4 py-2 rounded-xl shadow-md flex items-center gap-2 text-sm"
                 >
-                  <span className="text-lg">+</span> Create Program
+                  <span className="text-lg">+</span> Create
                 </button>
               </div>
 
-              <div className="mb-4">
-                <h2 className="text-2xl font-bold text-[#0B5A70]">🎵 Programs & Setlists</h2>
-                <p className="text-sm text-[#0B5A70]/70">Your live performance programs ({programs.length} programs)</p>
-              </div>
-
-              {/* Search Bar */}
               <div className="mb-6">
                 <input
                   type="text"
                   value={programSearchQuery}
                   onChange={(e) => setProgramSearchQuery(e.target.value)}
                   placeholder="🔍 Search programs by name or venue..."
+                  aria-label="Search programs"
                   className="w-full px-4 py-3 border border-[#0B5A70]/15 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none"
                 />
               </div>
 
-              {/* Programs List */}
               {programsLoading ? (
                 <div className="text-center py-12">
                   <div className="animate-spin rounded-full h-10 w-10 border-4 border-[#0B5A70]/40 border-t-transparent mx-auto mb-3"></div>
@@ -5556,7 +5519,7 @@ const App = () => {
                       {program.venue && (
                         <p className="text-sm text-gray-600 mb-2">📍 {program.venue}</p>
                       )}
-                      <p className="text-xs text-[#0B5A70]/50 mt-3">View Program →</p>
+                      <p className="text-xs text-[#0B5A70]/60 mt-3">View Program →</p>
                     </button>
                   ))}
                 </div>
@@ -5609,7 +5572,6 @@ const App = () => {
                   </span>
                 </div>
 
-                {/* START LIVE MODE Button */}
                 {selectedProgram.bhajanIds && selectedProgram.bhajanIds.length > 0 && (
                   <button
                     onClick={() => startLiveProgram(selectedProgram)}
@@ -5620,7 +5582,6 @@ const App = () => {
                 )}
               </div>
 
-              {/* Bhajans in Program */}
               <div className="mb-4">
                 <h3 className="text-lg font-bold text-[#0B5A70] mb-3">Bhajans in this Program:</h3>
                 {(!selectedProgram.bhajanIds || selectedProgram.bhajanIds.length === 0) ? (
@@ -5696,7 +5657,6 @@ const App = () => {
                   {currentView === 'edit-program' ? '✏️ Edit Program' : '➕ Create New Program'}
                 </h2>
 
-                {/* Name */}
                 <div className="mb-4">
                   <label className="block text-sm font-semibold text-[#0B5A70] mb-1">
                     Program Name <span className="text-red-500">*</span>
@@ -5710,7 +5670,6 @@ const App = () => {
                   />
                 </div>
 
-                {/* Date and Venue */}
                 <div className="grid grid-cols-2 gap-3 mb-4">
                   <div>
                     <label className="block text-sm font-semibold text-[#0B5A70] mb-1">
@@ -5736,12 +5695,13 @@ const App = () => {
                         placeholder="e.g., Delhi Temple"
                       />
                       {programForm.venue.trim() && (
-                        <a
+                        
                           href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(programForm.venue)}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="absolute right-2 top-1/2 -translate-y-1/2 text-[#0B5A70]/50 hover:text-[#0B5A70] p-1.5 rounded-lg hover:bg-[#0B5A70]/5 transition-colors"
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-[#0B5A70]/60 hover:text-[#0B5A70] p-1.5 rounded-lg hover:bg-[#0B5A70]/5 transition-colors"
                           title="Open in Google Maps"
+                          aria-label="Open venue in Google Maps"
                         >
                           📍
                         </a>
@@ -5750,7 +5710,6 @@ const App = () => {
                   </div>
                 </div>
 
-                {/* Bhajans Section */}
                 <div className="mb-4 pt-4 border-t border-[#0B5A70]/8">
                   <div className="flex items-center justify-between mb-3">
                     <label className="block text-sm font-semibold text-[#0B5A70]">
@@ -5809,6 +5768,7 @@ const App = () => {
                                 disabled={index === 0}
                                 className="w-8 h-8 rounded-lg bg-[#0B5A70]/8 hover:bg-[#0B5A70]/15 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center"
                                 title="Move up"
+                                aria-label={`Move ${bhajan.title} up`}
                               >
                                 ↑
                               </button>
@@ -5818,6 +5778,7 @@ const App = () => {
                                 disabled={index === programForm.bhajanIds.length - 1}
                                 className="w-8 h-8 rounded-lg bg-[#0B5A70]/8 hover:bg-[#0B5A70]/15 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center"
                                 title="Move down"
+                                aria-label={`Move ${bhajan.title} down`}
                               >
                                 ↓
                               </button>
@@ -5826,6 +5787,7 @@ const App = () => {
                                 onClick={() => removeBhajanFromProgram(bhajanId)}
                                 className="w-8 h-8 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 flex items-center justify-center"
                                 title="Remove"
+                                aria-label={`Remove ${bhajan.title} from program`}
                               >
                                 ✕
                               </button>
@@ -5837,14 +5799,12 @@ const App = () => {
                   )}
                 </div>
 
-                {/* Error */}
                 {programFormError && (
                   <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
                     ⚠️ {programFormError}
                   </div>
                 )}
 
-                {/* Save */}
                 <div className="flex gap-3">
                   <button
                     onClick={saveProgram}
@@ -5870,7 +5830,6 @@ const App = () => {
 
               {/* Bhajan Picker Modal */}
               {showBhajanPicker && (() => {
-                // Collect unique deities, categories, and keywords from user's library
                 const pickerDeities = [...new Set(bhajans.map(b => b.deity).filter(Boolean))].sort();
                 const pickerCategories = [...new Set(bhajans.map(b => b.category).filter(Boolean))].sort();
                 const allKeywordsMap = {};
@@ -5884,14 +5843,12 @@ const App = () => {
                   .slice(0, 15)
                   .map(([kw]) => kw);
 
-                // Gather keywords from bhajans already in the program for "Related" suggestions
                 const programKeywords = new Set();
                 programForm.bhajanIds.forEach(id => {
                   const b = getBhajanById(id);
                   if (b && b.keywords) b.keywords.forEach(kw => programKeywords.add(kw));
                 });
 
-                // Filter bhajans
                 const searchLower = bhajanPickerSearch.toLowerCase();
                 const filteredPickerBhajans = bhajans.filter(b => {
                   if (bhajanPickerSearch && !(
@@ -5905,7 +5862,6 @@ const App = () => {
                   return true;
                 });
 
-                // Related bhajans: not already in program, share keywords with program bhajans
                 const relatedBhajans = programKeywords.size > 0 && !bhajanPickerSearch && !pickerDeityFilter && !pickerCategoryFilter && !pickerKeywordFilter
                   ? bhajans.filter(b => {
                       if (programForm.bhajanIds.includes(b.id)) return false;
@@ -5918,20 +5874,18 @@ const App = () => {
                 return (
                 <div onClick={() => setShowBhajanPicker(false)} className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
                   <div onClick={(e) => e.stopPropagation()} className="bg-[#FFFCF8] rounded-2xl shadow-[0_8px_40px_rgba(11,90,112,0.15)] max-w-lg w-full max-h-[85vh] flex flex-col">
-                    {/* Header */}
                     <div className="p-4 border-b border-[#0B5A70]/10 flex items-center justify-between">
                       <h3 className="text-lg font-bold text-[#0B5A70]">Add Bhajans to Program</h3>
                       <button
                         onClick={() => setShowBhajanPicker(false)}
                         className="text-gray-500 hover:text-gray-700 text-2xl leading-none"
+                        aria-label="Close bhajan picker"
                       >
                         ×
                       </button>
                     </div>
 
-                    {/* Search + Filters */}
                     <div className="p-4 border-b border-[#0B5A70]/10 space-y-3">
-                      {/* Search bar */}
                       <input
                         type="text"
                         value={bhajanPickerSearch}
@@ -5941,14 +5895,14 @@ const App = () => {
                         autoFocus
                       />
 
-                      {/* Filter row */}
                       <div className="flex gap-2">
                         <select
                           value={pickerDeityFilter}
                           onChange={(e) => setPickerDeityFilter(e.target.value)}
+                          aria-label="Filter picker by deity"
                           className={`flex-1 px-2 py-1.5 border rounded-lg text-xs outline-none bg-[#FFFCF8] transition-all ${
                             pickerDeityFilter
-                              ? `border-[#0B5A70]/50 ring-2 ring-[#0B5A70]/10 font-semibold ${darkMode ? 'text-white' : 'text-[#0B5A70]'}`
+                              ? 'border-[#0B5A70]/50 ring-2 ring-[#0B5A70]/10 font-semibold text-[#0B5A70]'
                               : 'border-[#0B5A70]/15'
                           }`}
                         >
@@ -5958,9 +5912,10 @@ const App = () => {
                         <select
                           value={pickerCategoryFilter}
                           onChange={(e) => setPickerCategoryFilter(e.target.value)}
+                          aria-label="Filter picker by category"
                           className={`flex-1 px-2 py-1.5 border rounded-lg text-xs outline-none bg-[#FFFCF8] transition-all ${
                             pickerCategoryFilter
-                              ? `border-[#0B5A70]/50 ring-2 ring-[#0B5A70]/10 font-semibold ${darkMode ? 'text-white' : 'text-[#0B5A70]'}`
+                              ? 'border-[#0B5A70]/50 ring-2 ring-[#0B5A70]/10 font-semibold text-[#0B5A70]'
                               : 'border-[#0B5A70]/15'
                           }`}
                         >
@@ -5982,7 +5937,6 @@ const App = () => {
                         )}
                       </div>
 
-                      {/* Keyword chips */}
                       {topKeywords.length > 0 && (
                         <div className="flex flex-wrap gap-1.5">
                           {topKeywords.map(kw => (
@@ -5992,7 +5946,7 @@ const App = () => {
                               className={`text-xs px-2.5 py-1 rounded-full transition-all ${
                                 pickerKeywordFilter === kw
                                   ? 'bg-[#0B5A70] text-white shadow-md'
-                                  : `${darkMode ? 'bg-[#0B5A70]/15 text-teal-300 border border-[#0B5A70]/25 hover:bg-[#0B5A70]/25' : 'bg-[#0B5A70]/5 text-[#0B5A70] border border-[#0B5A70]/12 hover:bg-[#0B5A70]/10'}`
+                                  : 'bg-[#0B5A70]/5 text-[#0B5A70] border border-[#0B5A70]/12 hover:bg-[#0B5A70]/10'
                               }`}
                             >
                               #{kw}
@@ -6002,7 +5956,6 @@ const App = () => {
                       )}
                     </div>
 
-                    {/* Scrollable list */}
                     <div className="flex-1 overflow-y-auto p-4">
                       {bhajans.length === 0 ? (
                         <div className="text-center py-8">
@@ -6011,7 +5964,6 @@ const App = () => {
                         </div>
                       ) : (
                         <>
-                          {/* Related Bhajans Section - only when no active filters */}
                           {relatedBhajans.length > 0 && (
                             <div className="mb-4">
                               <p className="text-xs font-semibold text-[#E65100] uppercase tracking-wide mb-2 flex items-center gap-1">
@@ -6027,7 +5979,7 @@ const App = () => {
                                       onClick={() => !isAdded && addBhajanToProgram(bhajan.id)}
                                       disabled={isAdded}
                                       className={`w-full text-left p-3 rounded-xl border transition-all ${
-                                        isAdded 
+                                        isAdded
                                           ? 'bg-green-50 border-green-200 opacity-60 cursor-not-allowed'
                                           : 'bg-[#E65100]/3 border-[#E65100]/15 hover:border-[#E65100]/30'
                                       }`}
@@ -6062,7 +6014,6 @@ const App = () => {
                             </div>
                           )}
 
-                          {/* All Bhajans (filtered) */}
                           <p className="text-xs font-semibold text-[#0B5A70]/60 uppercase tracking-wide mb-2">
                             {hasActiveFilters ? `${filteredPickerBhajans.length} results` : `All bhajans (${bhajans.length})`}
                           </p>
@@ -6091,7 +6042,7 @@ const App = () => {
                                     onClick={() => !isAdded && addBhajanToProgram(bhajan.id)}
                                     disabled={isAdded}
                                     className={`w-full text-left p-3 rounded-xl border transition-all ${
-                                      isAdded 
+                                      isAdded
                                         ? 'bg-green-50 border-green-200 opacity-60 cursor-not-allowed'
                                         : 'bg-white border-[#0B5A70]/10 hover:border-[#0B5A70]/25'
                                     }`}
@@ -6132,37 +6083,17 @@ const App = () => {
               ============================================== */}
           {currentView === 'public-library' && (
             <>
-              {/* Library Header with Public/Personal Switcher */}
-              <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-                <div className="flex items-center gap-3 flex-wrap">
-                  {/* Public ↔ Personal library switcher */}
-                  <div className={`inline-flex rounded-xl p-1 border ${darkMode ? 'bg-[#1e2e33] border-[#0B5A70]/20' : 'bg-[#0B5A70]/10 border-[#0B5A70]/20'}`}>
-                    <button
-                      className={`px-3 py-1.5 rounded-lg text-sm font-bold shadow-sm ${darkMode ? 'bg-[#0B5A70]/30 text-gray-100' : 'bg-white text-[#0B5A70] border border-[#0B5A70]/15'}`}
-                    >
-                      🌐 Public
-                    </button>
-                    <button
-                      onClick={() => { if (guestMode && !user) { setGuestMode(false); } else { setCurrentView('library'); } }}
-                      className={`px-3 py-1.5 rounded-lg text-sm font-bold transition-all ${darkMode ? 'text-gray-400 hover:text-gray-200 hover:bg-[#0B5A70]/10' : 'text-[#0B5A70]/70 hover:text-[#0B5A70] hover:bg-white/50'}`}
-                    >
-                      📚 My Library
-                    </button>
-                  </div>
-                  {/* Add Bhajan (admin-only) - placed where Dashboard used to be */}
-                  {isAdmin && (
-                    <button
-                      onClick={openAddPublicBhajan}
-                      className="bg-[#0B5A70] hover:bg-[#094a5d] text-white font-semibold px-4 py-2 rounded-xl text-sm flex items-center gap-1 shadow-md"
-                    >
-                      + Add Bhajan
-                    </button>
-                  )}
+              {isAdmin && (
+                <div className="flex justify-end mb-4">
+                  <button
+                    onClick={openAddPublicBhajan}
+                    className="bg-[#0B5A70] hover:bg-[#094a5d] text-white font-semibold px-4 py-2 rounded-xl text-sm flex items-center gap-1 shadow-md"
+                  >
+                    + Add Bhajan
+                  </button>
                 </div>
-              </div>
+              )}
 
-              {/* Search Bar - page title removed as tab already indicates location.
-                  Voice language toggle now sits inline with mic for less clutter. */}
               <div className="mb-4">
                 <div className="relative">
                   <input
@@ -6170,13 +6101,13 @@ const App = () => {
                     value={publicSearchQuery}
                     onChange={(e) => setPublicSearchQuery(e.target.value)}
                     placeholder="🔍 Search public bhajans..."
+                    aria-label="Search public library"
                     className={`w-full px-4 py-3 pr-24 border rounded-xl focus:ring-4 outline-none ${
                       darkMode
                         ? 'bg-[#162226] border-[#0B5A70]/15 text-gray-100 focus:ring-[#0B5A70]/20 focus:border-[#0B5A70]/30'
                         : 'bg-white border-[#0B5A70]/12 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30'
                     }`}
                   />
-                  {/* Voice language toggle (compact, sits inline next to mic) */}
                   <button
                     onClick={() => setSpeechLang(speechLang === 'en-IN' ? 'hi-IN' : 'en-IN')}
                     className={`absolute right-11 top-1/2 -translate-y-1/2 px-1.5 py-0.5 rounded text-[10px] font-bold border transition-colors ${
@@ -6185,6 +6116,7 @@ const App = () => {
                         : 'bg-white text-gray-600 border-gray-300 hover:border-[#0B5A70]/20'
                     }`}
                     title={`Voice input: ${speechLang === 'hi-IN' ? 'Hindi' : 'English'}`}
+                    aria-label={`Voice input language: ${speechLang === 'hi-IN' ? 'Hindi' : 'English'}. Tap to switch.`}
                   >
                     {speechLang === 'hi-IN' ? 'HI' : 'EN'}
                   </button>
@@ -6194,26 +6126,19 @@ const App = () => {
                       isListening
                         ? 'bg-red-500 text-white animate-pulse'
                         : darkMode
-                          ? 'text-[#0B5A70]/40 hover:text-[#0B5A70]/70 hover:bg-[#1e2e33]'
-                          : 'text-[#0B5A70]/40 hover:text-[#0B5A70] hover:bg-[#0B5A70]/5'
+                          ? 'text-[#0B5A70]/60 hover:text-[#0B5A70]/80 hover:bg-[#1e2e33]'
+                          : 'text-[#0B5A70]/60 hover:text-[#0B5A70] hover:bg-[#0B5A70]/5'
                     }`}
                     title={isListening ? 'Listening...' : 'Voice search'}
+                    aria-label={isListening ? 'Stop voice search' : 'Start voice search'}
                   >
-                    {isListening ? (
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-                      </svg>
-                    ) : (
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-                      </svg>
-                    )}
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                    </svg>
                   </button>
                 </div>
               </div>
 
-              {/* Clear filters link - only appears when a filter is active.
-                  Sits above the dropdowns row so it doesn't wrap awkwardly. */}
               {(publicSearchQuery || publicFilterDeity || publicFilterCategory || publicFilterKeyword) && (
                 <div className="flex justify-end mb-1">
                   <button
@@ -6230,12 +6155,11 @@ const App = () => {
                 </div>
               )}
 
-              {/* Filters - single row: Deity | Category | Keyword.
-                  Active filters get amber ring + bold font so users see them at a glance. */}
               <div className="flex flex-wrap gap-2 mb-3">
                 <select
                   value={publicFilterDeity}
                   onChange={(e) => setPublicFilterDeity(e.target.value)}
+                  aria-label="Filter public library by deity"
                   className={`flex-1 min-w-[110px] px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none text-sm transition-all ${darkMode ? 'bg-[#162226] text-gray-200' : 'bg-[#FFFCF8]'} ${
                     publicFilterDeity
                       ? `border-[#0B5A70]/50 ring-2 ring-[#0B5A70]/10 font-semibold ${darkMode ? 'text-white' : 'text-[#0B5A70]'}`
@@ -6251,6 +6175,7 @@ const App = () => {
                 <select
                   value={publicFilterCategory}
                   onChange={(e) => setPublicFilterCategory(e.target.value)}
+                  aria-label="Filter public library by category"
                   className={`flex-1 min-w-[110px] px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none text-sm transition-all ${darkMode ? 'bg-[#162226] text-gray-200' : 'bg-[#FFFCF8]'} ${
                     publicFilterCategory
                       ? `border-[#0B5A70]/50 ring-2 ring-[#0B5A70]/10 font-semibold ${darkMode ? 'text-white' : 'text-[#0B5A70]'}`
@@ -6266,6 +6191,7 @@ const App = () => {
                 <select
                   value={publicFilterKeyword}
                   onChange={(e) => setPublicFilterKeyword(e.target.value)}
+                  aria-label="Filter public library by keyword"
                   className={`flex-1 min-w-[110px] px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none text-sm transition-all ${darkMode ? 'bg-[#162226] text-gray-200' : 'bg-[#FFFCF8]'} ${
                     publicFilterKeyword
                       ? `border-[#0B5A70]/50 ring-2 ring-[#0B5A70]/10 font-semibold ${darkMode ? 'text-white' : 'text-[#0B5A70]'}`
@@ -6279,8 +6205,6 @@ const App = () => {
                 </select>
               </div>
 
-              {/* Quick Keywords - top 4 chips only. Full keyword list is
-                  available in the "All Keywords" dropdown in the filters row above. */}
               <div className="mb-6 flex flex-wrap gap-2 items-center">
                 {allKeywordOptions.slice(0, 4).map(kw => (
                   <button
@@ -6297,9 +6221,6 @@ const App = () => {
                 ))}
               </div>
 
-              {/* Public Bhajans List - skeleton loaders while data loads.
-                  Structured placeholders feel much faster than a plain spinner
-                  because users see the layout appear immediately. */}
               {publicLoading ? (
                 <div className={compactView ? 'space-y-2' : 'grid grid-cols-1 md:grid-cols-2 gap-4'}>
                   {[...Array(6)].map((_, i) => (
@@ -6319,20 +6240,16 @@ const App = () => {
                         key={i}
                         className={`rounded-2xl shadow-[0_2px_12px_rgba(11,90,112,0.06)] p-5 border animate-pulse ${darkMode ? 'bg-[#162226] border-[#0B5A70]/15' : 'bg-[#FFFCF8] border-[#0B5A70]/8'}`}
                       >
-                        {/* Title placeholder */}
                         <div className={`h-5 rounded w-3/4 mb-3 ${darkMode ? 'bg-[#1e2e33]' : 'bg-[#0B5A70]/8'}`}></div>
-                        {/* Tags row placeholder */}
                         <div className="flex gap-2 mb-3">
                           <div className={`h-5 w-16 rounded-full ${darkMode ? 'bg-[#1e2e33]' : 'bg-[#0B5A70]/8'}`}></div>
                           <div className={`h-5 w-14 rounded-full ${darkMode ? 'bg-[#1e2e33]' : 'bg-[#E65100]/5'}`}></div>
                         </div>
-                        {/* Lyrics placeholder - 3 lines */}
                         <div className="space-y-2 mb-3">
                           <div className={`h-3 rounded ${darkMode ? 'bg-[#1e2e33]' : 'bg-gray-100'}`}></div>
                           <div className={`h-3 rounded w-5/6 ${darkMode ? 'bg-[#1e2e33]' : 'bg-gray-100'}`}></div>
                           <div className={`h-3 rounded w-4/6 ${darkMode ? 'bg-[#1e2e33]' : 'bg-gray-100'}`}></div>
                         </div>
-                        {/* Bottom action placeholder */}
                         <div className={`h-9 rounded-lg mt-3 ${darkMode ? 'bg-[#1e2e33]' : 'bg-[#0B5A70]/5'}`}></div>
                       </div>
                     )
@@ -6365,22 +6282,21 @@ const App = () => {
                 </div>
               ) : (
                 <>
-                  {/* View density toggle - saved to localStorage.
-                      Compact = title + first line of lyrics only (fits 4-6 cards per screen).
-                      Full = title + tags + 3 lines lyrics + keywords (default). */}
                   <div className="flex justify-end mb-2">
                     <div className="inline-flex bg-[#0B5A70]/5 rounded-lg p-0.5 border border-[#0B5A70]/10">
                       <button
                         onClick={() => setCompactView(false)}
-                        className={`px-2 py-1 rounded text-xs font-semibold transition-colors ${!compactView ? 'bg-white text-[#0B5A70] shadow' : 'text-[#0B5A70]/50 hover:text-[#0B5A70]'}`}
+                        className={`px-2 py-1 rounded text-xs font-semibold transition-colors ${!compactView ? 'bg-white text-[#0B5A70] shadow' : 'text-[#0B5A70]/60 hover:text-[#0B5A70]'}`}
                         title="Full card view"
+                        aria-label="Full card view"
                       >
                         ▤ Full
                       </button>
                       <button
                         onClick={() => setCompactView(true)}
-                        className={`px-2 py-1 rounded text-xs font-semibold transition-colors ${compactView ? 'bg-white text-[#0B5A70] shadow' : 'text-[#0B5A70]/50 hover:text-[#0B5A70]'}`}
+                        className={`px-2 py-1 rounded text-xs font-semibold transition-colors ${compactView ? 'bg-white text-[#0B5A70] shadow' : 'text-[#0B5A70]/60 hover:text-[#0B5A70]'}`}
                         title="Compact list view"
+                        aria-label="Compact list view"
                       >
                         ☰ Compact
                       </button>
@@ -6388,11 +6304,9 @@ const App = () => {
                   </div>
 
                 <div className={compactView ? 'space-y-2' : 'grid grid-cols-1 md:grid-cols-2 gap-4'}>
-                  {filteredPublicBhajans.slice(0, publicVisibleCount).map(bhajan => {
+                  {filteredPublicBhajans.slice(0, publicVisibleCount).map((bhajan, pubCardIndex) => {
                     const isSaved = savedBhajanIds.has(bhajan.id);
 
-                    // COMPACT VIEW - title + one lyrics line + save state on right.
-                    // Clicking the row opens the bhajan (same as full card).
                     if (compactView) {
                       return (
                         <button
@@ -6424,8 +6338,6 @@ const App = () => {
                       );
                     }
 
-                    // FULL CARD VIEW
-                    const pubCardIndex = filteredPublicBhajans.slice(0, publicVisibleCount).indexOf(bhajan);
                     return (
                       <div
                         key={bhajan.id}
@@ -6457,10 +6369,6 @@ const App = () => {
                             </span>
                           </div>
 
-                          {/* Lyrics preview - explicit max-height prevents rare
-                              rendering bug where line-clamp + whitespace-pre-line
-                              can leak height on iOS Safari when lyrics have many
-                              trailing newlines or whitespace-only lines. */}
                           <p className={`text-sm line-clamp-3 mb-2 whitespace-pre-line max-h-16 overflow-hidden ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
                             {(bhajan.lyrics || '').trim()}
                           </p>
@@ -6476,8 +6384,6 @@ const App = () => {
                           )}
                         </button>
 
-                        {/* Action row - only Save/In Library. "Read" removed since
-                            clicking the card body above already opens the bhajan. */}
                         <div className={`flex gap-2 mt-3 pt-3 border-t ${darkMode ? 'border-[#0B5A70]/15' : 'border-[#0B5A70]/8'}`}>
                           {isSaved ? (
                             <span className="flex-1 bg-green-50 text-green-700 font-semibold py-2 rounded-lg text-sm text-center">
@@ -6495,7 +6401,7 @@ const App = () => {
                         </div>
 
                         {(bhajan.saveCount > 0) && (
-                          <p className={`text-xs mt-2 text-center ${darkMode ? 'text-gray-500' : 'text-[#0B5A70]/40'}`}>
+                          <p className={`text-xs mt-2 text-center ${darkMode ? 'text-gray-500' : 'text-[#0B5A70]/50'}`}>
                             ✨ Added by {bhajan.saveCount} {bhajan.saveCount === 1 ? 'person' : 'people'}
                           </p>
                         )}
@@ -6504,9 +6410,6 @@ const App = () => {
                   })}
                 </div>
 
-                {/* Load more sentinel - IntersectionObserver watches this div
-                    and bumps visibleCount when it scrolls into view. Also
-                    shows a subtle "loading more" indicator + a count summary. */}
                 {publicVisibleCount < filteredPublicBhajans.length && (
                   <div ref={publicLoadMoreRef} className="text-center py-6">
                     <div className="inline-flex items-center gap-2 text-xs text-[#0B5A70]/60">
@@ -6532,7 +6435,7 @@ const App = () => {
                 </>
               )}
               <div className="text-center mt-12 mb-4">
-                <p className={`text-xs mb-2 ${darkMode ? 'text-gray-500' : 'text-[#0B5A70]/60'}`}>
+                <p className={`text-xs mb-2 ${darkMode ? 'text-gray-500' : 'text-[#0B5A70]/70'}`}>
                   Founded for the Bhajan Community 🙏 by Grace of <strong>Babosa Bhagwan</strong> 🕉️
                 </p>
                 <button
@@ -6546,7 +6449,7 @@ const App = () => {
                 >
                   💬 Share feedback or suggestions
                 </button>
-                <div className={`flex items-center justify-center gap-3 mt-2 text-xs ${darkMode ? 'text-gray-600' : 'text-[#0B5A70]/40'}`}>
+                <div className={`flex items-center justify-center gap-3 mt-2 text-xs ${darkMode ? 'text-gray-600' : 'text-[#0B5A70]/50'}`}>
                   <a href="/privacy-policy.html" className="hover:underline">Privacy Policy</a>
                   <span>·</span>
                   <a href="/terms.html" className="hover:underline">Terms & Copyright</a>
@@ -6563,8 +6466,6 @@ const App = () => {
               onTouchStart={publicSwipe.onTouchStart}
               onTouchEnd={publicSwipe.onTouchEnd}
             >
-              {/* Compact action bar: back button + pill actions.
-                  All actions live in one row now: Save / Share / Edit / Delete / View. */}
               <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
                 <button
                   onClick={() => setCurrentView('public-library')}
@@ -6573,7 +6474,6 @@ const App = () => {
                   ← Back
                 </button>
                 <div className="flex gap-1.5 flex-wrap">
-                  {/* Add to Personal (small pill instead of big banner button) */}
                   {savedBhajanIds.has(selectedPublicBhajan.id) ? (
                     <span
                       className="bg-green-50 text-green-700 font-semibold px-2.5 py-1 rounded-full text-xs flex items-center gap-1"
@@ -6591,7 +6491,6 @@ const App = () => {
                     </button>
                   )}
 
-                  {/* Share pill */}
                   <button
                     onClick={() => handleShareBhajan(selectedPublicBhajan)}
                     className={`px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 transition-colors ${darkMode ? 'bg-[#1e2e33] text-gray-300 hover:bg-[#0B5A70]/20' : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15'}`}
@@ -6600,7 +6499,6 @@ const App = () => {
                     ↗ Share
                   </button>
 
-                  {/* View settings pill */}
                   <button
                     onClick={() => setShowReadingSettings(true)}
                     className={`px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 transition-colors ${darkMode ? 'bg-[#1e2e33] text-gray-300 hover:bg-[#0B5A70]/20' : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15'}`}
@@ -6632,7 +6530,6 @@ const App = () => {
                 key={selectedPublicBhajan.id}
                 className={`rounded-2xl shadow-[0_2px_12px_rgba(11,90,112,0.06)] p-6 md:p-8 mb-4 ${darkMode ? 'bg-[#162226] border border-[#0B5A70]/15' : 'bg-[#FFFCF8] border border-[#0B5A70]/8'} ${slideDir === 'left' ? 'sk-slide-left' : slideDir === 'right' ? 'sk-slide-right' : ''}`}
               >
-                {/* Title (smaller, max 2 lines) */}
                 <h1
                   className={`text-xl md:text-2xl font-bold mb-3 line-clamp-2 ${darkMode ? 'text-amber-100' : 'text-[#0B5A70]'}`}
                   title={selectedPublicBhajan.title}
@@ -6649,13 +6546,12 @@ const App = () => {
                 )}
 
                 <div className={`border-t pt-4 ${darkMode ? 'border-[#0B5A70]/15' : 'border-[#0B5A70]/8'}`}>
-                  {/* Quick font size adjust - no need to open Reading View modal for
-                      common tweaks. Range clamped to 14-40px to match the modal slider. */}
                   <div className="flex items-center justify-end gap-1 mb-2">
                     <button
                       onClick={() => setReadingSettings(prev => ({ ...prev, fontSize: Math.max(14, prev.fontSize - 2) }))}
                       className={`px-2 py-1 rounded-md text-xs font-semibold transition-colors ${darkMode ? 'bg-[#1e2e33] hover:bg-[#0B5A70]/20 text-gray-200' : 'bg-[#0B5A70]/5 hover:bg-[#0B5A70]/10 text-[#0B5A70] border border-[#0B5A70]/12'}`}
                       title="Decrease font size"
+                      aria-label="Decrease font size"
                     >
                       Aa−
                     </button>
@@ -6664,6 +6560,7 @@ const App = () => {
                       onClick={() => setReadingSettings(prev => ({ ...prev, fontSize: Math.min(40, prev.fontSize + 2) }))}
                       className={`px-2 py-1 rounded-md text-xs font-semibold transition-colors ${darkMode ? 'bg-[#1e2e33] hover:bg-[#0B5A70]/20 text-gray-200' : 'bg-[#0B5A70]/5 hover:bg-[#0B5A70]/10 text-[#0B5A70] border border-[#0B5A70]/12'}`}
                       title="Increase font size"
+                      aria-label="Increase font size"
                     >
                       Aa+
                     </button>
@@ -6696,7 +6593,7 @@ const App = () => {
 
                 {selectedPublicBhajan.source && (
                   <div className="mt-4 pt-4 border-t border-[#0B5A70]/8">
-                    <a
+                    
                       href={selectedPublicBhajan.source}
                       target="_blank"
                       rel="noopener noreferrer"
@@ -6708,7 +6605,7 @@ const App = () => {
                 )}
               </div>
 
-              {/* Related Bhajans - compact cards BELOW the main bhajan card */}
+              {/* Related Bhajans */}
               {selectedPublicBhajan.keywords && selectedPublicBhajan.keywords.length > 0 && (() => {
                 const relKws = new Set(selectedPublicBhajan.keywords);
                 const related = publicBhajans
@@ -6764,6 +6661,7 @@ const App = () => {
                     <button
                       onClick={() => navigateBhajan('prev', true)}
                       className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold transition-all max-w-[45%] ${darkMode ? 'text-gray-300 hover:bg-[#1e2e33]' : 'text-[#0B5A70] hover:bg-[#0B5A70]/5'}`}
+                      aria-label="Previous bhajan"
                     >
                       <span className="flex-shrink-0">‹</span>
                       <span className="truncate">{prevB.title}</span>
@@ -6772,6 +6670,7 @@ const App = () => {
                     <button
                       onClick={() => navigateBhajan('next', true)}
                       className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold transition-all max-w-[45%] text-right ${darkMode ? 'text-gray-300 hover:bg-[#1e2e33]' : 'text-[#0B5A70] hover:bg-[#0B5A70]/5'}`}
+                      aria-label="Next bhajan"
                     >
                       <span className="truncate">{nextB.title}</span>
                       <span className="flex-shrink-0">›</span>
@@ -6783,7 +6682,8 @@ const App = () => {
           )}
 
           {/* ==============================================
-              ADMIN PANEL VIEW
+              ADMIN PANEL VIEW — unchanged structurally from S4,
+              alert()/confirm() calls now route through toast/dialog
               ============================================== */}
           {currentView === 'admin-panel' && isAdmin && (
             <>
@@ -6792,7 +6692,7 @@ const App = () => {
                   onClick={() => setCurrentView('public-library')}
                   className="text-[#0B5A70] hover:text-[#0B5A70]/80 flex items-center gap-1 text-sm"
                 >
-                  ← Dashboard
+                  ← Back
                 </button>
                 <span className="bg-purple-100 text-purple-700 px-3 py-1 rounded-full text-xs font-bold">
                   👑 Admin Only
@@ -6804,7 +6704,6 @@ const App = () => {
                 <p className="text-sm text-[#0B5A70]/70">Manage the Public Library</p>
               </div>
 
-              {/* Stats Card */}
               <div className="bg-[#0B5A70] rounded-2xl p-6 text-white mb-6">
                 <h3 className="text-lg font-bold mb-3">📊 Public Library Stats</h3>
                 <div className="grid grid-cols-3 gap-4">
@@ -6827,7 +6726,6 @@ const App = () => {
                 </div>
               </div>
 
-              {/* Manual Add Bhajan Card */}
               <div className="bg-[#FFFCF8] rounded-2xl shadow-[0_2px_12px_rgba(11,90,112,0.06)] p-6 mb-6 border border-green-200/60">
                 <h3 className="text-lg font-bold text-[#0B5A70] mb-3">➕ Add Bhajan Manually</h3>
                 <p className="text-sm text-gray-600 mb-4">
@@ -6840,20 +6738,20 @@ const App = () => {
                   + Add New Public Bhajan
                 </button>
               </div>
-              
-              {/* MANAGE LISTS (Deities, Categories, Keywords) */}
+
+              {/* MANAGE LISTS */}
               <div className="bg-[#FFFCF8] rounded-2xl shadow-[0_2px_12px_rgba(11,90,112,0.06)] p-6 mb-6 border border-indigo-200/60">
                 <h3 className="text-lg font-bold text-[#0B5A70] mb-2">📋 Manage Lists</h3>
                 <p className="text-sm text-gray-600 mb-4">
                   Add, rename, or delete deities, categories, and keywords. Changes apply to all users.
                 </p>
-                
+
                 {configLoading && (
                   <div className="text-center py-4 text-gray-500 text-sm">
                     ⏳ Loading lists...
                   </div>
                 )}
-                
+
                 {/* Deities */}
                 <div className="mb-6">
                   <h4 className="font-semibold text-[#0B5A70] mb-2">🕉️ Deities ({customDeities.length || DEITY_OPTIONS.length})</h4>
@@ -6876,11 +6774,13 @@ const App = () => {
                             onClick={() => editConfigItem('deity', name, editingValue)}
                             className="text-green-600 hover:text-green-800 text-xs font-bold"
                             title="Save (Enter)"
+                            aria-label="Save rename"
                           >✓</button>
                           <button
                             onClick={() => { setEditingItem(null); setEditingValue(''); }}
                             className="text-red-600 hover:text-red-800 text-xs font-bold"
                             title="Cancel (Esc)"
+                            aria-label="Cancel rename"
                           >×</button>
                         </div>
                       ) : (
@@ -6893,11 +6793,13 @@ const App = () => {
                             onClick={() => { setEditingItem({ type: 'deity', value: name }); setEditingValue(name); }}
                             className="ml-1 text-[#0B5A70] hover:text-[#0B5A70]/80 text-[10px]"
                             title="Rename"
+                            aria-label={`Rename ${name}`}
                           >✏️</button>
                           <button
                             onClick={() => deleteConfigItem('deity', name)}
                             className="ml-0.5 text-red-600 hover:text-red-800 font-bold"
                             title="Delete"
+                            aria-label={`Delete ${name}`}
                           >×</button>
                         </span>
                       )
@@ -6921,7 +6823,7 @@ const App = () => {
                     </button>
                   </div>
                 </div>
-                
+
                 {/* Categories */}
                 <div className="mb-6">
                   <h4 className="font-semibold text-[#0B5A70] mb-2">📖 Categories ({customCategories.length || CATEGORY_OPTIONS.length})</h4>
@@ -6943,10 +6845,12 @@ const App = () => {
                           <button
                             onClick={() => editConfigItem('category', name, editingValue)}
                             className="text-green-600 hover:text-green-800 text-xs font-bold"
+                            aria-label="Save rename"
                           >✓</button>
                           <button
                             onClick={() => { setEditingItem(null); setEditingValue(''); }}
                             className="text-red-600 hover:text-red-800 text-xs font-bold"
+                            aria-label="Cancel rename"
                           >×</button>
                         </div>
                       ) : (
@@ -6959,11 +6863,13 @@ const App = () => {
                             onClick={() => { setEditingItem({ type: 'category', value: name }); setEditingValue(name); }}
                             className="ml-1 text-[#0B5A70] hover:text-[#0B5A70]/80 text-[10px]"
                             title="Rename"
+                            aria-label={`Rename ${name}`}
                           >✏️</button>
                           <button
                             onClick={() => deleteConfigItem('category', name)}
                             className="ml-0.5 text-red-600 hover:text-red-800 font-bold"
                             title="Delete"
+                            aria-label={`Delete ${name}`}
                           >×</button>
                         </span>
                       )
@@ -6987,7 +6893,7 @@ const App = () => {
                     </button>
                   </div>
                 </div>
-                
+
                 {/* Keywords */}
                 <div>
                   <h4 className="font-semibold text-[#0B5A70] mb-2">🏷️ Keywords ({customKeywords.length || DEFAULT_KEYWORDS.length})</h4>
@@ -7009,10 +6915,12 @@ const App = () => {
                           <button
                             onClick={() => editConfigItem('keyword', name, editingValue)}
                             className="text-green-600 hover:text-green-800 text-xs font-bold"
+                            aria-label="Save rename"
                           >✓</button>
                           <button
                             onClick={() => { setEditingItem(null); setEditingValue(''); }}
                             className="text-red-600 hover:text-red-800 text-xs font-bold"
+                            aria-label="Cancel rename"
                           >×</button>
                         </div>
                       ) : (
@@ -7025,11 +6933,13 @@ const App = () => {
                             onClick={() => { setEditingItem({ type: 'keyword', value: name }); setEditingValue(name); }}
                             className="ml-1 text-[#0B5A70] hover:text-[#0B5A70]/80 text-[10px]"
                             title="Rename"
+                            aria-label={`Rename ${name}`}
                           >✏️</button>
                           <button
                             onClick={() => deleteConfigItem('keyword', name)}
                             className="ml-0.5 text-red-600 hover:text-red-800 font-bold"
                             title="Delete"
+                            aria-label={`Delete ${name}`}
                           >×</button>
                         </span>
                       )
@@ -7053,15 +6963,15 @@ const App = () => {
                     </button>
                   </div>
                 </div>
-                
+
                 <div className="mt-4 p-3 bg-[#0B5A70]/5 rounded-lg text-xs text-[#0B5A70]">
                   💡 Click <strong>✏️</strong> to rename, <strong>×</strong> to delete.<br/>
                   Items in use by bhajans <strong>cannot be renamed or deleted</strong> - update those bhajans first.
                 </div>
               </div>
-              
+
               {/* USER FEEDBACK CARD */}
-              <div className="bg-[#FFFCF8] rounded-2xl shadow-[0_2px_12px_rgba(11,90,112,0.06)] p-6 mb-6 border border-[#0B5A70]/12/60">
+              <div className="bg-[#FFFCF8] rounded-2xl shadow-[0_2px_12px_rgba(11,90,112,0.06)] p-6 mb-6 border border-[#0B5A70]/12">
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-lg font-bold text-[#0B5A70]">💬 User Feedback</h3>
                   <button
@@ -7075,14 +6985,14 @@ const App = () => {
                 <p className="text-sm text-gray-600 mb-4">
                   View feedback from your users to improve the app.
                 </p>
-                
+
                 {feedbackList.length === 0 && !feedbackListLoading && (
                   <div className="text-center py-6 text-gray-500 text-sm">
                     <div className="text-3xl mb-2">📭</div>
                     <p>No feedback yet. Click "Refresh" to check.</p>
                   </div>
                 )}
-                
+
                 {feedbackList.length > 0 && (
                   <>
                     <div className="text-sm text-[#0B5A70] font-semibold mb-3">
@@ -7100,7 +7010,7 @@ const App = () => {
                                 <p className="text-xs text-gray-600">{fb.userEmail}</p>
                               )}
                               <p className="text-xs text-gray-500 mt-0.5">
-                                {fb.createdAt?.seconds 
+                                {fb.createdAt?.seconds
                                   ? new Date(fb.createdAt.seconds * 1000).toLocaleString('en-IN', {
                                       day: 'numeric',
                                       month: 'short',
@@ -7116,6 +7026,7 @@ const App = () => {
                               onClick={() => deleteFeedback(fb.id)}
                               className="text-red-500 hover:text-red-700 text-sm p-1"
                               title="Delete"
+                              aria-label="Delete feedback"
                             >
                               🗑️
                             </button>
@@ -7124,7 +7035,7 @@ const App = () => {
                             {fb.text}
                           </p>
                           {fb.userEmail && (
-                            <a 
+                            
                               href={`mailto:${fb.userEmail}?subject=Re: Your Sankirtan Feedback&body=Hi ${fb.userName},%0D%0A%0D%0AThank you for your feedback!%0D%0A%0D%0A`}
                               className="inline-block mt-2 text-xs text-[#0B5A70] hover:text-[#0B5A70]/80 font-semibold"
                             >
@@ -7153,13 +7064,13 @@ const App = () => {
                       className="w-full h-40 px-4 py-3 border border-purple-200/40 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none font-mono text-sm"
                       placeholder='Paste JSON here... e.g., [{"title": "...", "lyrics": "..."}, ...]'
                     />
-                    
+
                     {importError && (
                       <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
                         ⚠️ {importError}
                       </div>
                     )}
-                    
+
                     {importSuccess && (
                       <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg text-green-700 text-sm">
                         {importSuccess}
@@ -7194,7 +7105,6 @@ const App = () => {
                       </div>
                     </div>
 
-                    {/* Preview List */}
                     <div className="max-h-60 overflow-y-auto bg-gray-50 rounded-xl p-3 mb-4">
                       <p className="text-xs text-gray-500 mb-2">Preview (first 10):</p>
                       {importPreview.bhajans.slice(0, 10).map((b, idx) => (
@@ -7252,7 +7162,6 @@ const App = () => {
                 )}
               </div>
 
-              {/* Quick Info */}
               <div className="bg-[#0B5A70]/5 border border-[#0B5A70]/12 rounded-xl p-4">
                 <h4 className="font-bold text-[#0B5A70] mb-2">💡 JSON Format Support:</h4>
                 <p className="text-xs text-[#0B5A70]/80 mb-2">The importer accepts:</p>
@@ -7266,7 +7175,7 @@ const App = () => {
             </>
           )}
         </main>
-        
+
         {/* ==============================================
             PUBLIC BHAJAN ADD/EDIT MODAL (Admin only)
             ============================================== */}
@@ -7283,11 +7192,12 @@ const App = () => {
                     setEditingPublicBhajan(null);
                   }}
                   className="text-gray-500 hover:text-gray-700 text-2xl leading-none"
+                  aria-label="Close form"
                 >
                   ×
                 </button>
               </div>
-              
+
               <div className="p-6 space-y-4">
                 {/* Title */}
                 <div>
@@ -7332,10 +7242,6 @@ const App = () => {
                             {idx === 0 && '⭐ '}{suggestion}
                           </button>
                         ))}
-                        {/* English fallback - keeps the original English word.
-                            Useful for proper nouns (Krishna, Radha) and bilingual titles
-                            (कृष्ण भजन / Krishna Bhajan). Styled subtly so it doesn't
-                            compete with Hindi options; positioned last as an escape hatch. */}
                         <button
                           type="button"
                           onMouseDown={(e) => {
@@ -7389,7 +7295,8 @@ const App = () => {
                   <label className="block text-sm font-semibold text-[#0B5A70] mb-1">
                     तर्ज़ / धुन (Tune)
                   </label>
-                  <div className="relative">
+                  <div
+<div className="relative">
                     <input
                       id="public-hindi-input-dhun"
                       type="text"
@@ -7427,10 +7334,6 @@ const App = () => {
                             {idx === 0 && '⭐ '}{suggestion}
                           </button>
                         ))}
-                        {/* English fallback - keeps the original English word.
-                            Useful for proper nouns (Krishna, Radha) and bilingual titles
-                            (कृष्ण भजन / Krishna Bhajan). Styled subtly so it doesn't
-                            compete with Hindi options; positioned last as an escape hatch. */}
                         <button
                           type="button"
                           onMouseDown={(e) => {
@@ -7463,13 +7366,12 @@ const App = () => {
                   />
                 </div>
 
-                {/* NEW: Add lyrics from Image / PDF / Camera (on-device OCR) */}
+                {/* OCR import block (public form) */}
                 <div className="mb-3 p-3 bg-[#0B5A70]/5 border border-[#0B5A70]/12 rounded-xl">
                   <p className="text-xs font-semibold text-[#0B5A70] mb-2">
                     📥 Auto-fill lyrics from a photo, PDF, or camera — text is read on your device, nothing is uploaded or stored as a file
                   </p>
 
-                  {/* First-time warning about OCR engine download */}
                   {!localStorage.getItem('sankirtan-tesseract-langs-cached') && !ocrProcessing && (
                     <div className="mb-2 p-2 bg-[#E65100]/5 border border-[#E65100]/20 rounded-lg text-xs text-[#0B5A70]">
                       ⚠️ <strong>First-time use:</strong> The OCR engine (~15 MB) will download once and be cached. Please use WiFi if possible.
@@ -7503,7 +7405,6 @@ const App = () => {
                     </button>
                   </div>
 
-                  {/* Hidden file inputs for public form */}
                   <input
                     ref={publicCameraInputRef}
                     type="file"
@@ -7632,10 +7533,6 @@ const App = () => {
                             {idx === 0 && '⭐ '}{suggestion}
                           </button>
                         ))}
-                        {/* English fallback - keeps the original English word.
-                            Useful for proper nouns (Krishna, Radha) and bilingual titles
-                            (कृष्ण भजन / Krishna Bhajan). Styled subtly so it doesn't
-                            compete with Hindi options; positioned last as an escape hatch. */}
                         <button
                           type="button"
                           onMouseDown={(e) => {
@@ -7668,7 +7565,7 @@ const App = () => {
                         className={`px-3 py-1.5 rounded-full text-sm font-medium ${
                           publicBhajanForm.keywords.includes(kw)
                             ? 'bg-[#0B5A70] text-white shadow-md'
-                            : `${darkMode ? 'bg-[#0B5A70]/15 text-teal-300 border border-[#0B5A70]/25 hover:bg-[#0B5A70]/25' : 'bg-[#0B5A70]/5 text-[#0B5A70] border border-[#0B5A70]/12 hover:bg-[#0B5A70]/10'}`
+                            : 'bg-[#0B5A70]/5 text-[#0B5A70] border border-[#0B5A70]/12 hover:bg-[#0B5A70]/10'
                         }`}
                       >
                         {publicBhajanForm.keywords.includes(kw) ? '✓ ' : ''}#{kw}
@@ -7718,187 +7615,106 @@ const App = () => {
           </div>
         )}
 
-        {/* Scroll-to-top floating button */}
+        {/* ==============================================
+            BOTTOM TAB BAR (SESSION 5 — NEW)
+            One-handed navigation between the three main views.
+            Only shows on list views (public-library / library /
+            programs); hidden on detail, form, admin & live views.
+            Guest users see a lock hint on My Library & Programs
+            and are routed to sign-in when they tap them.
+            ============================================== */}
+        {showTabBar && (
+          <nav
+            className={`fixed bottom-0 left-0 right-0 z-40 border-t ${
+              darkMode
+                ? 'bg-[#0f1a1c]/95 backdrop-blur-md border-[#0B5A70]/20'
+                : 'bg-[#FFF8F0]/95 backdrop-blur-md border-[#0B5A70]/10 shadow-[0_-2px_12px_rgba(11,90,112,0.06)]'
+            }`}
+            style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+            aria-label="Main navigation"
+          >
+            <div className="max-w-6xl mx-auto flex items-stretch">
+              {[
+                { view: 'public-library', label: 'Public', icon: '🌐', requiresAuth: false },
+                { view: 'library', label: 'My Library', icon: '📚', requiresAuth: true },
+                { view: 'programs', label: 'Programs', icon: '🎵', requiresAuth: true },
+              ].map(tab => {
+                const isActive = currentView === tab.view;
+                const isLocked = tab.requiresAuth && guestMode && !user;
+                return (
+                  <button
+                    key={tab.view}
+                    onClick={() => {
+                      if (isLocked) {
+                        // Guest tapped a members-only tab → route to sign-in
+                        setGuestMode(false);
+                        setLoading(false);
+                        return;
+                      }
+                      if (!isActive) setCurrentView(tab.view);
+                      else window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }}
+                    className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-2.5 transition-colors relative ${
+                      isActive
+                        ? darkMode ? 'text-[#E65100]' : 'text-[#0B5A70]'
+                        : darkMode ? 'text-gray-500 hover:text-gray-300' : 'text-[#0B5A70]/50 hover:text-[#0B5A70]/80'
+                    }`}
+                    aria-label={isLocked ? `${tab.label} (sign in required)` : tab.label}
+                    aria-current={isActive ? 'page' : undefined}
+                  >
+                    {/* Active indicator bar */}
+                    {isActive && (
+                      <span className={`absolute top-0 left-1/2 -translate-x-1/2 w-10 h-0.5 rounded-full ${darkMode ? 'bg-[#E65100]' : 'bg-[#0B5A70]'}`}></span>
+                    )}
+                    <span className="text-xl leading-none">
+                      {isLocked ? '🔒' : tab.icon}
+                    </span>
+                    <span className={`text-[10px] font-semibold ${isActive ? '' : 'font-medium'}`}>
+                      {tab.label}
+                    </span>
+                    {/* Badge: count on My Library / Programs */}
+                    {!isLocked && tab.view === 'library' && bhajans.length > 0 && (
+                      <span className={`absolute top-1 right-[calc(50%-24px)] text-[9px] font-bold px-1.5 py-0.5 rounded-full leading-none ${
+                        isActive
+                          ? 'bg-[#0B5A70] text-white'
+                          : darkMode ? 'bg-[#1e2e33] text-gray-400' : 'bg-[#0B5A70]/10 text-[#0B5A70]/70'
+                      }`}>
+                        {bhajans.length > 99 ? '99+' : bhajans.length}
+                      </span>
+                    )}
+                    {!isLocked && tab.view === 'programs' && programs.length > 0 && (
+                      <span className={`absolute top-1 right-[calc(50%-24px)] text-[9px] font-bold px-1.5 py-0.5 rounded-full leading-none ${
+                        isActive
+                          ? 'bg-[#0B5A70] text-white'
+                          : darkMode ? 'bg-[#1e2e33] text-gray-400' : 'bg-[#0B5A70]/10 text-[#0B5A70]/70'
+                      }`}>
+                        {programs.length > 99 ? '99+' : programs.length}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </nav>
+        )}
+
+        {/* Scroll-to-top floating button — lifted above the tab bar */}
         {showScrollTop && (
           <button
             onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-            className={`fixed bottom-6 right-6 z-40 w-11 h-11 rounded-full shadow-lg flex items-center justify-center transition-all ${
+            className={`fixed right-6 z-40 w-11 h-11 rounded-full shadow-lg flex items-center justify-center transition-all ${
+              showTabBar ? 'bottom-20' : 'bottom-6'
+            } ${
               darkMode
                 ? 'bg-[#0B5A70] text-white hover:bg-[#094a5d]'
                 : 'bg-[#0B5A70] text-white hover:bg-[#094a5d] shadow-[0_4px_12px_rgba(11,90,112,0.3)]'
             }`}
             title="Scroll to top"
+            aria-label="Scroll to top"
           >
             ↑
           </button>
         )}
-
-        {/* Share toast notification */}
-        {shareToast && (
-          <div
-            className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 pointer-events-none"
-            style={{
-              animation: shareToast.visible
-                ? 'sk-toast-in 0.3s cubic-bezier(0.22,1,0.36,1) both'
-                : 'sk-toast-out 0.3s ease-in both'
-            }}
-          >
-            <div className={`px-5 py-3 rounded-2xl shadow-lg text-sm font-semibold whitespace-nowrap ${
-              darkMode
-                ? 'bg-[#1e2e33] text-gray-100 border border-[#0B5A70]/20'
-                : 'bg-[#0B5A70] text-white shadow-[0_4px_20px_rgba(11,90,112,0.3)]'
-            }`}>
-              {shareToast.message}
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  // ==============================================
-  // LIVE PROGRAM MODE (Fullscreen)
-  // ==============================================
-  if (user && userProfile && currentView === 'live-program' && selectedProgram) {
-    const currentBhajanId = selectedProgram.bhajanIds[liveProgramIndex];
-    const currentBhajan = getBhajanById(currentBhajanId);
-    const totalBhajans = selectedProgram.bhajanIds.length;
-    
-    if (!currentBhajan) {
-      return (
-        <div className="min-h-screen bg-[#FFF8F0] p-4 flex items-center justify-center">
-          <div className="text-center">
-            <p className="text-lg text-[#0B5A70] mb-4">⚠️ This bhajan is not available</p>
-            <p className="text-sm text-gray-600 mb-4">It may have been deleted from your library</p>
-            <button
-              onClick={exitLiveProgram}
-              className="bg-[#0B5A70] hover:bg-[#094a5d] text-white px-4 py-2 rounded-xl"
-            >
-              Exit Live Mode
-            </button>
-          </div>
-        </div>
-      );
-    }
-    
-    return (
-      <div className="min-h-screen bg-[#FFF8F0]">
-        {/* Live Header */}
-        <div className="bg-[#FFF8F0]/95 backdrop-blur-md sticky top-0 z-40 border-b border-[#0B5A70]/10">
-          <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
-            <button
-              onClick={exitLiveProgram}
-              className="text-red-600 hover:text-red-800 font-semibold flex items-center gap-1 text-sm"
-            >
-              ✕ Exit Live
-            </button>
-            <div className="text-center flex-1 mx-4">
-              <p className="text-xs text-[#0B5A70]/60 font-semibold">🎤 LIVE PROGRAM</p>
-              <p className="text-sm font-bold text-[#0B5A70] truncate">{selectedProgram.name}</p>
-            </div>
-            <div className="text-right">
-              <p className="text-xs text-gray-500">Bhajan</p>
-              <p className="text-lg font-bold text-[#E65100]">{liveProgramIndex + 1} / {totalBhajans}</p>
-            </div>
-          </div>
-          
-          {/* Font Size Controls */}
-          <div className="max-w-4xl mx-auto px-4 pb-2 flex items-center justify-center gap-2">
-            <button
-              onClick={() => setLiveFontSize(Math.max(14, liveFontSize - 2))}
-              className="w-8 h-8 rounded-lg bg-[#0B5A70]/8 hover:bg-[#0B5A70]/15 text-[#0B5A70] font-bold"
-              title="Decrease font"
-            >
-              A−
-            </button>
-            <span className="text-xs text-gray-500 min-w-[40px] text-center">{liveFontSize}px</span>
-            <button
-              onClick={() => setLiveFontSize(Math.min(40, liveFontSize + 2))}
-              className="w-8 h-8 rounded-lg bg-[#0B5A70]/8 hover:bg-[#0B5A70]/15 text-[#0B5A70] font-bold"
-              title="Increase font"
-            >
-              A+
-            </button>
-            {liveWakeLock && (
-              <span className="ml-2 text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded-full">
-                🔦 Screen On
-              </span>
-            )}
-          </div>
-        </div>
-        
-        {/* Bhajan Content */}
-        <div className="max-w-4xl mx-auto px-4 py-6 pb-24">
-          <h1 className="text-3xl md:text-4xl font-bold text-[#0B5A70] mb-3">
-            {currentBhajan.title}
-          </h1>
-          
-          {currentBhajan.dhun && (
-            <div className="bg-[#0B5A70]/5 border-l-4 border-[#E65100]/40 p-3 rounded-r-lg mb-4">
-              <p className="text-sm text-[#E65100]">
-                <span className="font-semibold">तर्ज़ / धुन:</span> {currentBhajan.dhun}
-              </p>
-            </div>
-          )}
-          
-          <div className="flex flex-wrap gap-2 mb-6">
-            <span className="bg-[#0B5A70]/8 text-[#0B5A70] px-3 py-1 rounded-full text-sm font-semibold">
-              {currentBhajan.deity}
-            </span>
-            {currentBhajan.scale && (
-              <span className="bg-purple-50 text-purple-700 px-3 py-1 rounded-full text-sm font-semibold">
-                🎵 {currentBhajan.scale}
-              </span>
-            )}
-          </div>
-          
-          <div className={`rounded-2xl shadow-[0_2px_12px_rgba(11,90,112,0.06)] p-6 md:p-8 ${darkMode ? 'bg-[#162226] border border-[#0B5A70]/15' : 'bg-[#FFFCF8] border border-[#0B5A70]/8'}`}>
-            <div className="flex justify-end mb-2">
-              <button
-                onClick={() => setShowReadingSettings(true)}
-                className={`p-2 rounded-lg text-sm font-semibold flex items-center gap-1 transition-colors ${darkMode ? 'bg-[#1e2e33] text-gray-300 hover:bg-[#0B5A70]/20' : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15'}`}
-                title="Reading view options"
-              >
-                ⚙️ View
-              </button>
-            </div>
-            <pre
-              className={`whitespace-pre-wrap leading-relaxed ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}
-              style={{
-                fontSize: `${Math.max(readingSettings.fontSize, liveFontSize)}px`,
-                fontFamily: readingSettings.fontFamily,
-                lineHeight: readingSettings.lineHeight,
-                textAlign: readingSettings.textAlign
-              }}
-            >
-              {currentBhajan.lyrics}
-            </pre>
-          </div>
-        </div>
-        
-        {/* Bottom Navigation Bar */}
-        <div className="fixed bottom-0 left-0 right-0 bg-[#FFF8F0]/95 backdrop-blur-md border-t border-[#0B5A70]/10 shadow-2xl z-40">
-          <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
-            <button
-              onClick={livePrev}
-              disabled={liveProgramIndex === 0}
-              className="flex-1 bg-[#0B5A70]/8 hover:bg-[#0B5A70]/15 disabled:opacity-30 disabled:cursor-not-allowed text-[#0B5A70] font-bold py-3 rounded-xl flex items-center justify-center gap-2"
-            >
-              ← Previous
-            </button>
-            <div className="text-center min-w-[80px]">
-              <p className="text-xs text-gray-500">Bhajan</p>
-              <p className="text-lg font-bold text-[#E65100]">{liveProgramIndex + 1} / {totalBhajans}</p>
-            </div>
-            <button
-              onClick={liveNext}
-              disabled={liveProgramIndex >= totalBhajans - 1}
-              className="flex-1 bg-[#0B5A70] hover:bg-[#094a5d] disabled:opacity-30 disabled:cursor-not-allowed text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2"
-            >
-              Next →
-            </button>
-          </div>
-        </div>
       </div>
     );
   }
@@ -7908,7 +7724,8 @@ const App = () => {
   // ==============================================
   return (
     <div className="min-h-screen bg-[#FFF8F0] flex items-center justify-center p-4">
-      {/* Offline Indicator */}
+      {confirmDialogJsx}
+      {toastJsx}
       {isOffline && (
         <div className="fixed top-0 left-0 right-0 bg-red-500 text-white px-4 py-2 text-center text-sm font-semibold z-50 shadow-md">
           <span className="inline-flex items-center gap-2">
@@ -7917,7 +7734,6 @@ const App = () => {
           </span>
         </div>
       )}
-      {/* App Update Prompt */}
       {showUpdatePrompt && (
         <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4">
           <div className="bg-[#FFFCF8] rounded-3xl shadow-[0_8px_40px_rgba(11,90,112,0.15)] max-w-md w-full overflow-hidden">
@@ -7933,11 +7749,15 @@ const App = () => {
               <ul className="text-sm text-gray-700 space-y-2 mb-6">
                 <li className="flex items-start gap-2">
                   <span className="text-[#0B5A70] font-bold">✓</span>
-                  <span>Google Hindi typing now works in Public Library add/edit forms</span>
+                  <span>New bottom tab bar — switch between Public, My Library & Programs with one tap</span>
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="text-[#0B5A70] font-bold">✓</span>
-                  <span>You will now see this prompt every time the app is updated on GitHub</span>
+                  <span>Hindi typing is now faster (smarter caching)</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-[#0B5A70] font-bold">✓</span>
+                  <span>Faster app opening & smoother confirmations</span>
                 </li>
               </ul>
               <button
@@ -7951,10 +7771,8 @@ const App = () => {
         </div>
       )}
 
-            <div className="max-w-md w-full">
+      <div className="max-w-md w-full">
         <div className="bg-[#FFFCF8] rounded-3xl shadow-[0_8px_40px_rgba(11,90,112,0.12)] overflow-hidden border border-[#0B5A70]/8">
-          {/* Cream hero with wordmark - matches new brand aesthetic.
-              Wordmark component reused from header (single source of truth). */}
           <div className="bg-[#FFF8F0] p-8 text-center border-b border-[#0B5A70]/10">
             <SankirtanWordmark className="h-14 sm:h-16 w-auto mx-auto" />
             <p className="text-sm text-[#0B5A70] mt-3" style={{ fontFamily: "'Noto Sans Devanagari', system-ui, sans-serif" }}>
@@ -7985,7 +7803,7 @@ const App = () => {
                   {authLoading ? 'Signing in...' : 'Sign in with Google'}
                 </button>
 
-                <p className="text-[11px] text-[#0B5A70]/40 text-center">One tap sign-in — no passwords needed</p>
+                <p className="text-[11px] text-[#0B5A70]/50 text-center">One tap sign-in — no passwords needed</p>
 
                 <div className="flex items-center gap-3">
                   <div className="flex-1 border-t border-[#0B5A70]/15"></div>
@@ -8005,7 +7823,6 @@ const App = () => {
                   Browse Public Library as Guest →
                 </button>
 
-                {/* Phone login temporarily hidden - will be enabled when Blaze plan is active */}
                 {false && (
                   <button
                     onClick={() => setShowPhoneLogin(true)}
@@ -8027,8 +7844,6 @@ const App = () => {
                   <div className="flex-1 border-t border-[#0B5A70]/15"></div>
                 </div>
 
-                {/* Benefit-focused features. Verb-first, action-oriented.
-                    Answers "what do I get to DO?" not "what does the app HAVE?" */}
                 <div className="text-center text-xs text-[#0B5A70]/80 space-y-1.5">
                   <p>🎵 Sing your favourites, anywhere</p>
                   <p>🔍 Find any bhajan instantly</p>
@@ -8152,8 +7967,6 @@ const App = () => {
           </div>
         </div>
 
-        {/* Footer credit - now on cream background so uses teal (not white) text.
-            Music note replaces 🕉️ for consistency with new brand identity. */}
         <div className="text-center mt-4 text-[#0B5A70]/60 text-xs">
           <p>Founded for the Bhajan Community</p>
           <p className="mt-1">🎵 by Grace of <strong className="text-[#0B5A70]">Babosa Bhagwan</strong> 🎵</p>
@@ -8165,10 +7978,6 @@ const App = () => {
 
 // ==============================================
 // ERROR BOUNDARY
-// Catches any unhandled React errors (e.g. OCR crashes, Firestore errors)
-// and shows a friendly recovery screen instead of a white page.
-// Without this, ANY component crash = users see a blank screen with no
-// recovery option - they'd have to know to hard-refresh or clear cache.
 // ==============================================
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -8181,7 +7990,6 @@ class ErrorBoundary extends React.Component {
   }
 
   componentDidCatch(error, errorInfo) {
-    // Log for debugging (visible in browser console + can be sent to error tracking later)
     console.error('🚨 App crashed:', error);
     console.error('Component stack:', errorInfo.componentStack);
   }
@@ -8191,9 +7999,7 @@ class ErrorBoundary extends React.Component {
   };
 
   handleHardReload = () => {
-    // Clear caches that might be causing repeated crashes
     try {
-      // Do NOT clear login state or user preferences - only crash-related caches
       localStorage.removeItem('sankirtan-tesseract-langs-cached');
     } catch (e) {}
     window.location.reload();
@@ -8255,7 +8061,6 @@ class ErrorBoundary extends React.Component {
   }
 }
 
-// Wrap App in ErrorBoundary before exporting
 const AppWithErrorBoundary = () => (
   <ErrorBoundary>
     <App />
