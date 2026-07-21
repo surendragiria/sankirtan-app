@@ -20,37 +20,50 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 // ==============================================
 // SANKIRTAN WORDMARK COMPONENT (Devanagari)
 // ==============================================
-// संकीर्तन. wordmark in Devanagari — Option A color split:
-//   सं = brand teal (#0B5A70)
-//   कीर्तन. = brand saffron (#E65100)
-// Uses system Devanagari font (Noto Sans Devanagari / system-ui).
-// viewBox tuned so the wordmark scales correctly via className height.
-const SankirtanWordmark = ({ className = "" }) => (
-  <svg
-    className={className}
-    viewBox="0 -18 400 86"
-    xmlns="http://www.w3.org/2000/svg"
-    role="img"
-    aria-label="संकीर्तन"
-    style={{ overflow: 'visible' }}
-  >
-    <title>संकीर्तन</title>
-    <text
-      x="0"
-      y="48"
+// संकीर्तन. wordmark in Devanagari — HTML version (not SVG).
+// SVG <text> cannot reliably shape Devanagari conjuncts (र्त, etc.)
+// on iOS Safari. A native HTML <span> uses the browser's proper
+// OpenType shaping engine and renders perfectly everywhere.
+//
+// Color split:  सं = brand teal (#0B5A70)  |  कीर्तन. = brand saffron (#E65100)
+//
+// className controls the wrapper height/width/alignment; the inner
+// text scales via a fontSize map keyed to common Tailwind h-* classes.
+const WORDMARK_FONT = "'Noto Sans Devanagari', 'Mangal', system-ui, sans-serif";
+
+const SankirtanWordmark = ({ className = "" }) => {
+  // Derive font-size from the className height hint.
+  // h-10 (40px) → 28px,  h-12 (48px) → 34px,  h-14 (56px) → 40px,
+  // h-16 (64px) → 46px,  h-20 (80px) → 58px.  Fallback: 34px.
+  let fontSize = '34px';
+  if (className.includes('h-20'))      fontSize = '58px';
+  else if (className.includes('h-16')) fontSize = '46px';
+  else if (className.includes('h-14')) fontSize = '40px';
+  else if (className.includes('h-12')) fontSize = '34px';
+  else if (className.includes('h-10')) fontSize = '28px';
+
+  return (
+    <span
+      className={className}
+      role="img"
+      aria-label="संकीर्तन"
       style={{
-        fontFamily: "'Noto Sans Devanagari', 'Mangal', system-ui, sans-serif",
-        fontSize: '46px',
+        display: 'inline-flex',
+        alignItems: 'center',
+        fontFamily: WORDMARK_FONT,
+        fontSize,
         fontWeight: 700,
+        lineHeight: 1.2,
         letterSpacing: '0.01em',
+        whiteSpace: 'nowrap',
+        userSelect: 'none',
       }}
     >
-      <tspan fill="#0B5A70">सं</tspan>
-      <tspan fill="#E65100">कीर्तन</tspan>
-      <tspan fill="#E65100">.</tspan>
-    </text>
-  </svg>
-);
+      <span style={{ color: '#0B5A70' }}>सं</span>
+      <span style={{ color: '#E65100' }}>कीर्तन.</span>
+    </span>
+  );
+};
 
 // Constants for dropdowns
 const DEITY_OPTIONS = [
