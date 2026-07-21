@@ -4890,7 +4890,7 @@ const App = () => {
 
                 {selectedBhajan.source && (
                   <div className="mt-4 pt-4 border-t border-[#0B5A70]/8">
-                    
+                    <a
                       href={selectedBhajan.source}
                       target="_blank"
                       rel="noopener noreferrer"
@@ -5694,7 +5694,7 @@ const App = () => {
                         placeholder="e.g., Delhi Temple"
                       />
                       {programForm.venue.trim() && (
-                        
+                        <a
                           href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(programForm.venue)}`}
                           target="_blank"
                           rel="noopener noreferrer"
@@ -6592,7 +6592,7 @@ const App = () => {
 
                 {selectedPublicBhajan.source && (
                   <div className="mt-4 pt-4 border-t border-[#0B5A70]/8">
-                    
+                    <a
                       href={selectedPublicBhajan.source}
                       target="_blank"
                       rel="noopener noreferrer"
@@ -7034,7 +7034,7 @@ const App = () => {
                             {fb.text}
                           </p>
                           {fb.userEmail && (
-                            
+                            <a
                               href={`mailto:${fb.userEmail}?subject=Re: Your Sankirtan Feedback&body=Hi ${fb.userName},%0D%0A%0D%0AThank you for your feedback!%0D%0A%0D%0A`}
                               className="inline-block mt-2 text-xs text-[#0B5A70] hover:text-[#0B5A70]/80 font-semibold"
                             >
