@@ -386,7 +386,6 @@ const App = () => {
   const [showBhajanPicker, setShowBhajanPicker] = useState(false);
   const [bhajanPickerSearch, setBhajanPickerSearch] = useState('');
   const [pickerDeityFilter, setPickerDeityFilter] = useState('');
-  const [pickerCategoryFilter, setPickerCategoryFilter] = useState('');
   const [pickerKeywordFilter, setPickerKeywordFilter] = useState('');
 
   const [programForm, setProgramForm] = useState({
@@ -1346,9 +1345,14 @@ const App = () => {
               merge: true
             });
 
-            const isChrome = /Chrome/.test(navigator.userAgent) && !/Edg/.test(navigator.userAgent);
+            // Skip Firestore's IndexedDB persistence on iOS (all browsers).
+            // On iOS every browser is a WebKit wrapper, and WebKit's IndexedDB
+            // implementation causes slow first-load hydration and aggressive
+            // eviction. The app already maintains a localStorage cache layer
+            // for bhajans/programs, so we don't lose offline-first behaviour
+            // by disabling this.
             const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-            const skipPersistence = isChrome && isIOS;
+            const skipPersistence = isIOS;
 
             if (!skipPersistence) {
               try {
@@ -3054,7 +3058,6 @@ const App = () => {
     setShowBhajanPicker(true);
     setBhajanPickerSearch('');
     setPickerDeityFilter('');
-    setPickerCategoryFilter('');
     setPickerKeywordFilter('');
   };
 
@@ -3167,7 +3170,6 @@ const App = () => {
     setShowBhajanPicker(false);
     setBhajanPickerSearch('');
     setPickerDeityFilter('');
-    setPickerCategoryFilter('');
     setPickerKeywordFilter('');
   };
 
@@ -5669,7 +5671,7 @@ const App = () => {
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-3 mb-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
                   <div>
                     <label className="block text-sm font-semibold text-[#0B5A70] mb-1">
                       Date (optional)
@@ -5720,7 +5722,6 @@ const App = () => {
                         setShowBhajanPicker(true);
                         setBhajanPickerSearch('');
                         setPickerDeityFilter('');
-                        setPickerCategoryFilter('');
                         setPickerKeywordFilter('');
                       }}
                       className="bg-[#0B5A70]/8 hover:bg-[#0B5A70]/15 text-[#0B5A70] font-semibold px-3 py-1.5 rounded-lg text-sm"
@@ -5830,17 +5831,7 @@ const App = () => {
               {/* Bhajan Picker Modal */}
               {showBhajanPicker && (() => {
                 const pickerDeities = [...new Set(bhajans.map(b => b.deity).filter(Boolean))].sort();
-                const pickerCategories = [...new Set(bhajans.map(b => b.category).filter(Boolean))].sort();
-                const allKeywordsMap = {};
-                bhajans.forEach(b => {
-                  (b.keywords || []).forEach(kw => {
-                    allKeywordsMap[kw] = (allKeywordsMap[kw] || 0) + 1;
-                  });
-                });
-                const topKeywords = Object.entries(allKeywordsMap)
-                  .sort((a, b) => b[1] - a[1])
-                  .slice(0, 15)
-                  .map(([kw]) => kw);
+                const allPickerKeywords = [...new Set(bhajans.flatMap(b => b.keywords || []))].sort();
 
                 const programKeywords = new Set();
                 programForm.bhajanIds.forEach(id => {
@@ -5856,19 +5847,18 @@ const App = () => {
                     (b.keywords && b.keywords.some(kw => kw.toLowerCase().includes(searchLower)))
                   )) return false;
                   if (pickerDeityFilter && b.deity !== pickerDeityFilter) return false;
-                  if (pickerCategoryFilter && b.category !== pickerCategoryFilter) return false;
                   if (pickerKeywordFilter && !(b.keywords && b.keywords.includes(pickerKeywordFilter))) return false;
                   return true;
                 });
 
-                const relatedBhajans = programKeywords.size > 0 && !bhajanPickerSearch && !pickerDeityFilter && !pickerCategoryFilter && !pickerKeywordFilter
+                const relatedBhajans = programKeywords.size > 0 && !bhajanPickerSearch && !pickerDeityFilter && !pickerKeywordFilter
                   ? bhajans.filter(b => {
                       if (programForm.bhajanIds.includes(b.id)) return false;
                       return b.keywords && b.keywords.some(kw => programKeywords.has(kw));
                     }).slice(0, 8)
                   : [];
 
-                const hasActiveFilters = bhajanPickerSearch || pickerDeityFilter || pickerCategoryFilter || pickerKeywordFilter;
+                const hasActiveFilters = bhajanPickerSearch || pickerDeityFilter || pickerKeywordFilter;
 
                 return (
                 <div onClick={closeBhajanPicker} className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
@@ -5902,7 +5892,7 @@ const App = () => {
                           value={pickerDeityFilter}
                           onChange={(e) => setPickerDeityFilter(e.target.value)}
                           aria-label="Filter picker by deity"
-                          className={`flex-1 px-2 py-1.5 border rounded-lg text-xs outline-none bg-[#FFFCF8] transition-all ${
+                          className={`flex-1 min-w-0 px-2 py-1.5 border rounded-lg text-xs outline-none bg-[#FFFCF8] transition-all ${
                             pickerDeityFilter
                               ? 'border-[#0B5A70]/50 ring-2 ring-[#0B5A70]/10 font-semibold text-[#0B5A70]'
                               : 'border-[#0B5A70]/15'
@@ -5912,24 +5902,23 @@ const App = () => {
                           {pickerDeities.map(d => <option key={d} value={d}>{d}</option>)}
                         </select>
                         <select
-                          value={pickerCategoryFilter}
-                          onChange={(e) => setPickerCategoryFilter(e.target.value)}
-                          aria-label="Filter picker by category"
-                          className={`flex-1 px-2 py-1.5 border rounded-lg text-xs outline-none bg-[#FFFCF8] transition-all ${
-                            pickerCategoryFilter
+                          value={pickerKeywordFilter}
+                          onChange={(e) => setPickerKeywordFilter(e.target.value)}
+                          aria-label="Filter picker by keyword"
+                          className={`flex-1 min-w-0 px-2 py-1.5 border rounded-lg text-xs outline-none bg-[#FFFCF8] transition-all ${
+                            pickerKeywordFilter
                               ? 'border-[#0B5A70]/50 ring-2 ring-[#0B5A70]/10 font-semibold text-[#0B5A70]'
                               : 'border-[#0B5A70]/15'
                           }`}
                         >
-                          <option value="">All Categories</option>
-                          {pickerCategories.map(c => <option key={c} value={c}>{c}</option>)}
+                          <option value="">All Keywords</option>
+                          {allPickerKeywords.map(kw => <option key={kw} value={kw}>#{kw}</option>)}
                         </select>
                         {hasActiveFilters && (
                           <button
                             onClick={() => {
                               setBhajanPickerSearch('');
                               setPickerDeityFilter('');
-                              setPickerCategoryFilter('');
                               setPickerKeywordFilter('');
                             }}
                             className="text-xs text-red-600 hover:text-red-800 whitespace-nowrap px-2"
@@ -5938,24 +5927,6 @@ const App = () => {
                           </button>
                         )}
                       </div>
-
-                      {topKeywords.length > 0 && (
-                        <div className="flex flex-wrap gap-1.5">
-                          {topKeywords.map(kw => (
-                            <button
-                              key={kw}
-                              onClick={() => setPickerKeywordFilter(pickerKeywordFilter === kw ? '' : kw)}
-                              className={`text-xs px-2.5 py-1 rounded-full transition-all ${
-                                pickerKeywordFilter === kw
-                                  ? 'bg-[#0B5A70] text-white shadow-md'
-                                  : 'bg-[#0B5A70]/5 text-[#0B5A70] border border-[#0B5A70]/12 hover:bg-[#0B5A70]/10'
-                              }`}
-                            >
-                              #{kw}
-                            </button>
-                          ))}
-                        </div>
-                      )}
                     </div>
 
                     <div className="flex-1 overflow-y-auto p-4">
@@ -6027,7 +5998,6 @@ const App = () => {
                                 onClick={() => {
                                   setBhajanPickerSearch('');
                                   setPickerDeityFilter('');
-                                  setPickerCategoryFilter('');
                                   setPickerKeywordFilter('');
                                 }}
                                 className="text-sm text-[#0B5A70] hover:underline mt-2"
