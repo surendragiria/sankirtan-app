@@ -3141,15 +3141,16 @@ const App = () => {
     );
   };
 
-  const addBhajanToProgram = (bhajanId) => {
-    if (!programForm.bhajanIds.includes(bhajanId)) {
-      setProgramForm(prev => ({
-        ...prev,
-        bhajanIds: [...prev.bhajanIds, bhajanId]
-      }));
-    }
-    setShowBhajanPicker(false);
-    setBhajanPickerSearch('');
+  // Toggle a bhajan in the current program form.
+  // Adds if absent, removes if present. Does NOT close the picker —
+  // the picker stays open so the user can add/remove multiple bhajans
+  // in one session and closes only via the Done button (or X/backdrop).
+  const toggleBhajanInProgram = (bhajanId) => {
+    setProgramForm(prev => (
+      prev.bhajanIds.includes(bhajanId)
+        ? { ...prev, bhajanIds: prev.bhajanIds.filter(id => id !== bhajanId) }
+        : { ...prev, bhajanIds: [...prev.bhajanIds, bhajanId] }
+    ));
   };
 
   const removeBhajanFromProgram = (bhajanId) => {
@@ -3157,6 +3158,17 @@ const App = () => {
       ...prev,
       bhajanIds: prev.bhajanIds.filter(id => id !== bhajanId)
     }));
+  };
+
+  // Central close-and-reset helper for the picker.
+  // Used by the Done button, X button, and backdrop click so all three
+  // paths reset search + filters consistently.
+  const closeBhajanPicker = () => {
+    setShowBhajanPicker(false);
+    setBhajanPickerSearch('');
+    setPickerDeityFilter('');
+    setPickerCategoryFilter('');
+    setPickerKeywordFilter('');
   };
 
   const moveBhajanUp = (index) => {
@@ -5859,12 +5871,15 @@ const App = () => {
                 const hasActiveFilters = bhajanPickerSearch || pickerDeityFilter || pickerCategoryFilter || pickerKeywordFilter;
 
                 return (
-                <div onClick={() => setShowBhajanPicker(false)} className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+                <div onClick={closeBhajanPicker} className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
                   <div onClick={(e) => e.stopPropagation()} className="bg-[#FFFCF8] rounded-2xl shadow-[0_8px_40px_rgba(11,90,112,0.15)] max-w-lg w-full max-h-[85vh] flex flex-col">
                     <div className="p-4 border-b border-[#0B5A70]/10 flex items-center justify-between">
-                      <h3 className="text-lg font-bold text-[#0B5A70]">Add Bhajans to Program</h3>
+                      <div>
+                        <h3 className="text-lg font-bold text-[#0B5A70]">Add Bhajans to Program</h3>
+                        <p className="text-xs text-[#0B5A70]/60 mt-0.5">Tap to add or remove. Hit Done when finished.</p>
+                      </div>
                       <button
-                        onClick={() => setShowBhajanPicker(false)}
+                        onClick={closeBhajanPicker}
                         className="text-gray-500 hover:text-gray-700 text-2xl leading-none"
                         aria-label="Close bhajan picker"
                       >
@@ -5963,11 +5978,12 @@ const App = () => {
                                   return (
                                     <button
                                       key={`rel-${bhajan.id}`}
-                                      onClick={() => !isAdded && addBhajanToProgram(bhajan.id)}
-                                      disabled={isAdded}
+                                      onClick={() => toggleBhajanInProgram(bhajan.id)}
+                                      aria-pressed={isAdded}
+                                      title={isAdded ? 'Tap to remove from program' : 'Tap to add to program'}
                                       className={`w-full text-left p-3 rounded-xl border transition-all ${
                                         isAdded
-                                          ? 'bg-green-50 border-green-200 opacity-60 cursor-not-allowed'
+                                          ? 'bg-green-50 border-green-200 hover:border-green-400'
                                           : 'bg-[#E65100]/3 border-[#E65100]/15 hover:border-[#E65100]/30'
                                       }`}
                                     >
@@ -5988,7 +6004,7 @@ const App = () => {
                                           )}
                                         </div>
                                         {isAdded ? (
-                                          <span className="text-green-600 font-bold ml-2 text-sm">✓</span>
+                                          <span className="text-green-700 font-semibold ml-2 text-sm whitespace-nowrap">✓ Added</span>
                                         ) : (
                                           <span className="text-[#0B5A70] font-semibold ml-2 text-sm">+ Add</span>
                                         )}
@@ -6026,11 +6042,12 @@ const App = () => {
                                 return (
                                   <button
                                     key={bhajan.id}
-                                    onClick={() => !isAdded && addBhajanToProgram(bhajan.id)}
-                                    disabled={isAdded}
+                                    onClick={() => toggleBhajanInProgram(bhajan.id)}
+                                    aria-pressed={isAdded}
+                                    title={isAdded ? 'Tap to remove from program' : 'Tap to add to program'}
                                     className={`w-full text-left p-3 rounded-xl border transition-all ${
                                       isAdded
-                                        ? 'bg-green-50 border-green-200 opacity-60 cursor-not-allowed'
+                                        ? 'bg-green-50 border-green-200 hover:border-green-400'
                                         : 'bg-white border-[#0B5A70]/10 hover:border-[#0B5A70]/25'
                                     }`}
                                   >
@@ -6045,7 +6062,7 @@ const App = () => {
                                         </p>
                                       </div>
                                       {isAdded ? (
-                                        <span className="text-green-600 font-bold ml-2 text-sm">✓</span>
+                                        <span className="text-green-700 font-semibold ml-2 text-sm whitespace-nowrap">✓ Added</span>
                                       ) : (
                                         <span className="text-[#0B5A70] font-semibold ml-2 text-sm">+ Add</span>
                                       )}
@@ -6057,6 +6074,16 @@ const App = () => {
                           )}
                         </>
                       )}
+                    </div>
+
+                    <div className="p-3 border-t border-[#0B5A70]/10 bg-[#FFFCF8]">
+                      <button
+                        type="button"
+                        onClick={closeBhajanPicker}
+                        className="w-full bg-[#0B5A70] hover:bg-[#094a5d] text-white font-semibold py-2.5 rounded-xl shadow-md transition-colors"
+                      >
+                        Done · {programForm.bhajanIds.length} {programForm.bhajanIds.length === 1 ? 'bhajan' : 'bhajans'} in program
+                      </button>
                     </div>
                   </div>
                 </div>
