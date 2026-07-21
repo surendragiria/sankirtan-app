@@ -2565,13 +2565,6 @@ const App = () => {
   // ==============================================
   // PUBLIC LIBRARY OPERATIONS
   // ==============================================
-  const openPublicLibrary = () => {
-    setCurrentView('public-library');
-    setPublicSearchQuery('');
-    setPublicFilterDeity('');
-    setPublicFilterCategory('');
-  };
-
   const openPublicBhajanDetail = (bhajan) => {
     setSelectedPublicBhajan(bhajan);
     setCurrentView('public-bhajan-detail');
@@ -3048,11 +3041,6 @@ const App = () => {
   // ==============================================
   // PROGRAMS CRUD OPERATIONS
   // ==============================================
-  const openPrograms = () => {
-    setCurrentView('programs');
-    setProgramSearchQuery('');
-  };
-
   const openCreateProgram = () => {
     setProgramForm({
       name: '',
