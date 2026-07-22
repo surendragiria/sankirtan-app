@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { SEED_PUBLIC_BHAJANS } from './seedPublicBhajans';
 
 // ==============================================
 // SANKIRTAN SAAS - SESSION 5
@@ -1585,14 +1584,22 @@ const App = () => {
       }
     } catch (e) { /* non-fatal */ }
 
-    // Brand-new users have no localStorage cache. Rather than blank the
-    // screen while Firestore hydrates, paint the bundled seed snapshot
-    // immediately. onSnapshot replaces it silently with the live data
-    // (~1s later); openPublicBhajanDetail handles the race where a user
-    // taps a _seed entry before the real doc arrives.
+    // Progressive load for cold-cache users: fetch the newest 30 bhajans
+    // immediately so the library renders in ~200-400ms, then the full
+    // onSnapshot below delivers the rest in the background (~800-1500ms).
+    // The onSnapshotFired flag prevents a slow .get() from overwriting the
+    // full data if onSnapshot happens to arrive first.
+    let onSnapshotFired = false;
     if (!cacheHit) {
-      setPublicBhajans(SEED_PUBLIC_BHAJANS);
-      setPublicLoading(false);
+      publicRef.orderBy('createdAt', 'desc').limit(30).get()
+        .then((snapshot) => {
+          if (onSnapshotFired) return;
+          const list = [];
+          snapshot.forEach((doc) => list.push({ id: doc.id, ...doc.data() }));
+          setPublicBhajans(list);
+          setPublicLoading(false);
+        })
+        .catch((e) => console.log('Initial 30-bhajan fetch failed:', e.message));
     }
 
     const saveCache = (list) => {
@@ -1602,6 +1609,7 @@ const App = () => {
     };
 
     const sortAndSet = (snapshot) => {
+      onSnapshotFired = true;
       const list = [];
       snapshot.forEach((doc) => {
         list.push({ id: doc.id, ...doc.data() });
@@ -2583,23 +2591,9 @@ const App = () => {
   // ==============================================
   // PUBLIC LIBRARY OPERATIONS
   // ==============================================
-  const openPublicBhajanDetail = async (bhajan) => {
+  const openPublicBhajanDetail = (bhajan) => {
     setSelectedPublicBhajan(bhajan);
     setCurrentView('public-bhajan-detail');
-    // Race guard: if the user tapped a seed entry before onSnapshot could
-    // replace the array with live data, the record has no lyrics. Fetch
-    // the full document so the reader view renders correctly.
-    if (bhajan._seed && !bhajan.lyrics) {
-      try {
-        const db = window.firebase.firestore();
-        const doc = await db.collection('publicBhajans').doc(bhajan.id).get();
-        if (doc.exists) {
-          setSelectedPublicBhajan({ id: doc.id, ...doc.data() });
-        }
-      } catch (e) {
-        console.log('On-demand fetch for seed bhajan failed:', e.message);
-      }
-    }
   };
 
   const saveToMyLibrary = async (publicBhajan) => {
