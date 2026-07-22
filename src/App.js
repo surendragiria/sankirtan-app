@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { SEED_PUBLIC_BHAJANS } from './seedPublicBhajans';
 
 // ==============================================
 // SANKIRTAN SAAS - SESSION 5
@@ -1426,7 +1427,7 @@ const App = () => {
     // CACHE HYDRATION: instant paint from localStorage while
     // Firestore's listener delivers cached-then-fresh data.
     const CACHE_KEY = `sankirtan-my-bhajans-${user.uid}`;
-    const CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+    const CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days — devotional content changes rarely, stale-but-instant beats blank-but-fresh
     try {
       const raw = localStorage.getItem(CACHE_KEY);
       if (raw) {
@@ -1498,11 +1499,12 @@ const App = () => {
     const programsRef = db.collection('users').doc(user.uid).collection('programs');
 
     const PROG_CACHE_KEY = `sankirtan-programs-${user.uid}`;
+    const PROG_CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days — programs change rarely once created
     try {
       const raw = localStorage.getItem(PROG_CACHE_KEY);
       if (raw) {
         const cached = JSON.parse(raw);
-        if (cached.list && cached.list.length > 0 && cached.savedAt && (Date.now() - cached.savedAt) < 24 * 60 * 60 * 1000) {
+        if (cached.list && cached.list.length > 0 && cached.savedAt && (Date.now() - cached.savedAt) < PROG_CACHE_MAX_AGE_MS) {
           setPrograms(cached.list);
           setProgramsLoading(false);
         }
@@ -1568,7 +1570,8 @@ const App = () => {
     const publicRef = db.collection('publicBhajans');
 
     const CACHE_KEY = 'sankirtan-public-bhajans-cache';
-    const CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+    const CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days — public library changes rarely; extended TTL avoids blank-then-repaint on weekly visitors
+    let cacheHit = false;
     try {
       const raw = localStorage.getItem(CACHE_KEY);
       if (raw) {
@@ -1577,9 +1580,20 @@ const App = () => {
         if (cached.list && cached.list.length > 0 && !isStale) {
           setPublicBhajans(cached.list);
           setPublicLoading(false);
+          cacheHit = true;
         }
       }
     } catch (e) { /* non-fatal */ }
+
+    // Brand-new users have no localStorage cache. Rather than blank the
+    // screen while Firestore hydrates, paint the bundled seed snapshot
+    // immediately. onSnapshot replaces it silently with the live data
+    // (~1s later); openPublicBhajanDetail handles the race where a user
+    // taps a _seed entry before the real doc arrives.
+    if (!cacheHit) {
+      setPublicBhajans(SEED_PUBLIC_BHAJANS);
+      setPublicLoading(false);
+    }
 
     const saveCache = (list) => {
       try {
@@ -2569,9 +2583,23 @@ const App = () => {
   // ==============================================
   // PUBLIC LIBRARY OPERATIONS
   // ==============================================
-  const openPublicBhajanDetail = (bhajan) => {
+  const openPublicBhajanDetail = async (bhajan) => {
     setSelectedPublicBhajan(bhajan);
     setCurrentView('public-bhajan-detail');
+    // Race guard: if the user tapped a seed entry before onSnapshot could
+    // replace the array with live data, the record has no lyrics. Fetch
+    // the full document so the reader view renders correctly.
+    if (bhajan._seed && !bhajan.lyrics) {
+      try {
+        const db = window.firebase.firestore();
+        const doc = await db.collection('publicBhajans').doc(bhajan.id).get();
+        if (doc.exists) {
+          setSelectedPublicBhajan({ id: doc.id, ...doc.data() });
+        }
+      } catch (e) {
+        console.log('On-demand fetch for seed bhajan failed:', e.message);
+      }
+    }
   };
 
   const saveToMyLibrary = async (publicBhajan) => {
