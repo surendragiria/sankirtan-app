@@ -1,45 +1,45 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 
 // ==============================================
-// SANKIRTAN SAAS - SESSION 7
+// SANKIRTAN SAAS - SESSION 8
 // Bhajan Se Bhagwan Tak
-// CHANGES (Session 7 — the "40 seconds → 2 seconds" hotfix):
+// CHANGES (Session 8 — "Firestore reliability" hotfix):
 //
-// Console diagnosis on 4G revealed the real cause of the "app hangs
-// on cold start" reports: it was NOT slow network, NOT big payloads,
-// NOT progressive loading. It was a vanity user counter blocking init.
+// After Session 7 fixed the 40-second cold-start hang on desktop,
+// mobile/incognito loads were still slow. Incognito console evidence
+// showed the culprit:
 //
-// 1. FIX: Removed fetchUserCount() entirely (function, state, and the
-//    "N devotees joined" JSX on the sign-in screen).
+//   GET .../Listen/channel 404 (Not Found)                [t = 0s]
+//   WebChannelConnection RPC 'Listen' stream errored      [t = 18s]
 //
-//    Why: the counter called db.collection('users').count() which
-//    requires collection-level read on users/. But the Firestore
-//    rules (correctly) restrict users/{uid} to the owning user, so
-//    the count() call was denied with "Missing or insufficient
-//    permissions" on EVERY app open. Firestore's SDK then retried
-//    the denied call with exponential backoff (1s → 2s → 4s → 8s →
-//    16s → give up ≈ 30-40s), and because fetchUserCount was AWAITED
-//    inside initFirebase, the entire splash → sign-in transition
-//    blocked on those retries.
+// Root cause: experimentalAutoDetectLongPolling tries WebChannel
+// (WebSocket-style) first and falls back to long-polling only if the
+// initial attempt fails. On mobile Safari, incognito windows, and
+// networks with strict proxies (common on Indian college/office
+// Wi-Fi), the WebChannel attempt reliably 404s and the SDK spends
+// 15-30 seconds retrying with backoff before falling back. Users
+// stared at skeleton cards the entire time.
 //
-//    Removing this fixes the load hang without needing to loosen
-//    the user-privacy rule. The counter was cosmetic — no product
-//    value lost.
+// 1. FIX: switched to experimentalForceLongPolling: true. Skips
+//    the failed WebChannel attempt entirely; long-polling works
+//    everywhere. Costs ~50-100ms per query on desktop (imperceptible);
+//    saves 15-30 seconds on mobile / incognito cold starts.
 //
-//    Symptom that pointed to it: Chrome DevTools console showed
-//    "Could not fetch user count: FirebaseError: Missing or
-//    insufficient permissions" alongside a stuck skeleton grid.
+// 2. UX: escape hatch — after 8 seconds of skeleton loading, show
+//    a "Taking longer than usual… [↻ Reload]" banner above the
+//    skeletons. If Firestore is still misbehaving, users have a way
+//    out instead of staring at cards forever. State: publicLoadingStuck.
 //
-// Not touched: everything else from Session 6. Card memoization,
-// dark mode, back-button behaviour, Firestore listeners, cache
-// layer — all unchanged.
+// Not touched: rest of the app. Same components, same data flow,
+// same rules. This is purely a transport-layer fix + a UX safety net.
 //
-// Known follow-ups (deliberately deferred):
-//   • Tailwind loaded from CDN in production (adds ~400KB gzip and
-//     runtime CSS generation). Fix is a build-step change, not code.
-//   • Cross-Origin-Opener-Policy warnings from Firebase popup helper
-//     are benign — modern browser privacy tightening, no impact.
+// Known follow-ups still deferred:
+//   • Tailwind CDN → build-step compile (dev-experience change,
+//     not urgent now that transport is stable)
+//   • Cross-Origin-Opener-Policy popup warnings (benign)
 // ==============================================
+// (Session 7 highlight kept for reference: fetchUserCount() deleted;
+//  it was blocking init on a permission-denied retry loop.)
 // (Session 6 highlights kept for reference:
 //  lyric-preview truncation, MyBhajanCard/PublicBhajanCard extracted
 //  as React.memo, useMemo on related/prev-next lists, transliteration
@@ -119,7 +119,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.07.23.s7';
+const APP_VERSION = '2026.07.23.s8';
 
 // Onboarding tour steps
 const ONBOARDING_STEPS = [
@@ -621,6 +621,12 @@ const App = () => {
   // Public Library states
   const [publicBhajans, setPublicBhajans] = useState([]);
   const [publicLoading, setPublicLoading] = useState(false);
+  // SESSION 8: escape hatch — after 8 seconds of skeleton loading,
+  // show a "Having trouble loading" message with a Retry button so
+  // users aren't stuck watching skeletons forever if Firestore's
+  // Listen stream is misbehaving (mobile Safari, incognito, strict
+  // corporate proxies, etc).
+  const [publicLoadingStuck, setPublicLoadingStuck] = useState(false);
   const [publicSearchQuery, setPublicSearchQuery] = useState('');
   const [debouncedPublicSearch, setDebouncedPublicSearch] = useState('');
   const [publicFilterKeyword, setPublicFilterKeyword] = useState('');
@@ -1588,7 +1594,26 @@ const App = () => {
             const db = window.firebase.firestore();
 
             db.settings({
-              experimentalAutoDetectLongPolling: true,
+              // SESSION 8: switched from experimentalAutoDetectLongPolling
+              // to experimentalForceLongPolling.
+              //
+              // Auto-detect tries WebChannel (WebSocket-style) first, and
+              // falls back to long-polling only if it 404s or times out.
+              // On mobile Safari, incognito windows, and networks with
+              // strict proxies (many corporate/college Wi-Fi setups in
+              // India), the WebChannel attempt reliably 404s and the
+              // fallback adds 15-30 seconds of retry-with-backoff before
+              // the app finally recovers.
+              //
+              // Console evidence: guest-mode incognito load showed
+              // "GET .../Listen/channel 404 (Not Found)" followed by
+              // "WebChannelConnection RPC 'Listen' stream errored"
+              // 18 seconds later — classic auto-detect fallback delay.
+              //
+              // Force long-polling skips the failed WebChannel attempt
+              // entirely. Costs ~50-100ms per query on desktop; saves
+              // 15-30 seconds on mobile / incognito cold starts.
+              experimentalForceLongPolling: true,
               merge: true
             });
 
@@ -1900,6 +1925,18 @@ const App = () => {
 
     return () => unsubscribe();
   }, [user, guestMode]);
+
+  // SESSION 8: after 8s of skeleton loading, show a "Having trouble
+  // loading" prompt with a Retry button so guests aren't stuck.
+  // Cleared as soon as data arrives OR user leaves the view.
+  useEffect(() => {
+    if (!publicLoading) {
+      setPublicLoadingStuck(false);
+      return;
+    }
+    const t = setTimeout(() => setPublicLoadingStuck(true), 8000);
+    return () => clearTimeout(t);
+  }, [publicLoading]);
 
   // Track which public bhajans user has already saved
   useEffect(() => {
@@ -6487,7 +6524,30 @@ const App = () => {
               </div>
 
               {publicLoading ? (
-                <div className={compactView ? 'space-y-2' : 'grid grid-cols-1 md:grid-cols-2 gap-4'}>
+                <>
+                  {/* SESSION 8: escape hatch — after 8s of skeletons,
+                      tell the user something is wrong and give them
+                      a way out. Reload picks up cached data OR
+                      re-attempts Firestore with a fresh listener. */}
+                  {publicLoadingStuck && (
+                    <div className={`mb-4 rounded-2xl border p-4 flex items-center gap-3 ${darkMode ? 'bg-[#1e2e33] border-[#E65100]/30 text-amber-100' : 'bg-[#FFF8F0] border-[#E65100]/40 text-[#0B5A70]'}`}>
+                      <div className="text-2xl flex-shrink-0">🐢</div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-bold mb-0.5">Taking longer than usual…</p>
+                        <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                          Your network may be slow, or Firestore is having a moment. Try reloading.
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => window.location.reload()}
+                        className={`flex-shrink-0 font-semibold px-4 py-2 rounded-xl text-sm ${darkMode ? 'bg-[#E65100] hover:bg-[#d64800] text-white' : 'bg-[#0B5A70] hover:bg-[#094a5d] text-white'}`}
+                        aria-label="Reload the page"
+                      >
+                        ↻ Reload
+                      </button>
+                    </div>
+                  )}
+                  <div className={compactView ? 'space-y-2' : 'grid grid-cols-1 md:grid-cols-2 gap-4'}>
                   {[...Array(6)].map((_, i) => (
                     compactView ? (
                       <div
@@ -6520,6 +6580,7 @@ const App = () => {
                     )
                   ))}
                 </div>
+                </>
               ) : filteredPublicBhajans.length === 0 ? (
                 <div className={`text-center py-12 rounded-2xl border-2 border-dashed ${darkMode ? 'bg-[#162226] border-[#0B5A70]/12' : 'bg-[#FFFCF8] border-[#0B5A70]/15'}`}>
                   {publicBhajans.length === 0 ? (
