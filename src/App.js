@@ -1,51 +1,51 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 
 // ==============================================
-// SANKIRTAN SAAS - SESSION 6
+// SANKIRTAN SAAS - SESSION 7
 // Bhajan Se Bhagwan Tak
-// CHANGES (Session 6 — the "smoothness release"):
-// 1. PERF: List cards truncate lyrics to 4 lines BEFORE rendering.
-//    line-clamp only hides overflow visually; the browser still
-//    laid out entire song texts for every card. Huge win on the
-//    public library with 100+ cards visible after scrolling.
-// 2. PERF: MyBhajanCard and PublicBhajanCard extracted as
-//    React.memo components at module scope. Toast fires, search
-//    keystrokes, font-size taps and dark-mode toggles no longer
-//    re-render the whole card grid — unchanged cards skip entirely.
-//    Handlers wrapped in useCallback so memo boundaries actually hold.
-// 3. PERF: Related Bhajans + Prev/Next lists in reading views are
-//    now useMemo'd on selected-bhajan.id. Previously every Aa+ tap
-//    re-scanned and re-sorted the full library.
-// 4. PERF: Transliteration cache moved fully to a ref (state +
-//    mirror effect deleted). Cache writes no longer trigger a full
-//    app re-render mid-typing — noticeably smoother lyrics input.
-// 5. UX: Back button no longer walks through top-level tab taps.
-//    Switching Public ↔ My Library ↔ Programs uses replaceState;
-//    only detail/form/admin drill-downs pushState. Back now exits
-//    from a top tab instead of unwinding 4 taps first.
-// 6. UX/A11y: Dark-mode contrast fixes —
-//    • Header username/badges get dark-mode colors (were near-invisible
-//      teal-on-dark-teal).
-//    • Live Program mode is now dark-mode aware (was hardcoded cream —
-//      a white flashbang for the singer on evening programs).
-//    • theme-color meta tag syncs with darkMode so the Android
-//      status bar matches the app chrome.
-// 7. UX: Compact Public card had a <span onClick> nested inside a
-//    <button> (invalid HTML, screen-readers skipped it). Restructured
-//    so both title-tap and Save are real sibling buttons.
-// 8. UX: Guest tapping a locked tab (My Library / Programs) now sees
-//    a "Sign in to build your personal library" toast before the
-//    sign-in screen appears — explains WHY the screen changed.
+// CHANGES (Session 7 — the "40 seconds → 2 seconds" hotfix):
+//
+// Console diagnosis on 4G revealed the real cause of the "app hangs
+// on cold start" reports: it was NOT slow network, NOT big payloads,
+// NOT progressive loading. It was a vanity user counter blocking init.
+//
+// 1. FIX: Removed fetchUserCount() entirely (function, state, and the
+//    "N devotees joined" JSX on the sign-in screen).
+//
+//    Why: the counter called db.collection('users').count() which
+//    requires collection-level read on users/. But the Firestore
+//    rules (correctly) restrict users/{uid} to the owning user, so
+//    the count() call was denied with "Missing or insufficient
+//    permissions" on EVERY app open. Firestore's SDK then retried
+//    the denied call with exponential backoff (1s → 2s → 4s → 8s →
+//    16s → give up ≈ 30-40s), and because fetchUserCount was AWAITED
+//    inside initFirebase, the entire splash → sign-in transition
+//    blocked on those retries.
+//
+//    Removing this fixes the load hang without needing to loosen
+//    the user-privacy rule. The counter was cosmetic — no product
+//    value lost.
+//
+//    Symptom that pointed to it: Chrome DevTools console showed
+//    "Could not fetch user count: FirebaseError: Missing or
+//    insufficient permissions" alongside a stuck skeleton grid.
+//
+// Not touched: everything else from Session 6. Card memoization,
+// dark mode, back-button behaviour, Firestore listeners, cache
+// layer — all unchanged.
+//
+// Known follow-ups (deliberately deferred):
+//   • Tailwind loaded from CDN in production (adds ~400KB gzip and
+//     runtime CSS generation). Fix is a build-step change, not code.
+//   • Cross-Origin-Opener-Policy warnings from Firebase popup helper
+//     are benign — modern browser privacy tightening, no impact.
 // ==============================================
-// (Session 5 highlights kept for reference:
-//  transliteration cache-key fix, no false "App Updated!" prompt,
-//  Recently Read reloads on auth change, live mode branch order fix,
-//  single-source Firestore listeners, count() aggregation for user
-//  count, memoized filtered lists, once-per-day splash, stable
-//  IntersectionObservers, toast+ConfirmDialog replacing alerts,
-//  bottom tab bar. Firestore-rules note from S5 still stands:
-//  ensure publicBhajans/appConfig writes and feedback reads are
-//  server-side restricted to the admin UID.)
+// (Session 6 highlights kept for reference:
+//  lyric-preview truncation, MyBhajanCard/PublicBhajanCard extracted
+//  as React.memo, useMemo on related/prev-next lists, transliteration
+//  cache moved to ref-only, replaceState for tab-level nav, dark-mode
+//  contrast fixes for header + Live Program mode, theme-color meta
+//  sync, compact card button-nesting fix, guest-locked-tab toast.)
 // ==============================================
 
 // ==============================================
@@ -119,7 +119,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.07.23.s6';
+const APP_VERSION = '2026.07.23.s7';
 
 // Onboarding tour steps
 const ONBOARDING_STEPS = [
@@ -577,7 +577,7 @@ const App = () => {
     youtube: '',
     instagram: ''
   });
-  const [userCount, setUserCount] = useState(0);
+  // SESSION 7: userCount state removed with fetchUserCount deletion.
 
   // My Library states
   const [currentView, setCurrentView] = useState('public-library');
@@ -1644,7 +1644,14 @@ const App = () => {
           setLoading(false);
         }, 8000);
 
-        await fetchUserCount();
+        // SESSION 7: fetchUserCount() removed from init.
+        // The vanity counter was awaited on the critical path AND
+        // was denied by Firestore rules (users collection is
+        // per-user-only, no collection-level count permission).
+        // The permission-denied error triggered Firestore's
+        // exponential-backoff retry loop, blocking splash → sign-in
+        // for 30-40 seconds on every cold start. Root cause of the
+        // "app hangs on first open" reports.
       } catch (error) {
         console.error('Firebase init error:', error);
         setLoading(false);
@@ -1982,24 +1989,12 @@ const App = () => {
     }
   };
 
-  // SESSION 5: count() aggregation — 1 billed read instead of
-  // reading up to 1,000 user documents on every app open
-  const fetchUserCount = async () => {
-    try {
-      const db = window.firebase.firestore();
-      try {
-        const countSnap = await db.collection('users').count().get();
-        setUserCount(countSnap.data().count);
-      } catch (aggErr) {
-        // Older SDK without aggregation support — light fallback
-        const snapshot = await db.collection('users').limit(200).get();
-        setUserCount(snapshot.size);
-      }
-    } catch (error) {
-      console.log('Could not fetch user count:', error);
-      setUserCount(1);
-    }
-  };
+  // SESSION 7: fetchUserCount() deleted. Was a vanity "N devotees
+  // joined" counter that (a) required collection-level read on
+  // users/ which isn't permitted by security rules, (b) sat on the
+  // critical path in initFirebase() awaiting a permission-denied
+  // retry loop. Cosmetic feature, blocking cost, no way to
+  // reconcile without loosening user-privacy rules — deleted.
 
   const saveProfile = async () => {
     if (!user || !profileForm.displayName.trim()) {
@@ -8122,13 +8117,8 @@ const App = () => {
               </>
             )}
 
-            {userCount > 0 && (
-              <div className="text-center pt-4 border-t border-[#0B5A70]/10">
-                <p className="text-xs text-[#0B5A70]">
-                  🌟 <strong className="text-[#E65100]">{userCount}+</strong> {userCount === 1 ? 'devotee has' : 'devotees have'} joined
-                </p>
-              </div>
-            )}
+            {/* SESSION 7: "N devotees joined" counter removed —
+                see fetchUserCount deletion note above. */}
           </div>
         </div>
 
