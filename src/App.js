@@ -1,51 +1,48 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 
 // ==============================================
-// SANKIRTAN SAAS - SESSION 8
+// SANKIRTAN SAAS - SESSION 9
 // Bhajan Se Bhagwan Tak
-// CHANGES (Session 8 — "Firestore reliability" hotfix):
+// CHANGES (Session 9 — hotfix for Session 8's Firestore config error):
 //
-// After Session 7 fixed the 40-second cold-start hang on desktop,
-// mobile/incognito loads were still slow. Incognito console evidence
-// showed the culprit:
+// Session 8's db.settings() call included `merge: true` alongside
+// `experimentalForceLongPolling: true`. Firebase compat SDK v10.7.0
+// throws at runtime:
 //
-//   GET .../Listen/channel 404 (Not Found)                [t = 0s]
-//   WebChannelConnection RPC 'Listen' stream errored      [t = 18s]
+//   "experimentalForceLongPolling and
+//    experimentalAutoDetectLongPolling cannot be used together"
 //
-// Root cause: experimentalAutoDetectLongPolling tries WebChannel
-// (WebSocket-style) first and falls back to long-polling only if the
-// initial attempt fails. On mobile Safari, incognito windows, and
-// networks with strict proxies (common on Indian college/office
-// Wi-Fi), the WebChannel attempt reliably 404s and the SDK spends
-// 15-30 seconds retrying with backoff before falling back. Users
-// stared at skeleton cards the entire time.
+// Why: the compat SDK's merge:true option merges new settings on
+// top of defaults, and the defaults include
+// experimentalAutoDetectLongPolling:false. Post-merge, both keys
+// end up present, and the SDK's own validation refuses. The
+// Firestore SDK was then left in an unconfigured, cannot-talk-to-
+// backend state — the observable symptom was "Public library is
+// empty" plus "Could not reach Cloud Firestore backend" for
+// signed-in and guest users alike, worse than pre-Session-8.
 //
-// 1. FIX: switched to experimentalForceLongPolling: true. Skips
-//    the failed WebChannel attempt entirely; long-polling works
-//    everywhere. Costs ~50-100ms per query on desktop (imperceptible);
-//    saves 15-30 seconds on mobile / incognito cold starts.
+// 1. FIX: dropped `merge: true`. The settings object now replaces
+//    defaults wholesale rather than merging.
 //
-// 2. UX: escape hatch — after 8 seconds of skeleton loading, show
-//    a "Taking longer than usual… [↻ Reload]" banner above the
-//    skeletons. If Firestore is still misbehaving, users have a way
-//    out instead of staring at cards forever. State: publicLoadingStuck.
+// 2. UX: removed the silent `console.warn` around the settings
+//    call. If settings ever fails, it now logs a CRITICAL error
+//    and throws so we see it fast next time, and _firestoreConfigured
+//    stays false so the next reload retries the setup.
 //
-// Not touched: rest of the app. Same components, same data flow,
-// same rules. This is purely a transport-layer fix + a UX safety net.
+// This is a hotfix for Session 8, not a full new session's worth of
+// work. Everything else from Session 8 stays: the 8-second stuck-
+// loading escape hatch with the Reload button.
 //
-// Known follow-ups still deferred:
-//   • Tailwind CDN → build-step compile (dev-experience change,
-//     not urgent now that transport is stable)
-//   • Cross-Origin-Opener-Policy popup warnings (benign)
+// Verification after deploy: incognito window on sankirtan.app,
+// console should NOT show "Firestore config error". Public library
+// should paint in 2-3 seconds even on mobile / incognito.
 // ==============================================
-// (Session 7 highlight kept for reference: fetchUserCount() deleted;
-//  it was blocking init on a permission-denied retry loop.)
-// (Session 6 highlights kept for reference:
-//  lyric-preview truncation, MyBhajanCard/PublicBhajanCard extracted
-//  as React.memo, useMemo on related/prev-next lists, transliteration
-//  cache moved to ref-only, replaceState for tab-level nav, dark-mode
-//  contrast fixes for header + Live Program mode, theme-color meta
-//  sync, compact card button-nesting fix, guest-locked-tab toast.)
+// (Session 8 kept: experimentalForceLongPolling for reliability;
+//  8-second stuck-loading escape-hatch banner with Reload button.)
+// (Session 7 kept: fetchUserCount() deleted; the blocking retry
+//  loop that caused the original 40-second cold-start hang.)
+// (Session 6 kept: card memoization, dark mode, back-button behaviour,
+//  transliteration cache, related/prev-next memoization.)
 // ==============================================
 
 // ==============================================
@@ -119,7 +116,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.07.23.s8';
+const APP_VERSION = '2026.07.23.s9';
 
 // Onboarding tour steps
 const ONBOARDING_STEPS = [
@@ -1593,29 +1590,37 @@ const App = () => {
           if (!window._firestoreConfigured) {
             const db = window.firebase.firestore();
 
-            db.settings({
-              // SESSION 8: switched from experimentalAutoDetectLongPolling
-              // to experimentalForceLongPolling.
-              //
-              // Auto-detect tries WebChannel (WebSocket-style) first, and
-              // falls back to long-polling only if it 404s or times out.
-              // On mobile Safari, incognito windows, and networks with
-              // strict proxies (many corporate/college Wi-Fi setups in
-              // India), the WebChannel attempt reliably 404s and the
-              // fallback adds 15-30 seconds of retry-with-backoff before
-              // the app finally recovers.
-              //
-              // Console evidence: guest-mode incognito load showed
-              // "GET .../Listen/channel 404 (Not Found)" followed by
-              // "WebChannelConnection RPC 'Listen' stream errored"
-              // 18 seconds later — classic auto-detect fallback delay.
-              //
-              // Force long-polling skips the failed WebChannel attempt
-              // entirely. Costs ~50-100ms per query on desktop; saves
-              // 15-30 seconds on mobile / incognito cold starts.
-              experimentalForceLongPolling: true,
-              merge: true
-            });
+            // SESSION 9 FIX for the "experimentalForceLongPolling
+            // and experimentalAutoDetectLongPolling cannot be used
+            // together" runtime error that Session 8 introduced.
+            //
+            // The compat SDK's `merge: true` option merges new
+            // settings on top of defaults. In v10.7.0 the defaults
+            // include experimentalAutoDetectLongPolling:false, so
+            // after merge the settings object ends up with BOTH
+            // keys present. The SDK's own validation then throws
+            // because setting both (even one true one false) is
+            // not allowed. Removing merge:true means our object
+            // replaces defaults wholesale.
+            //
+            // We also stopped swallowing config errors silently —
+            // the previous console.warn hid the "cannot be used
+            // together" error for a long time.
+            try {
+              db.settings({
+                experimentalForceLongPolling: true
+              });
+            } catch (settingsErr) {
+              console.error(
+                'CRITICAL: Firestore db.settings() failed. ' +
+                'App will not work correctly. Error: ',
+                settingsErr && settingsErr.message
+              );
+              // Fall back to default transport so the app can at
+              // least try to work. Don't set _firestoreConfigured
+              // — let the next reload attempt fresh.
+              throw settingsErr;
+            }
 
             // Skip Firestore's IndexedDB persistence on iOS (all browsers).
             // On iOS every browser is a WebKit wrapper, and WebKit's IndexedDB
