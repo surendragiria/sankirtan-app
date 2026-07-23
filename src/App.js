@@ -1,34 +1,51 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 
 // ==============================================
-// SANKIRTAN SAAS - SESSION 5
+// SANKIRTAN SAAS - SESSION 6
 // Bhajan Se Bhagwan Tak
-// CHANGES (Session 5):
-// 1. FIX: Hindi transliteration cache key mismatch (was refetching
-//    Google API on every keystroke; cache now uses 'hi:word' everywhere).
-// 2. FIX: "App Updated!" prompt no longer fires for brand-new users.
-// 3. FIX: Recently Read now reloads when user logs in/out (key change).
-// 4. FIX: Live Performance mode was unreachable (branch ordering) —
-//    moved above the main app branch so it renders again.
-// 5. PERF: Firestore listeners are now the single source of truth
-//    (removed duplicate .get() + onSnapshot double-reads for bhajans,
-//    programs, and public library — halves read quota usage).
-// 6. PERF: User count uses the count() aggregation (1 read vs 1000).
-// 7. PERF: Filtered lists are memoized (no more full-lyrics scanning
-//    on every render).
-// 8. PERF: Full 2.8s splash animation plays once per day; returning
-//    opens get a fast 0.8s splash.
-// 9. PERF: IntersectionObservers no longer tear down on every
-//    "load more" increment.
-// 10. UX: All alert()/window.confirm() replaced with in-app toasts
-//     and a branded ConfirmDialog (no more browser popups).
-// 11. UX: Bottom tab bar on list views (Public / My Library / Programs)
-//     for one-handed navigation.
-// 12. A11y: aria-labels on icon-only buttons, contrast bumps.
-// 13. Security hygiene: removed admin-check console logging.
-//     NOTE: ensure Firestore rules restrict publicBhajans/appConfig
-//     writes and feedback reads to the admin UID — client checks
-//     only hide buttons, they don't protect data.
+// CHANGES (Session 6 — the "smoothness release"):
+// 1. PERF: List cards truncate lyrics to 4 lines BEFORE rendering.
+//    line-clamp only hides overflow visually; the browser still
+//    laid out entire song texts for every card. Huge win on the
+//    public library with 100+ cards visible after scrolling.
+// 2. PERF: MyBhajanCard and PublicBhajanCard extracted as
+//    React.memo components at module scope. Toast fires, search
+//    keystrokes, font-size taps and dark-mode toggles no longer
+//    re-render the whole card grid — unchanged cards skip entirely.
+//    Handlers wrapped in useCallback so memo boundaries actually hold.
+// 3. PERF: Related Bhajans + Prev/Next lists in reading views are
+//    now useMemo'd on selected-bhajan.id. Previously every Aa+ tap
+//    re-scanned and re-sorted the full library.
+// 4. PERF: Transliteration cache moved fully to a ref (state +
+//    mirror effect deleted). Cache writes no longer trigger a full
+//    app re-render mid-typing — noticeably smoother lyrics input.
+// 5. UX: Back button no longer walks through top-level tab taps.
+//    Switching Public ↔ My Library ↔ Programs uses replaceState;
+//    only detail/form/admin drill-downs pushState. Back now exits
+//    from a top tab instead of unwinding 4 taps first.
+// 6. UX/A11y: Dark-mode contrast fixes —
+//    • Header username/badges get dark-mode colors (were near-invisible
+//      teal-on-dark-teal).
+//    • Live Program mode is now dark-mode aware (was hardcoded cream —
+//      a white flashbang for the singer on evening programs).
+//    • theme-color meta tag syncs with darkMode so the Android
+//      status bar matches the app chrome.
+// 7. UX: Compact Public card had a <span onClick> nested inside a
+//    <button> (invalid HTML, screen-readers skipped it). Restructured
+//    so both title-tap and Save are real sibling buttons.
+// 8. UX: Guest tapping a locked tab (My Library / Programs) now sees
+//    a "Sign in to build your personal library" toast before the
+//    sign-in screen appears — explains WHY the screen changed.
+// ==============================================
+// (Session 5 highlights kept for reference:
+//  transliteration cache-key fix, no false "App Updated!" prompt,
+//  Recently Read reloads on auth change, live mode branch order fix,
+//  single-source Firestore listeners, count() aggregation for user
+//  count, memoized filtered lists, once-per-day splash, stable
+//  IntersectionObservers, toast+ConfirmDialog replacing alerts,
+//  bottom tab bar. Firestore-rules note from S5 still stands:
+//  ensure publicBhajans/appConfig writes and feedback reads are
+//  server-side restricted to the admin UID.)
 // ==============================================
 
 // ==============================================
@@ -102,7 +119,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.07.21.s5';
+const APP_VERSION = '2026.07.23.s6';
 
 // Onboarding tour steps
 const ONBOARDING_STEPS = [
@@ -303,6 +320,207 @@ const useSwipe = (onSwipeLeft, onSwipeRight, { threshold = 60, enabled = true } 
   return { onTouchStart, onTouchEnd };
 };
 
+// ==============================================
+// SESSION 6: MEMOIZED CARD COMPONENTS
+// Extracted so that unchanged rows skip re-rendering when parent
+// state (toast, search, dark-mode, font-size) changes. React.memo
+// bails out when all props are shallow-equal, so parent callbacks
+// MUST be wrapped in useCallback for this to help.
+//
+// Lyric preview: line-clamp only hides overflow visually — the DOM
+// still holds the entire song. Slicing to 4 lines before render
+// keeps the browser fast on Android when hundreds of cards mount.
+// ==============================================
+const previewLyrics = (lyrics) =>
+  (lyrics || '').trim().split('\n').slice(0, 4).join('\n');
+
+const MyBhajanCard = React.memo(function MyBhajanCard({
+  bhajan, darkMode, compactView, cardIndex, onOpen
+}) {
+  if (compactView) {
+    return (
+      <button
+        onClick={() => onOpen(bhajan)}
+        className={`w-full text-left rounded-xl p-3 border transition-all flex items-center gap-3 ${darkMode ? 'bg-[#162226] border-[#0B5A70]/15 hover:border-[#0B5A70]/30' : 'bg-[#FFFCF8] border-[#0B5A70]/8 shadow-[0_1px_4px_rgba(11,90,112,0.04)] hover:border-[#0B5A70]/25 hover:shadow-[0_2px_8px_rgba(11,90,112,0.10)]'}`}
+      >
+        <div className="flex-1 min-w-0">
+          <h3 className={`text-sm font-bold truncate ${darkMode ? 'text-amber-100' : 'text-[#0B5A70]'}`}>
+            {bhajan.title}
+          </h3>
+          <p className={`text-xs truncate ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+            {bhajan.deity} · {bhajan.category}{bhajan.scale ? ` · 🎵 ${bhajan.scale}` : ''}
+          </p>
+        </div>
+      </button>
+    );
+  }
+
+  return (
+    <button
+      onClick={() => onOpen(bhajan)}
+      className={`sk-card-animate rounded-2xl p-5 border transition-all text-left ${darkMode ? 'bg-[#162226] border-[#0B5A70]/15 shadow-[0_2px_12px_rgba(11,90,112,0.15)] hover:border-[#0B5A70]/30 hover:shadow-[0_4px_20px_rgba(11,90,112,0.25)]' : 'bg-[#FFFCF8] border-[#0B5A70]/8 shadow-[0_2px_12px_rgba(11,90,112,0.06)] hover:border-[#0B5A70]/25 hover:shadow-[0_4px_20px_rgba(11,90,112,0.12)]'}`}
+      style={{ animationDelay: `${Math.min(cardIndex, 8) * 0.04}s` }}
+    >
+      <div className="flex items-start justify-between mb-2">
+        <h3 className={`text-lg font-bold flex-1 line-clamp-2 ${darkMode ? 'text-amber-100' : 'text-[#0B5A70]'}`}>
+          {bhajan.title}
+        </h3>
+      </div>
+
+      {bhajan.dhun && (
+        <p className={`text-xs mb-2 ${darkMode ? 'text-orange-200' : 'text-[#E65100]'}`}>
+          <span className="font-semibold">तर्ज़:</span> {bhajan.dhun}
+        </p>
+      )}
+
+      <div className="flex flex-wrap gap-1 mb-2">
+        <span className={`text-xs px-2 py-1 rounded-full ${darkMode ? 'bg-[#0B5A70]/20 text-teal-300' : 'bg-[#0B5A70]/8 text-[#0B5A70]'}`}>
+          {bhajan.deity}
+        </span>
+        <span className={`text-xs px-2 py-1 rounded-full ${darkMode ? 'bg-[#E65100]/15 text-orange-300' : 'bg-[#E65100]/8 text-[#E65100]'}`}>
+          {bhajan.category}
+        </span>
+        {bhajan.scale && (
+          <span className="text-xs bg-purple-50 text-purple-700 px-2 py-1 rounded-full">
+            🎵 {bhajan.scale}
+          </span>
+        )}
+      </div>
+
+      <p className={`text-sm line-clamp-3 mb-2 whitespace-pre-line max-h-16 overflow-hidden ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+        {previewLyrics(bhajan.lyrics)}
+      </p>
+
+      {bhajan.keywords && bhajan.keywords.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {bhajan.keywords.slice(0, 4).map(kw => (
+            <span key={kw} className={`text-xs px-2 py-0.5 rounded-full ${darkMode ? 'bg-[#0B5A70]/15 text-teal-400' : 'bg-[#0B5A70]/5 text-[#0B5A70]/70'}`}>
+              #{kw}
+            </span>
+          ))}
+          {bhajan.keywords.length > 4 && (
+            <span className="text-xs text-gray-400">+{bhajan.keywords.length - 4}</span>
+          )}
+        </div>
+      )}
+    </button>
+  );
+});
+
+const PublicBhajanCard = React.memo(function PublicBhajanCard({
+  bhajan, darkMode, compactView, cardIndex, isSaved, savingToLibrary, onOpen, onSave
+}) {
+  if (compactView) {
+    // SESSION 6 FIX: was <button><span onClick>+ Save</span></button>
+    // (invalid HTML, screen-readers skipped the Save action).
+    // Restructured so title-tap and Save are sibling real buttons.
+    return (
+      <div
+        className={`w-full rounded-xl p-3 border transition-all flex items-center gap-3 ${darkMode ? 'bg-[#162226] border-[#0B5A70]/15 hover:border-[#0B5A70]/30' : 'bg-[#FFFCF8] border-[#0B5A70]/8 shadow-[0_1px_4px_rgba(11,90,112,0.04)] hover:border-[#0B5A70]/25 hover:shadow-[0_2px_8px_rgba(11,90,112,0.10)]'}`}
+      >
+        <button
+          onClick={() => onOpen(bhajan)}
+          className="flex-1 min-w-0 text-left"
+          aria-label={`Open ${bhajan.title}`}
+        >
+          <h3 className={`text-sm font-bold truncate ${darkMode ? 'text-amber-100' : 'text-[#0B5A70]'}`}>
+            {bhajan.title}
+          </h3>
+          <p className={`text-xs truncate ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+            {bhajan.deity} · {bhajan.category}
+          </p>
+        </button>
+        {isSaved ? (
+          <span
+            className="bg-green-50 text-green-700 text-xs font-semibold px-2 py-1 rounded-full flex-shrink-0"
+            aria-label="Already in your library"
+          >
+            ✓
+          </span>
+        ) : (
+          <button
+            onClick={() => onSave(bhajan)}
+            disabled={savingToLibrary}
+            className="bg-[#0B5A70] hover:bg-[#094a5d] text-white text-xs font-semibold px-2 py-1 rounded-full flex-shrink-0 disabled:opacity-50"
+            aria-label={`Save ${bhajan.title} to my library`}
+          >
+            + Save
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={`sk-card-animate rounded-2xl p-5 border transition-all ${darkMode ? 'bg-[#162226] border-[#0B5A70]/15 shadow-[0_2px_12px_rgba(11,90,112,0.15)] hover:border-[#0B5A70]/30 hover:shadow-[0_4px_20px_rgba(11,90,112,0.25)]' : 'bg-[#FFFCF8] border-[#0B5A70]/8 shadow-[0_2px_12px_rgba(11,90,112,0.06)] hover:border-[#0B5A70]/25 hover:shadow-[0_4px_20px_rgba(11,90,112,0.12)]'}`}
+      style={{ animationDelay: `${Math.min(cardIndex, 8) * 0.04}s` }}
+    >
+      <button
+        onClick={() => onOpen(bhajan)}
+        className="w-full text-left"
+      >
+        <div className="flex items-start justify-between mb-2">
+          <h3 className={`text-lg font-bold flex-1 line-clamp-2 ${darkMode ? 'text-amber-100' : 'text-[#0B5A70]'}`}>
+            {bhajan.title}
+          </h3>
+        </div>
+
+        {bhajan.dhun && (
+          <p className={`text-xs mb-2 ${darkMode ? 'text-orange-200' : 'text-[#E65100]'}`}>
+            <span className="font-semibold">तर्ज़:</span> {bhajan.dhun}
+          </p>
+        )}
+
+        <div className="flex flex-wrap gap-1 mb-2">
+          <span className={`text-xs px-2 py-1 rounded-full ${darkMode ? 'bg-[#0B5A70]/20 text-teal-300' : 'bg-[#0B5A70]/8 text-[#0B5A70]'}`}>
+            {bhajan.deity}
+          </span>
+          <span className={`text-xs px-2 py-1 rounded-full ${darkMode ? 'bg-[#E65100]/15 text-orange-300' : 'bg-[#E65100]/8 text-[#E65100]'}`}>
+            {bhajan.category}
+          </span>
+        </div>
+
+        <p className={`text-sm line-clamp-3 mb-2 whitespace-pre-line max-h-16 overflow-hidden ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+          {previewLyrics(bhajan.lyrics)}
+        </p>
+
+        {bhajan.keywords && bhajan.keywords.length > 0 && (
+          <div className="flex flex-wrap gap-1 mb-3">
+            {bhajan.keywords.slice(0, 4).map(kw => (
+              <span key={kw} className={`text-xs px-2 py-0.5 rounded-full ${darkMode ? 'bg-[#0B5A70]/15 text-teal-400' : 'bg-[#0B5A70]/5 text-[#0B5A70]/70'}`}>
+                #{kw}
+              </span>
+            ))}
+          </div>
+        )}
+      </button>
+
+      <div className={`flex gap-2 mt-3 pt-3 border-t ${darkMode ? 'border-[#0B5A70]/15' : 'border-[#0B5A70]/8'}`}>
+        {isSaved ? (
+          <span className="flex-1 bg-green-50 text-green-700 font-semibold py-2 rounded-lg text-sm text-center">
+            ✓ In Your Library
+          </span>
+        ) : (
+          <button
+            onClick={() => onSave(bhajan)}
+            disabled={savingToLibrary}
+            className="flex-1 bg-[#0B5A70] hover:bg-[#094a5d] text-white font-semibold py-2 rounded-lg text-sm disabled:opacity-50"
+          >
+            ➕ Add to Personal
+          </button>
+        )}
+      </div>
+
+      {(bhajan.saveCount > 0) && (
+        <p className={`text-xs mt-2 text-center ${darkMode ? 'text-gray-500' : 'text-[#0B5A70]/50'}`}>
+          ✨ Added by {bhajan.saveCount} {bhajan.saveCount === 1 ? 'person' : 'people'}
+        </p>
+      )}
+    </div>
+  );
+});
+
 const App = () => {
   // Auth states
   const [user, setUser] = useState(null);
@@ -471,12 +689,13 @@ const App = () => {
   const [transliterationSuggestions, setTransliterationSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [currentWord, setCurrentWord] = useState('');
-  const [suggestionsCache, setSuggestionsCache] = useState({});
   const [activeTypingField, setActiveTypingField] = useState(null);
   const suggestionsAbortRef = useRef(null);
-  // Ref mirror of cache so keydown handlers always see fresh values
+  // SESSION 6: transliteration cache lives ONLY in a ref now.
+  // Previous session kept it in state + mirrored to a ref, which
+  // caused a full app re-render on every cache write (i.e. mid-typing).
+  // All reads/writes go through this ref directly.
   const suggestionsCacheRef = useRef({});
-  useEffect(() => { suggestionsCacheRef.current = suggestionsCache; }, [suggestionsCache]);
 
   // Voice search states
   const [isListening, setIsListening] = useState(false);
@@ -805,12 +1024,30 @@ const App = () => {
     try {
       localStorage.setItem('sankirtan-dark-mode', darkMode.toString());
     } catch (e) {}
+    // SESSION 6: keep the Android status bar / PWA chrome in sync
+    // with the app background — otherwise dark mode leaves a bright
+    // cream bar at the top of the screen.
+    try {
+      const meta = document.querySelector('meta[name="theme-color"]');
+      if (meta) {
+        meta.setAttribute('content', darkMode ? '#0f1a1c' : '#FFF8F0');
+      }
+    } catch (e) { /* non-fatal */ }
   }, [darkMode]);
 
   // ==============================================
   // NAVIGATION WITH HISTORY (browser back support)
+  // SESSION 6: switching between the three top-level tabs
+  // (public-library / library / programs) uses REPLACEstate so
+  // the back button doesn't have to unwind every tab tap before
+  // exiting. pushState is only used when drilling INTO a detail,
+  // form, or admin view — which is where "back" is actually useful.
   // ==============================================
   const previousViewRef = useRef('public-library');
+  const TOP_LEVEL_VIEWS = useMemo(
+    () => new Set(['public-library', 'library', 'programs']),
+    []
+  );
 
   useEffect(() => {
     if (currentView !== previousViewRef.current) {
@@ -819,7 +1056,17 @@ const App = () => {
         [previousViewRef.current]: window.scrollY
       }));
 
-      window.history.pushState({ view: currentView }, '', window.location.pathname);
+      const bothTopLevel =
+        TOP_LEVEL_VIEWS.has(currentView) &&
+        TOP_LEVEL_VIEWS.has(previousViewRef.current);
+
+      if (bothTopLevel) {
+        // Sideways tab switch — don't grow the history stack.
+        window.history.replaceState({ view: currentView }, '', window.location.pathname);
+      } else {
+        // Drill-down or drill-up between different navigation levels.
+        window.history.pushState({ view: currentView }, '', window.location.pathname);
+      }
 
       if (!window.__sankirtanBackNav) {
         window.scrollTo(0, 0);
@@ -2219,12 +2466,15 @@ const App = () => {
     );
   };
 
-  const openBhajanDetail = async (bhajan) => {
+  // SESSION 6: useCallback so MyBhajanCard's React.memo holds
+  // (a fresh function every render would defeat memoization).
+  const openBhajanDetail = useCallback(async (bhajan) => {
     setSelectedBhajan(bhajan);
     setCurrentView('bhajan-detail');
     trackRecentRead(bhajan);
 
     try {
+      if (!user) return;
       const db = window.firebase.firestore();
       await db.collection('users').doc(user.uid).collection('bhajans').doc(bhajan.id).update({
         viewCount: window.firebase.firestore.FieldValue.increment(1),
@@ -2233,7 +2483,7 @@ const App = () => {
     } catch (error) {
       console.log('Could not update view count:', error);
     }
-  };
+  }, [user, trackRecentRead]);
 
   // ==============================================
   // HINDI TYPING - GOOGLE INPUT TOOLS API
@@ -2272,12 +2522,13 @@ const App = () => {
       if (data && data[0] === 'SUCCESS' && data[1] && data[1][0] && data[1][0][1]) {
         const suggestions = data[1][0][1].slice(0, 5);
         setTransliterationSuggestions(suggestions);
-        setSuggestionsCache(prev => ({ ...prev, [cacheKey]: suggestions }));
+        // SESSION 6: write straight to the ref — no re-render.
+        suggestionsCacheRef.current[cacheKey] = suggestions;
       } else {
         const fallback = HINDI_FALLBACK_MAP[word.toLowerCase()];
         setTransliterationSuggestions(fallback ? [fallback] : []);
         if (fallback) {
-          setSuggestionsCache(prev => ({ ...prev, [cacheKey]: [fallback] }));
+          suggestionsCacheRef.current[cacheKey] = [fallback];
         }
       }
     } catch (err) {
@@ -2591,12 +2842,13 @@ const App = () => {
   // ==============================================
   // PUBLIC LIBRARY OPERATIONS
   // ==============================================
-  const openPublicBhajanDetail = (bhajan) => {
+  // SESSION 6: useCallback so PublicBhajanCard's React.memo holds.
+  const openPublicBhajanDetail = useCallback((bhajan) => {
     setSelectedPublicBhajan(bhajan);
     setCurrentView('public-bhajan-detail');
-  };
+  }, []);
 
-  const saveToMyLibrary = async (publicBhajan) => {
+  const saveToMyLibrary = useCallback(async (publicBhajan) => {
     if (!user || !userProfile) {
       if (guestMode) { setGuestMode(false); }
       return;
@@ -2656,7 +2908,7 @@ const App = () => {
     } finally {
       setSavingToLibrary(false);
     }
-  };
+  }, [user, userProfile, guestMode, savedBhajanIds, showToast]);
 
   // ==============================================
   // MEMOIZED FILTERED LISTS (SESSION 5: previously ran full-lyrics
@@ -2706,6 +2958,66 @@ const App = () => {
       (program.venue && program.venue.toLowerCase().includes(q))
     );
   }, [programs, programSearchQuery]);
+
+  // ==============================================
+  // SESSION 6: RELATED BHAJANS + PREV/NEXT MEMOS
+  // Previously these were inline IIFEs in the reading views, which
+  // re-scanned and re-sorted the full library on EVERY render —
+  // meaning every Aa+ font tap or scroll-to-top re-did the work.
+  // Now they only recompute when the selected bhajan or the source
+  // list actually changes.
+  // ==============================================
+  const relatedMyBhajans = useMemo(() => {
+    if (!selectedBhajan || !selectedBhajan.keywords || selectedBhajan.keywords.length === 0) return [];
+    const relKws = new Set(selectedBhajan.keywords);
+    return bhajans
+      .filter(b => b.id !== selectedBhajan.id && b.keywords && b.keywords.some(kw => relKws.has(kw)))
+      .map(b => ({
+        ...b,
+        matchCount: b.keywords.filter(kw => relKws.has(kw)).length,
+        matchedKws: b.keywords.filter(kw => relKws.has(kw))
+      }))
+      .sort((a, b) => b.matchCount - a.matchCount)
+      .slice(0, 6);
+  }, [selectedBhajan, bhajans]);
+
+  const relatedPublicBhajans = useMemo(() => {
+    if (!selectedPublicBhajan || !selectedPublicBhajan.keywords || selectedPublicBhajan.keywords.length === 0) return [];
+    const relKws = new Set(selectedPublicBhajan.keywords);
+    return publicBhajans
+      .filter(b => b.id !== selectedPublicBhajan.id && b.keywords && b.keywords.some(kw => relKws.has(kw)))
+      .map(b => ({
+        ...b,
+        matchCount: b.keywords.filter(kw => relKws.has(kw)).length,
+        matchedKws: b.keywords.filter(kw => relKws.has(kw))
+      }))
+      .sort((a, b) => b.matchCount - a.matchCount)
+      .slice(0, 6);
+  }, [selectedPublicBhajan, publicBhajans]);
+
+  const myPrevNext = useMemo(() => {
+    if (!selectedBhajan || filteredBhajans.length <= 1) return null;
+    const idx = filteredBhajans.findIndex(b => b.id === selectedBhajan.id);
+    if (idx === -1) return null;
+    return {
+      idx,
+      total: filteredBhajans.length,
+      prev: filteredBhajans[(idx - 1 + filteredBhajans.length) % filteredBhajans.length],
+      next: filteredBhajans[(idx + 1) % filteredBhajans.length]
+    };
+  }, [selectedBhajan, filteredBhajans]);
+
+  const publicPrevNext = useMemo(() => {
+    if (!selectedPublicBhajan || filteredPublicBhajans.length <= 1) return null;
+    const idx = filteredPublicBhajans.findIndex(b => b.id === selectedPublicBhajan.id);
+    if (idx === -1) return null;
+    return {
+      idx,
+      total: filteredPublicBhajans.length,
+      prev: filteredPublicBhajans[(idx - 1 + filteredPublicBhajans.length) % filteredPublicBhajans.length],
+      next: filteredPublicBhajans[(idx + 1) % filteredPublicBhajans.length]
+    };
+  }, [selectedPublicBhajan, filteredPublicBhajans]);
 
   // ==============================================
   // ADMIN PANEL FUNCTIONS
@@ -3766,15 +4078,29 @@ const App = () => {
     const currentBhajan = getBhajanById(currentBhajanId);
     const totalBhajans = selectedProgram.bhajanIds.length;
 
+    // SESSION 6: Live Program mode now respects darkMode.
+    // Previously hardcoded cream — a bright flashbang for the singer
+    // at evening programs. Dark background is also easier to read
+    // from a distance under stage lighting.
+    const liveBg = darkMode ? 'bg-[#0f1a1c]' : 'bg-[#FFF8F0]';
+    const liveHeaderBg = darkMode ? 'bg-[#0f1a1c]/95 border-[#0B5A70]/20' : 'bg-[#FFF8F0]/95 border-[#0B5A70]/10';
+    const liveTitleColor = darkMode ? 'text-amber-100' : 'text-[#0B5A70]';
+    const liveMutedColor = darkMode ? 'text-gray-400' : 'text-[#0B5A70]/60';
+    const liveMutedGray = darkMode ? 'text-gray-500' : 'text-gray-500';
+    const liveBtnMuted = darkMode ? 'bg-[#1e2e33] hover:bg-[#0B5A70]/25 text-teal-200' : 'bg-[#0B5A70]/8 hover:bg-[#0B5A70]/15 text-[#0B5A70]';
+    const liveBtnPrimary = darkMode ? 'bg-[#0B5A70] hover:bg-[#094a5d] text-white' : 'bg-[#0B5A70] hover:bg-[#094a5d] text-white';
+
     if (!currentBhajan) {
       return (
-        <div className="min-h-screen bg-[#FFF8F0] p-4 flex items-center justify-center">
+        <div className={`min-h-screen p-4 flex items-center justify-center ${liveBg}`}>
           <div className="text-center">
-            <p className="text-lg text-[#0B5A70] mb-4">⚠️ This bhajan is not available</p>
-            <p className="text-sm text-gray-600 mb-4">It may have been deleted from your library</p>
+            <p className={`text-lg mb-4 ${liveTitleColor}`}>⚠️ This bhajan is not available</p>
+            <p className={`text-sm mb-4 ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+              It may have been deleted from your library
+            </p>
             <button
               onClick={exitLiveProgram}
-              className="bg-[#0B5A70] hover:bg-[#094a5d] text-white px-4 py-2 rounded-xl"
+              className={`${liveBtnPrimary} px-4 py-2 rounded-xl`}
             >
               Exit Live Mode
             </button>
@@ -3784,26 +4110,28 @@ const App = () => {
     }
 
     return (
-      <div className="min-h-screen bg-[#FFF8F0]">
+      <div className={`min-h-screen ${liveBg}`}>
         {confirmDialogJsx}
         {toastJsx}
         {/* Live Header */}
-        <div className="bg-[#FFF8F0]/95 backdrop-blur-md sticky top-0 z-40 border-b border-[#0B5A70]/10">
+        <div className={`backdrop-blur-md sticky top-0 z-40 border-b ${liveHeaderBg}`}>
           <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
             <button
               onClick={exitLiveProgram}
-              className="text-red-600 hover:text-red-800 font-semibold flex items-center gap-1 text-sm"
+              className={`font-semibold flex items-center gap-1 text-sm ${darkMode ? 'text-red-400 hover:text-red-300' : 'text-red-600 hover:text-red-800'}`}
               aria-label="Exit live mode"
             >
               ✕ Exit Live
             </button>
             <div className="text-center flex-1 mx-4">
-              <p className="text-xs text-[#0B5A70]/60 font-semibold">🎤 LIVE PROGRAM</p>
-              <p className="text-sm font-bold text-[#0B5A70] truncate">{selectedProgram.name}</p>
+              <p className={`text-xs font-semibold ${liveMutedColor}`}>🎤 LIVE PROGRAM</p>
+              <p className={`text-sm font-bold truncate ${liveTitleColor}`}>{selectedProgram.name}</p>
             </div>
             <div className="text-right">
-              <p className="text-xs text-gray-500">Bhajan</p>
-              <p className="text-lg font-bold text-[#E65100]">{liveProgramIndex + 1} / {totalBhajans}</p>
+              <p className={`text-xs ${liveMutedGray}`}>Bhajan</p>
+              <p className={`text-lg font-bold ${darkMode ? 'text-orange-300' : 'text-[#E65100]'}`}>
+                {liveProgramIndex + 1} / {totalBhajans}
+              </p>
             </div>
           </div>
 
@@ -3811,23 +4139,23 @@ const App = () => {
           <div className="max-w-4xl mx-auto px-4 pb-2 flex items-center justify-center gap-2">
             <button
               onClick={() => setLiveFontSize(Math.max(14, liveFontSize - 2))}
-              className="w-8 h-8 rounded-lg bg-[#0B5A70]/8 hover:bg-[#0B5A70]/15 text-[#0B5A70] font-bold"
+              className={`w-8 h-8 rounded-lg font-bold ${liveBtnMuted}`}
               title="Decrease font"
               aria-label="Decrease font size"
             >
               A−
             </button>
-            <span className="text-xs text-gray-500 min-w-[40px] text-center">{liveFontSize}px</span>
+            <span className={`text-xs min-w-[40px] text-center ${liveMutedGray}`}>{liveFontSize}px</span>
             <button
               onClick={() => setLiveFontSize(Math.min(40, liveFontSize + 2))}
-              className="w-8 h-8 rounded-lg bg-[#0B5A70]/8 hover:bg-[#0B5A70]/15 text-[#0B5A70] font-bold"
+              className={`w-8 h-8 rounded-lg font-bold ${liveBtnMuted}`}
               title="Increase font"
               aria-label="Increase font size"
             >
               A+
             </button>
             {liveWakeLock && (
-              <span className="ml-2 text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded-full">
+              <span className={`ml-2 text-xs px-2 py-0.5 rounded-full ${darkMode ? 'bg-green-900/40 text-green-300' : 'bg-green-50 text-green-700'}`}>
                 🔦 Screen On
               </span>
             )}
@@ -3836,24 +4164,24 @@ const App = () => {
 
         {/* Bhajan Content */}
         <div className="max-w-4xl mx-auto px-4 py-6 pb-24">
-          <h1 className="text-3xl md:text-4xl font-bold text-[#0B5A70] mb-3">
+          <h1 className={`text-3xl md:text-4xl font-bold mb-3 ${liveTitleColor}`}>
             {currentBhajan.title}
           </h1>
 
           {currentBhajan.dhun && (
-            <div className="bg-[#0B5A70]/5 border-l-4 border-[#E65100]/40 p-3 rounded-r-lg mb-4">
-              <p className="text-sm text-[#E65100]">
+            <div className={`border-l-4 border-[#E65100]/40 p-3 rounded-r-lg mb-4 ${darkMode ? 'bg-[#1e2e33]' : 'bg-[#0B5A70]/5'}`}>
+              <p className={`text-sm ${darkMode ? 'text-orange-200' : 'text-[#E65100]'}`}>
                 <span className="font-semibold">तर्ज़ / धुन:</span> {currentBhajan.dhun}
               </p>
             </div>
           )}
 
           <div className="flex flex-wrap gap-2 mb-6">
-            <span className="bg-[#0B5A70]/8 text-[#0B5A70] px-3 py-1 rounded-full text-sm font-semibold">
+            <span className={`px-3 py-1 rounded-full text-sm font-semibold ${darkMode ? 'bg-[#0B5A70]/25 text-teal-200' : 'bg-[#0B5A70]/8 text-[#0B5A70]'}`}>
               {currentBhajan.deity}
             </span>
             {currentBhajan.scale && (
-              <span className="bg-purple-50 text-purple-700 px-3 py-1 rounded-full text-sm font-semibold">
+              <span className={`px-3 py-1 rounded-full text-sm font-semibold ${darkMode ? 'bg-purple-900/40 text-purple-200' : 'bg-purple-50 text-purple-700'}`}>
                 🎵 {currentBhajan.scale}
               </span>
             )}
@@ -3884,25 +4212,27 @@ const App = () => {
           </div>
         </div>
 
-        {/* Bottom Navigation Bar (live mode) */}
-        <div className="fixed bottom-0 left-0 right-0 bg-[#FFF8F0]/95 backdrop-blur-md border-t border-[#0B5A70]/10 shadow-2xl z-40">
+        {/* Bottom Navigation Bar (live mode) — SESSION 6: dark-mode aware */}
+        <div className={`fixed bottom-0 left-0 right-0 backdrop-blur-md border-t shadow-2xl z-40 ${liveHeaderBg}`}>
           <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
             <button
               onClick={livePrev}
               disabled={liveProgramIndex === 0}
-              className="flex-1 bg-[#0B5A70]/8 hover:bg-[#0B5A70]/15 disabled:opacity-30 disabled:cursor-not-allowed text-[#0B5A70] font-bold py-3 rounded-xl flex items-center justify-center gap-2"
+              className={`flex-1 disabled:opacity-30 disabled:cursor-not-allowed font-bold py-3 rounded-xl flex items-center justify-center gap-2 ${liveBtnMuted}`}
               aria-label="Previous bhajan"
             >
               ← Previous
             </button>
             <div className="text-center min-w-[80px]">
-              <p className="text-xs text-gray-500">Bhajan</p>
-              <p className="text-lg font-bold text-[#E65100]">{liveProgramIndex + 1} / {totalBhajans}</p>
+              <p className={`text-xs ${liveMutedGray}`}>Bhajan</p>
+              <p className={`text-lg font-bold ${darkMode ? 'text-orange-300' : 'text-[#E65100]'}`}>
+                {liveProgramIndex + 1} / {totalBhajans}
+              </p>
             </div>
             <button
               onClick={liveNext}
               disabled={liveProgramIndex >= totalBhajans - 1}
-              className="flex-1 bg-[#0B5A70] hover:bg-[#094a5d] disabled:opacity-30 disabled:cursor-not-allowed text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2"
+              className={`flex-1 disabled:opacity-30 disabled:cursor-not-allowed font-bold py-3 rounded-xl flex items-center justify-center gap-2 ${liveBtnPrimary}`}
               aria-label="Next bhajan"
             >
               Next →
@@ -4367,10 +4697,22 @@ const App = () => {
                 />
               )}
               {userProfile && (
+              /* SESSION 6: username was hardcoded teal on dark-teal bg — invisible.
+                 Now uses amber-100 in dark mode to match card titles. */
               <div className="hidden sm:block">
-                <p className="text-sm font-semibold text-[#0B5A70]">{userProfile.displayName}</p>
-                {userProfile.verified && <span className="text-xs text-[#0B5A70]">✓ Verified</span>}
-                {isAdmin && <span className="text-xs text-purple-600 ml-1">👑 Admin</span>}
+                <p className={`text-sm font-semibold ${darkMode ? 'text-amber-100' : 'text-[#0B5A70]'}`}>
+                  {userProfile.displayName}
+                </p>
+                {userProfile.verified && (
+                  <span className={`text-xs ${darkMode ? 'text-teal-300' : 'text-[#0B5A70]'}`}>
+                    ✓ Verified
+                  </span>
+                )}
+                {isAdmin && (
+                  <span className={`text-xs ml-1 ${darkMode ? 'text-purple-300' : 'text-purple-600'}`}>
+                    👑 Admin
+                  </span>
+                )}
               </div>
               )}
               </>
@@ -4681,78 +5023,17 @@ const App = () => {
                   </div>
 
                 <div className={compactView ? 'space-y-2' : 'grid grid-cols-1 md:grid-cols-2 gap-4'}>
-                  {filteredBhajans.slice(0, libraryVisibleCount).map((bhajan, cardIndex) => {
-                    if (compactView) {
-                      return (
-                        <button
-                          key={bhajan.id}
-                          onClick={() => openBhajanDetail(bhajan)}
-                          className={`w-full text-left rounded-xl p-3 border transition-all flex items-center gap-3 ${darkMode ? 'bg-[#162226] border-[#0B5A70]/15 hover:border-[#0B5A70]/30' : 'bg-[#FFFCF8] border-[#0B5A70]/8 shadow-[0_1px_4px_rgba(11,90,112,0.04)] hover:border-[#0B5A70]/25 hover:shadow-[0_2px_8px_rgba(11,90,112,0.10)]'}`}
-                        >
-                          <div className="flex-1 min-w-0">
-                            <h3 className={`text-sm font-bold truncate ${darkMode ? 'text-amber-100' : 'text-[#0B5A70]'}`}>
-                              {bhajan.title}
-                            </h3>
-                            <p className={`text-xs truncate ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                              {bhajan.deity} · {bhajan.category}{bhajan.scale ? ` · 🎵 ${bhajan.scale}` : ''}
-                            </p>
-                          </div>
-                        </button>
-                      );
-                    }
-
-                    return (
-                      <button
-                        key={bhajan.id}
-                        onClick={() => openBhajanDetail(bhajan)}
-                        className={`sk-card-animate rounded-2xl p-5 border transition-all text-left ${darkMode ? 'bg-[#162226] border-[#0B5A70]/15 shadow-[0_2px_12px_rgba(11,90,112,0.15)] hover:border-[#0B5A70]/30 hover:shadow-[0_4px_20px_rgba(11,90,112,0.25)]' : 'bg-[#FFFCF8] border-[#0B5A70]/8 shadow-[0_2px_12px_rgba(11,90,112,0.06)] hover:border-[#0B5A70]/25 hover:shadow-[0_4px_20px_rgba(11,90,112,0.12)]'}`}
-                        style={{ animationDelay: `${Math.min(cardIndex, 8) * 0.04}s` }}
-                      >
-                        <div className="flex items-start justify-between mb-2">
-                          <h3 className={`text-lg font-bold flex-1 line-clamp-2 ${darkMode ? 'text-amber-100' : 'text-[#0B5A70]'}`}>
-                            {bhajan.title}
-                          </h3>
-                        </div>
-
-                        {bhajan.dhun && (
-                          <p className={`text-xs mb-2 ${darkMode ? 'text-orange-200' : 'text-[#E65100]'}`}>
-                            <span className="font-semibold">तर्ज़:</span> {bhajan.dhun}
-                          </p>
-                        )}
-
-                        <div className="flex flex-wrap gap-1 mb-2">
-                          <span className={`text-xs px-2 py-1 rounded-full ${darkMode ? 'bg-[#0B5A70]/20 text-teal-300' : 'bg-[#0B5A70]/8 text-[#0B5A70]'}`}>
-                            {bhajan.deity}
-                          </span>
-                          <span className={`text-xs px-2 py-1 rounded-full ${darkMode ? 'bg-[#E65100]/15 text-orange-300' : 'bg-[#E65100]/8 text-[#E65100]'}`}>
-                            {bhajan.category}
-                          </span>
-                          {bhajan.scale && (
-                            <span className="text-xs bg-purple-50 text-purple-700 px-2 py-1 rounded-full">
-                              🎵 {bhajan.scale}
-                            </span>
-                          )}
-                        </div>
-
-                        <p className={`text-sm line-clamp-3 mb-2 whitespace-pre-line max-h-16 overflow-hidden ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                          {(bhajan.lyrics || '').trim()}
-                        </p>
-
-                        {bhajan.keywords && bhajan.keywords.length > 0 && (
-                          <div className="flex flex-wrap gap-1">
-                            {bhajan.keywords.slice(0, 4).map(kw => (
-                              <span key={kw} className={`text-xs px-2 py-0.5 rounded-full ${darkMode ? 'bg-[#0B5A70]/15 text-teal-400' : 'bg-[#0B5A70]/5 text-[#0B5A70]/70'}`}>
-                                #{kw}
-                              </span>
-                            ))}
-                            {bhajan.keywords.length > 4 && (
-                              <span className="text-xs text-gray-400">+{bhajan.keywords.length - 4}</span>
-                            )}
-                          </div>
-                        )}
-                      </button>
-                    );
-                  })}
+                  {/* SESSION 6: MyBhajanCard is React.memo — unchanged rows skip re-render */}
+                  {filteredBhajans.slice(0, libraryVisibleCount).map((bhajan, cardIndex) => (
+                    <MyBhajanCard
+                      key={bhajan.id}
+                      bhajan={bhajan}
+                      darkMode={darkMode}
+                      compactView={compactView}
+                      cardIndex={cardIndex}
+                      onOpen={openBhajanDetail}
+                    />
+                  ))}
                 </div>
 
                 {libraryVisibleCount < filteredBhajans.length && (
@@ -4926,80 +5207,63 @@ const App = () => {
                 )}
               </div>
 
-              {/* Related Bhajans */}
-              {selectedBhajan.keywords && selectedBhajan.keywords.length > 0 && (() => {
-                const relKws = new Set(selectedBhajan.keywords);
-                const related = bhajans
-                  .filter(b => b.id !== selectedBhajan.id && b.keywords && b.keywords.some(kw => relKws.has(kw)))
-                  .map(b => ({
-                    ...b,
-                    matchCount: b.keywords.filter(kw => relKws.has(kw)).length,
-                    matchedKws: b.keywords.filter(kw => relKws.has(kw))
-                  }))
-                  .sort((a, b) => b.matchCount - a.matchCount)
-                  .slice(0, 6);
-                if (related.length === 0) return null;
-                return (
-                  <div className="mt-6">
-                    <p className={`text-sm font-bold mb-3 flex items-center gap-1.5 ${darkMode ? 'text-gray-300' : 'text-[#0B5A70]'}`}>
-                      ✨ Related Bhajans
-                    </p>
-                    <div className="space-y-1.5">
-                      {related.map(b => (
-                        <button
-                          key={b.id}
-                          onClick={() => {
-                            setSelectedBhajan(b);
-                            trackRecentRead(b);
-                            window.scrollTo({ top: 0, behavior: 'smooth' });
-                          }}
-                          className={`w-full text-left rounded-xl p-3 border transition-all flex items-center gap-3 ${darkMode ? 'bg-[#162226] border-[#0B5A70]/15 hover:border-[#0B5A70]/30' : 'bg-[#FFFCF8] border-[#0B5A70]/8 shadow-[0_1px_4px_rgba(11,90,112,0.04)] hover:border-[#0B5A70]/25 hover:shadow-[0_2px_8px_rgba(11,90,112,0.10)]'}`}
-                        >
-                          <div className="flex-1 min-w-0">
-                            <p className={`text-sm font-bold truncate ${darkMode ? 'text-amber-100' : 'text-[#0B5A70]'}`}>{b.title}</p>
-                            <p className="text-xs text-gray-600 truncate">
-                              {b.deity} · {b.category}
-                              {b.matchedKws.length > 0 && (
-                                <span className="text-[#E65100]/60"> · {b.matchedKws.slice(0, 2).map(k => `#${k}`).join(' ')}</span>
-                              )}
-                            </p>
-                          </div>
-                          <span className="text-[#0B5A70]/30 text-lg flex-shrink-0">›</span>
-                        </button>
-                      ))}
-                    </div>
+              {/* Related Bhajans — SESSION 6: uses memoized relatedMyBhajans */}
+              {relatedMyBhajans.length > 0 && (
+                <div className="mt-6">
+                  <p className={`text-sm font-bold mb-3 flex items-center gap-1.5 ${darkMode ? 'text-gray-300' : 'text-[#0B5A70]'}`}>
+                    ✨ Related Bhajans
+                  </p>
+                  <div className="space-y-1.5">
+                    {relatedMyBhajans.map(b => (
+                      <button
+                        key={b.id}
+                        onClick={() => {
+                          setSelectedBhajan(b);
+                          trackRecentRead(b);
+                          window.scrollTo({ top: 0, behavior: 'smooth' });
+                        }}
+                        className={`w-full text-left rounded-xl p-3 border transition-all flex items-center gap-3 ${darkMode ? 'bg-[#162226] border-[#0B5A70]/15 hover:border-[#0B5A70]/30' : 'bg-[#FFFCF8] border-[#0B5A70]/8 shadow-[0_1px_4px_rgba(11,90,112,0.04)] hover:border-[#0B5A70]/25 hover:shadow-[0_2px_8px_rgba(11,90,112,0.10)]'}`}
+                      >
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-sm font-bold truncate ${darkMode ? 'text-amber-100' : 'text-[#0B5A70]'}`}>{b.title}</p>
+                          <p className={`text-xs truncate ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                            {b.deity} · {b.category}
+                            {b.matchedKws.length > 0 && (
+                              <span className={darkMode ? 'text-orange-300/70' : 'text-[#E65100]/60'}> · {b.matchedKws.slice(0, 2).map(k => `#${k}`).join(' ')}</span>
+                            )}
+                          </p>
+                        </div>
+                        <span className={`text-lg flex-shrink-0 ${darkMode ? 'text-gray-500' : 'text-[#0B5A70]/30'}`}>›</span>
+                      </button>
+                    ))}
                   </div>
-                );
-              })()}
+                </div>
+              )}
 
-              {/* Prev / Next navigation */}
-              {filteredBhajans.length > 1 && (() => {
-                const idx = filteredBhajans.findIndex(b => b.id === selectedBhajan.id);
-                if (idx === -1) return null;
-                const prevB = filteredBhajans[(idx - 1 + filteredBhajans.length) % filteredBhajans.length];
-                const nextB = filteredBhajans[(idx + 1) % filteredBhajans.length];
-                return (
-                  <div className={`flex items-center justify-between mt-6 pt-4 border-t ${darkMode ? 'border-[#0B5A70]/15' : 'border-[#0B5A70]/8'}`}>
-                    <button
-                      onClick={() => navigateBhajan('prev', false)}
-                      className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold transition-all max-w-[45%] ${darkMode ? 'text-gray-300 hover:bg-[#1e2e33]' : 'text-[#0B5A70] hover:bg-[#0B5A70]/5'}`}
-                      aria-label="Previous bhajan"
-                    >
-                      <span className="flex-shrink-0">‹</span>
-                      <span className="truncate">{prevB.title}</span>
-                    </button>
-                    <span className={`text-xs flex-shrink-0 ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>{idx + 1}/{filteredBhajans.length}</span>
-                    <button
-                      onClick={() => navigateBhajan('next', false)}
-                      className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold transition-all max-w-[45%] text-right ${darkMode ? 'text-gray-300 hover:bg-[#1e2e33]' : 'text-[#0B5A70] hover:bg-[#0B5A70]/5'}`}
-                      aria-label="Next bhajan"
-                    >
-                      <span className="truncate">{nextB.title}</span>
-                      <span className="flex-shrink-0">›</span>
-                    </button>
-                  </div>
-                );
-              })()}
+              {/* Prev / Next navigation — SESSION 6: uses memoized myPrevNext */}
+              {myPrevNext && (
+                <div className={`flex items-center justify-between mt-6 pt-4 border-t ${darkMode ? 'border-[#0B5A70]/15' : 'border-[#0B5A70]/8'}`}>
+                  <button
+                    onClick={() => navigateBhajan('prev', false)}
+                    className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold transition-all max-w-[45%] ${darkMode ? 'text-gray-300 hover:bg-[#1e2e33]' : 'text-[#0B5A70] hover:bg-[#0B5A70]/5'}`}
+                    aria-label="Previous bhajan"
+                  >
+                    <span className="flex-shrink-0">‹</span>
+                    <span className="truncate">{myPrevNext.prev.title}</span>
+                  </button>
+                  <span className={`text-xs flex-shrink-0 ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                    {myPrevNext.idx + 1}/{myPrevNext.total}
+                  </span>
+                  <button
+                    onClick={() => navigateBhajan('next', false)}
+                    className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold transition-all max-w-[45%] text-right ${darkMode ? 'text-gray-300 hover:bg-[#1e2e33]' : 'text-[#0B5A70] hover:bg-[#0B5A70]/5'}`}
+                    aria-label="Next bhajan"
+                  >
+                    <span className="truncate">{myPrevNext.next.title}</span>
+                    <span className="flex-shrink-0">›</span>
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
@@ -6310,110 +6574,21 @@ const App = () => {
                   </div>
 
                 <div className={compactView ? 'space-y-2' : 'grid grid-cols-1 md:grid-cols-2 gap-4'}>
-                  {filteredPublicBhajans.slice(0, publicVisibleCount).map((bhajan, pubCardIndex) => {
-                    const isSaved = savedBhajanIds.has(bhajan.id);
-
-                    if (compactView) {
-                      return (
-                        <button
-                          key={bhajan.id}
-                          onClick={() => openPublicBhajanDetail(bhajan)}
-                          className={`w-full text-left rounded-xl p-3 border transition-all flex items-center gap-3 ${darkMode ? 'bg-[#162226] border-[#0B5A70]/15 hover:border-[#0B5A70]/30' : 'bg-[#FFFCF8] border-[#0B5A70]/8 shadow-[0_1px_4px_rgba(11,90,112,0.04)] hover:border-[#0B5A70]/25 hover:shadow-[0_2px_8px_rgba(11,90,112,0.10)]'}`}
-                        >
-                          <div className="flex-1 min-w-0">
-                            <h3 className={`text-sm font-bold truncate ${darkMode ? 'text-amber-100' : 'text-[#0B5A70]'}`}>
-                              {bhajan.title}
-                            </h3>
-                            <p className={`text-xs truncate ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                              {bhajan.deity} · {bhajan.category}
-                            </p>
-                          </div>
-                          {isSaved ? (
-                            <span className="bg-green-50 text-green-700 text-xs font-semibold px-2 py-1 rounded-full flex-shrink-0">
-                              ✓
-                            </span>
-                          ) : (
-                            <span
-                              onClick={(e) => { e.stopPropagation(); saveToMyLibrary(bhajan); }}
-                              className="bg-[#0B5A70] hover:bg-[#094a5d] text-white text-xs font-semibold px-2 py-1 rounded-full flex-shrink-0 cursor-pointer"
-                            >
-                              + Save
-                            </span>
-                          )}
-                        </button>
-                      );
-                    }
-
-                    return (
-                      <div
-                        key={bhajan.id}
-                        className={`sk-card-animate rounded-2xl p-5 border transition-all ${darkMode ? 'bg-[#162226] border-[#0B5A70]/15 shadow-[0_2px_12px_rgba(11,90,112,0.15)] hover:border-[#0B5A70]/30 hover:shadow-[0_4px_20px_rgba(11,90,112,0.25)]' : 'bg-[#FFFCF8] border-[#0B5A70]/8 shadow-[0_2px_12px_rgba(11,90,112,0.06)] hover:border-[#0B5A70]/25 hover:shadow-[0_4px_20px_rgba(11,90,112,0.12)]'}`}
-                        style={{ animationDelay: `${Math.min(pubCardIndex, 8) * 0.04}s` }}
-                      >
-                        <button
-                          onClick={() => openPublicBhajanDetail(bhajan)}
-                          className="w-full text-left"
-                        >
-                          <div className="flex items-start justify-between mb-2">
-                            <h3 className={`text-lg font-bold flex-1 line-clamp-2 ${darkMode ? 'text-amber-100' : 'text-[#0B5A70]'}`}>
-                              {bhajan.title}
-                            </h3>
-                          </div>
-
-                          {bhajan.dhun && (
-                            <p className={`text-xs mb-2 ${darkMode ? 'text-orange-200' : 'text-[#E65100]'}`}>
-                              <span className="font-semibold">तर्ज़:</span> {bhajan.dhun}
-                            </p>
-                          )}
-
-                          <div className="flex flex-wrap gap-1 mb-2">
-                            <span className={`text-xs px-2 py-1 rounded-full ${darkMode ? 'bg-[#0B5A70]/20 text-teal-300' : 'bg-[#0B5A70]/8 text-[#0B5A70]'}`}>
-                              {bhajan.deity}
-                            </span>
-                            <span className={`text-xs px-2 py-1 rounded-full ${darkMode ? 'bg-[#E65100]/15 text-orange-300' : 'bg-[#E65100]/8 text-[#E65100]'}`}>
-                              {bhajan.category}
-                            </span>
-                          </div>
-
-                          <p className={`text-sm line-clamp-3 mb-2 whitespace-pre-line max-h-16 overflow-hidden ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                            {(bhajan.lyrics || '').trim()}
-                          </p>
-
-                          {bhajan.keywords && bhajan.keywords.length > 0 && (
-                            <div className="flex flex-wrap gap-1 mb-3">
-                              {bhajan.keywords.slice(0, 4).map(kw => (
-                                <span key={kw} className={`text-xs px-2 py-0.5 rounded-full ${darkMode ? 'bg-[#0B5A70]/15 text-teal-400' : 'bg-[#0B5A70]/5 text-[#0B5A70]/70'}`}>
-                                  #{kw}
-                                </span>
-                              ))}
-                            </div>
-                          )}
-                        </button>
-
-                        <div className={`flex gap-2 mt-3 pt-3 border-t ${darkMode ? 'border-[#0B5A70]/15' : 'border-[#0B5A70]/8'}`}>
-                          {isSaved ? (
-                            <span className="flex-1 bg-green-50 text-green-700 font-semibold py-2 rounded-lg text-sm text-center">
-                              ✓ In Your Library
-                            </span>
-                          ) : (
-                            <button
-                              onClick={() => saveToMyLibrary(bhajan)}
-                              disabled={savingToLibrary}
-                              className="flex-1 bg-[#0B5A70] hover:bg-[#094a5d] text-white font-semibold py-2 rounded-lg text-sm disabled:opacity-50"
-                            >
-                              ➕ Add to Personal
-                            </button>
-                          )}
-                        </div>
-
-                        {(bhajan.saveCount > 0) && (
-                          <p className={`text-xs mt-2 text-center ${darkMode ? 'text-gray-500' : 'text-[#0B5A70]/50'}`}>
-                            ✨ Added by {bhajan.saveCount} {bhajan.saveCount === 1 ? 'person' : 'people'}
-                          </p>
-                        )}
-                      </div>
-                    );
-                  })}
+                  {/* SESSION 6: PublicBhajanCard is React.memo + compact card
+                      now uses sibling buttons instead of nested span/onClick */}
+                  {filteredPublicBhajans.slice(0, publicVisibleCount).map((bhajan, pubCardIndex) => (
+                    <PublicBhajanCard
+                      key={bhajan.id}
+                      bhajan={bhajan}
+                      darkMode={darkMode}
+                      compactView={compactView}
+                      cardIndex={pubCardIndex}
+                      isSaved={savedBhajanIds.has(bhajan.id)}
+                      savingToLibrary={savingToLibrary}
+                      onOpen={openPublicBhajanDetail}
+                      onSave={saveToMyLibrary}
+                    />
+                  ))}
                 </div>
 
                 {publicVisibleCount < filteredPublicBhajans.length && (
@@ -6611,79 +6786,62 @@ const App = () => {
                 )}
               </div>
 
-              {/* Related Bhajans */}
-              {selectedPublicBhajan.keywords && selectedPublicBhajan.keywords.length > 0 && (() => {
-                const relKws = new Set(selectedPublicBhajan.keywords);
-                const related = publicBhajans
-                  .filter(b => b.id !== selectedPublicBhajan.id && b.keywords && b.keywords.some(kw => relKws.has(kw)))
-                  .map(b => ({
-                    ...b,
-                    matchCount: b.keywords.filter(kw => relKws.has(kw)).length,
-                    matchedKws: b.keywords.filter(kw => relKws.has(kw))
-                  }))
-                  .sort((a, b) => b.matchCount - a.matchCount)
-                  .slice(0, 6);
-                if (related.length === 0) return null;
-                return (
-                  <div className="mt-6">
-                    <p className={`text-sm font-bold mb-3 flex items-center gap-1.5 ${darkMode ? 'text-gray-300' : 'text-[#0B5A70]'}`}>
-                      ✨ Related Bhajans
-                    </p>
-                    <div className="space-y-1.5">
-                      {related.map(b => (
-                        <button
-                          key={b.id}
-                          onClick={() => {
-                            openPublicBhajanDetail(b);
-                            window.scrollTo({ top: 0, behavior: 'smooth' });
-                          }}
-                          className={`w-full text-left rounded-xl p-3 border transition-all flex items-center gap-3 ${darkMode ? 'bg-[#162226] border-[#0B5A70]/15 hover:border-[#0B5A70]/30' : 'bg-[#FFFCF8] border-[#0B5A70]/8 shadow-[0_1px_4px_rgba(11,90,112,0.04)] hover:border-[#0B5A70]/25 hover:shadow-[0_2px_8px_rgba(11,90,112,0.10)]'}`}
-                        >
-                          <div className="flex-1 min-w-0">
-                            <p className={`text-sm font-bold truncate ${darkMode ? 'text-amber-100' : 'text-[#0B5A70]'}`}>{b.title}</p>
-                            <p className="text-xs text-gray-600 truncate">
-                              {b.deity} · {b.category}
-                              {b.matchedKws.length > 0 && (
-                                <span className="text-[#E65100]/60"> · {b.matchedKws.slice(0, 2).map(k => `#${k}`).join(' ')}</span>
-                              )}
-                            </p>
-                          </div>
-                          <span className="text-[#0B5A70]/30 text-lg flex-shrink-0">›</span>
-                        </button>
-                      ))}
-                    </div>
+              {/* Related Bhajans — SESSION 6: uses memoized relatedPublicBhajans */}
+              {relatedPublicBhajans.length > 0 && (
+                <div className="mt-6">
+                  <p className={`text-sm font-bold mb-3 flex items-center gap-1.5 ${darkMode ? 'text-gray-300' : 'text-[#0B5A70]'}`}>
+                    ✨ Related Bhajans
+                  </p>
+                  <div className="space-y-1.5">
+                    {relatedPublicBhajans.map(b => (
+                      <button
+                        key={b.id}
+                        onClick={() => {
+                          openPublicBhajanDetail(b);
+                          window.scrollTo({ top: 0, behavior: 'smooth' });
+                        }}
+                        className={`w-full text-left rounded-xl p-3 border transition-all flex items-center gap-3 ${darkMode ? 'bg-[#162226] border-[#0B5A70]/15 hover:border-[#0B5A70]/30' : 'bg-[#FFFCF8] border-[#0B5A70]/8 shadow-[0_1px_4px_rgba(11,90,112,0.04)] hover:border-[#0B5A70]/25 hover:shadow-[0_2px_8px_rgba(11,90,112,0.10)]'}`}
+                      >
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-sm font-bold truncate ${darkMode ? 'text-amber-100' : 'text-[#0B5A70]'}`}>{b.title}</p>
+                          <p className={`text-xs truncate ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                            {b.deity} · {b.category}
+                            {b.matchedKws.length > 0 && (
+                              <span className={darkMode ? 'text-orange-300/70' : 'text-[#E65100]/60'}> · {b.matchedKws.slice(0, 2).map(k => `#${k}`).join(' ')}</span>
+                            )}
+                          </p>
+                        </div>
+                        <span className={`text-lg flex-shrink-0 ${darkMode ? 'text-gray-500' : 'text-[#0B5A70]/30'}`}>›</span>
+                      </button>
+                    ))}
                   </div>
-                );
-              })()}
+                </div>
+              )}
 
-              {/* Prev / Next navigation */}
-              {filteredPublicBhajans.length > 1 && (() => {
-                const idx = filteredPublicBhajans.findIndex(b => b.id === selectedPublicBhajan.id);
-                if (idx === -1) return null;
-                const prevB = filteredPublicBhajans[(idx - 1 + filteredPublicBhajans.length) % filteredPublicBhajans.length];
-                const nextB = filteredPublicBhajans[(idx + 1) % filteredPublicBhajans.length];
-                return (
-                  <div className={`flex items-center justify-between mt-6 pt-4 border-t ${darkMode ? 'border-[#0B5A70]/15' : 'border-[#0B5A70]/8'}`}>
-                    <button
-                      onClick={() => navigateBhajan('prev', true)}
-                      className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold transition-all max-w-[45%] ${darkMode ? 'text-gray-300 hover:bg-[#1e2e33]' : 'text-[#0B5A70] hover:bg-[#0B5A70]/5'}`}
-                      aria-label="Previous bhajan"
-                    >
-                      <span className="flex-shrink-0">‹</span>
-                      <span className="truncate">{prevB.title}</span>
-                    </button>
-                    <span className={`text-xs flex-shrink-0 ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>{idx + 1}/{filteredPublicBhajans.length}</span>
-                    <button
-                      onClick={() => navigateBhajan('next', true)}
-                      className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold transition-all max-w-[45%] text-right ${darkMode ? 'text-gray-300 hover:bg-[#1e2e33]' : 'text-[#0B5A70] hover:bg-[#0B5A70]/5'}`}
-                      aria-label="Next bhajan"
-                    >
-                      <span className="truncate">{nextB.title}</span>
-                      <span className="flex-shrink-0">›</span>
-                    </button>
-                  </div>
-                );
-              })()}
+              {/* Prev / Next navigation — SESSION 6: uses memoized publicPrevNext */}
+              {publicPrevNext && (
+                <div className={`flex items-center justify-between mt-6 pt-4 border-t ${darkMode ? 'border-[#0B5A70]/15' : 'border-[#0B5A70]/8'}`}>
+                  <button
+                    onClick={() => navigateBhajan('prev', true)}
+                    className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold transition-all max-w-[45%] ${darkMode ? 'text-gray-300 hover:bg-[#1e2e33]' : 'text-[#0B5A70] hover:bg-[#0B5A70]/5'}`}
+                    aria-label="Previous bhajan"
+                  >
+                    <span className="flex-shrink-0">‹</span>
+                    <span className="truncate">{publicPrevNext.prev.title}</span>
+                  </button>
+                  <span className={`text-xs flex-shrink-0 ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                    {publicPrevNext.idx + 1}/{publicPrevNext.total}
+                  </span>
+                  <button
+                    onClick={() => navigateBhajan('next', true)}
+                    className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold transition-all max-w-[45%] text-right ${darkMode ? 'text-gray-300 hover:bg-[#1e2e33]' : 'text-[#0B5A70] hover:bg-[#0B5A70]/5'}`}
+                    aria-label="Next bhajan"
+                  >
+                    <span className="truncate">{publicPrevNext.next.title}</span>
+                    <span className="flex-shrink-0">›</span>
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
@@ -7651,7 +7809,9 @@ const App = () => {
                     key={tab.view}
                     onClick={() => {
                       if (isLocked) {
-                        // Guest tapped a members-only tab → route to sign-in
+                        // SESSION 6: explain WHY the screen is about to change,
+                        // instead of silently dumping the user on the sign-in page.
+                        showToast('Sign in to build your personal library', 'error');
                         setGuestMode(false);
                         setLoading(false);
                         return;
