@@ -1,48 +1,48 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 
 // ==============================================
-// SANKIRTAN SAAS - SESSION 9
+// SANKIRTAN SAAS - SESSION 10
 // Bhajan Se Bhagwan Tak
-// CHANGES (Session 9 — hotfix for Session 8's Firestore config error):
+// CHANGES (Session 10 — five user-reported items):
 //
-// Session 8's db.settings() call included `merge: true` alongside
-// `experimentalForceLongPolling: true`. Firebase compat SDK v10.7.0
-// throws at runtime:
+// 1. UX/DARKMODE: Add Bhajan, Edit Bhajan, and Create/Edit Program
+//    forms are now dark-mode aware. All inputs, selects, textareas,
+//    labels, and card backgrounds swap to the dark palette. Text was
+//    previously invisible on dark bg (near-black default on
+//    #0f1a1c). Same fInput/fSelect/fLabel/fCard helpers used across
+//    all three forms so behaviour matches.
 //
-//   "experimentalForceLongPolling and
-//    experimentalAutoDetectLongPolling cannot be used together"
+// 2. UX/LIVE MODE:
+//    (a) Below the current bhajan's lyrics, live mode now shows a
+//        "All Bhajans in this Program" list — past bhajans dimmed
+//        with a ✓, current bhajan highlighted with ▶, upcoming
+//        bhajans normal. Any tap jumps directly to that bhajan.
+//        Singers no longer need to hammer the → arrow to reach
+//        bhajan 12 of 15.
+//    (b) iOS edge-swipe (system back gesture) used to exit live
+//        mode entirely — a common accidental gesture that lost the
+//        singer's place mid-program. Now intercepted while in
+//        live-program view: swipe back = previous bhajan, only
+//        exits at bhajan 1. The Exit Live button remains the
+//        explicit way to leave.
 //
-// Why: the compat SDK's merge:true option merges new settings on
-// top of defaults, and the defaults include
-// experimentalAutoDetectLongPolling:false. Post-merge, both keys
-// end up present, and the SDK's own validation refuses. The
-// Firestore SDK was then left in an unconfigured, cannot-talk-to-
-// backend state — the observable symptom was "Public library is
-// empty" plus "Could not reach Cloud Firestore backend" for
-// signed-in and guest users alike, worse than pre-Session-8.
+// 3. COPY: "Founded for the Bhajan Community" → "Made for the
+//    Bhajan Community" in all 3 places (splash footer, reading-view
+//    footer, main app footer).
 //
-// 1. FIX: dropped `merge: true`. The settings object now replaces
-//    defaults wholesale rather than merging.
+// 4. UX: Create Program → Add Bhajan picker now uses the master
+//    keyword list (same as home page), not just keywords found in
+//    the user's own bhajans. A user with 5 bhajans in library used
+//    to see a nearly-empty keyword dropdown.
 //
-// 2. UX: removed the silent `console.warn` around the settings
-//    call. If settings ever fails, it now logs a CRITICAL error
-//    and throws so we see it fast next time, and _firestoreConfigured
-//    stays false so the next reload retries the setup.
+// 5. UX: Program-detail page now has a prominent "➕ Add Bhajan"
+//    button alongside Edit and Delete. Opens the bhajan picker
+//    directly instead of forcing Edit → scroll → tap-add every
+//    time. Edit and Delete remain accessible.
 //
-// This is a hotfix for Session 8, not a full new session's worth of
-// work. Everything else from Session 8 stays: the 8-second stuck-
-// loading escape hatch with the Reload button.
-//
-// Verification after deploy: incognito window on sankirtan.app,
-// console should NOT show "Firestore config error". Public library
-// should paint in 2-3 seconds even on mobile / incognito.
-// ==============================================
-// (Session 8 kept: experimentalForceLongPolling for reliability;
-//  8-second stuck-loading escape-hatch banner with Reload button.)
-// (Session 7 kept: fetchUserCount() deleted; the blocking retry
-//  loop that caused the original 40-second cold-start hang.)
-// (Session 6 kept: card memoization, dark mode, back-button behaviour,
-//  transliteration cache, related/prev-next memoization.)
+// Not touched: Firestore config, security rules, memoized cards,
+// listener setup, transliteration, escape hatch, cache layer —
+// everything from Sessions 6-9 untouched.
 // ==============================================
 
 // ==============================================
@@ -116,7 +116,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.07.23.s9';
+const APP_VERSION = '2026.07.27.s10';
 
 // Onboarding tour steps
 const ONBOARDING_STEPS = [
@@ -1099,8 +1099,34 @@ const App = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentView]);
 
+  // SESSION 10 (item 2): refs so the popstate handler always sees
+  // fresh live-mode state without needing to be re-registered on
+  // every state change (which would risk missing events).
+  const currentViewRef = useRef(currentView);
+  const liveProgramIndexRef = useRef(liveProgramIndex);
+  useEffect(() => { currentViewRef.current = currentView; }, [currentView]);
+  useEffect(() => { liveProgramIndexRef.current = liveProgramIndex; }, [liveProgramIndex]);
+
   useEffect(() => {
     const handlePopState = (event) => {
+      // SESSION 10 (item 2): iOS edge-swipe (system back gesture)
+      // fires popstate. In live mode we redirect this to livePrev
+      // instead of exiting the mode — a swipe back = previous bhajan.
+      // Only if already at bhajan 1 do we let the browser back
+      // proceed normally (which exits live mode).
+      if (currentViewRef.current === 'live-program') {
+        if (liveProgramIndexRef.current > 0) {
+          setLiveProgramIndex(liveProgramIndexRef.current - 1);
+          window.scrollTo(0, 0);
+          // Push a fresh state so the next back-swipe fires again.
+          try {
+            window.history.pushState({ view: 'live-program' }, '', window.location.pathname);
+          } catch (e) { /* private-mode / rare failures — non-fatal */ }
+          return;
+        }
+        // At first bhajan — fall through to exit as usual.
+      }
+
       window.__sankirtanBackNav = true;
       if (event.state && event.state.view) {
         setCurrentView(event.state.view);
@@ -3947,7 +3973,7 @@ const App = () => {
             className="mt-5"
           >
             <p className="text-[#0B5A70]/60 text-xs sm:text-sm leading-relaxed">
-              Founded for the Bhajan Community
+              Made for the Bhajan Community
             </p>
             <p className="text-[#0B5A70]/60 text-xs sm:text-sm mt-1 flex items-center justify-center gap-1.5">
               <span
@@ -4247,6 +4273,60 @@ const App = () => {
               {currentBhajan.lyrics}
             </pre>
           </div>
+
+          {/* SESSION 10 (item 2): "coming up" list below the current bhajan.
+              Lets the singer see what's next and jump to any bhajan
+              without swiping through arrows one by one. */}
+          {totalBhajans > 1 && (
+            <div className="mt-6">
+              <p className={`text-sm font-bold mb-3 flex items-center gap-1.5 ${liveMutedColor}`}>
+                📜 All Bhajans in this Program
+              </p>
+              <div className="space-y-2">
+                {selectedProgram.bhajanIds.map((bId, idx) => {
+                  const b = getBhajanById(bId);
+                  if (!b) return null;
+                  const isCurrent = idx === liveProgramIndex;
+                  const isPast = idx < liveProgramIndex;
+                  return (
+                    <button
+                      key={bId + '-' + idx}
+                      onClick={() => {
+                        setLiveProgramIndex(idx);
+                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                      }}
+                      className={`w-full text-left rounded-xl p-3 border transition-all flex items-center gap-3 ${
+                        isCurrent
+                          ? (darkMode
+                              ? 'bg-[#0B5A70]/25 border-teal-400/40 shadow-md'
+                              : 'bg-[#0B5A70]/10 border-[#0B5A70]/40 shadow-md')
+                          : (darkMode
+                              ? 'bg-[#162226] border-[#0B5A70]/15 hover:border-[#0B5A70]/30'
+                              : 'bg-[#FFFCF8] border-[#0B5A70]/8 hover:border-[#0B5A70]/25')
+                      } ${isPast ? 'opacity-60' : ''}`}
+                    >
+                      <div className={`text-lg font-bold min-w-[28px] text-center flex-shrink-0 ${
+                        isCurrent
+                          ? (darkMode ? 'text-orange-300' : 'text-[#E65100]')
+                          : (darkMode ? 'text-gray-500' : 'text-[#0B5A70]/50')
+                      }`}>
+                        {isCurrent ? '▶' : idx + 1}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-sm font-bold truncate ${liveTitleColor}`}>{b.title}</p>
+                        <p className={`text-xs truncate ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                          {b.deity}{b.dhun ? ` · तर्ज़: ${b.dhun}` : ''}
+                        </p>
+                      </div>
+                      {isPast && (
+                        <span className={`text-xs flex-shrink-0 ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>✓</span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Bottom Navigation Bar (live mode) — SESSION 6: dark-mode aware */}
@@ -5307,7 +5387,23 @@ const App = () => {
           {/* ==============================================
               ADD/EDIT BHAJAN FORM
               ============================================== */}
-          {(currentView === 'add-bhajan' || currentView === 'edit-bhajan') && (
+          {(currentView === 'add-bhajan' || currentView === 'edit-bhajan') && (() => {
+            // SESSION 10 (item 1): dark-mode-aware form control classes.
+            // Previously all inputs/selects/textareas were hardcoded to
+            // cream backgrounds with dark-teal borders and inherited
+            // near-black text — invisible on the dark-mode background.
+            const fInput = darkMode
+              ? 'w-full px-4 py-3 border border-[#0B5A70]/30 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/20 focus:border-teal-400 outline-none bg-[#1e2e33] text-amber-50 placeholder-gray-500'
+              : 'w-full px-4 py-3 border border-[#0B5A70]/15 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none bg-[#FFFCF8] text-gray-900 placeholder-gray-400';
+            const fSelect = darkMode
+              ? 'w-full px-4 py-3 border border-[#0B5A70]/30 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/20 focus:border-teal-400 outline-none bg-[#1e2e33] text-amber-50'
+              : 'w-full px-4 py-3 border border-[#0B5A70]/15 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none bg-[#FFFCF8] text-gray-900';
+            const fLabel = darkMode ? 'block text-sm font-semibold text-teal-200 mb-1' : 'block text-sm font-semibold text-[#0B5A70] mb-1';
+            const fCard = darkMode
+              ? 'bg-[#162226] rounded-2xl shadow-[0_2px_12px_rgba(11,90,112,0.15)] p-6 md:p-8 border border-[#0B5A70]/15'
+              : 'bg-[#FFFCF8] rounded-2xl shadow-[0_2px_12px_rgba(11,90,112,0.06)] p-6 md:p-8 border border-[#0B5A70]/8';
+            const fTitle = darkMode ? 'text-2xl font-bold text-amber-100 mb-6' : 'text-2xl font-bold text-[#0B5A70] mb-6';
+            return (
             <>
               <div className="flex items-center justify-between mb-4">
                 <button
@@ -5318,20 +5414,20 @@ const App = () => {
                       setCurrentView('library');
                     }
                   }}
-                  className="text-[#0B5A70] hover:text-[#0B5A70]/80 flex items-center gap-1 text-sm"
+                  className={darkMode ? 'text-teal-200 hover:text-teal-100 flex items-center gap-1 text-sm' : 'text-[#0B5A70] hover:text-[#0B5A70]/80 flex items-center gap-1 text-sm'}
                 >
                   ← Cancel
                 </button>
               </div>
 
-              <div className="bg-[#FFFCF8] rounded-2xl shadow-[0_2px_12px_rgba(11,90,112,0.06)] p-6 md:p-8 border border-[#0B5A70]/8">
-                <h2 className="text-2xl font-bold text-[#0B5A70] mb-6">
+              <div className={fCard}>
+                <h2 className={fTitle}>
                   {currentView === 'edit-bhajan' ? '✏️ Edit Bhajan' : '➕ Add New Bhajan'}
                 </h2>
 
                 {/* Title */}
                 <div className="mb-4">
-                  <label className="block text-sm font-semibold text-[#0B5A70] mb-1">
+                  <label className={fLabel}>
                     Title <span className="text-red-500">*</span>
                   </label>
                   <div className="relative">
@@ -5343,11 +5439,11 @@ const App = () => {
                       onKeyDown={(e) => handleHindiKeyDown(e, 'title')}
                       onBlur={() => setTimeout(() => setShowSuggestions(false), 300)}
                       onFocus={() => setActiveTypingField('title')}
-                      className="w-full px-4 py-3 border border-[#0B5A70]/15 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none text-lg"
+                      className={fInput + " text-lg"}
                       placeholder={hindiTypingEnabled ? "Type: om jai jagdish hare" : "e.g., ॐ जय जगदीश हरे"}
                     />
                     {hindiTypingEnabled && showSuggestions && activeTypingField === 'title' && transliterationSuggestions.length > 0 && (
-                      <div className="absolute bottom-full left-0 right-0 mb-2 bg-[#FFFCF8] border border-[#0B5A70]/15 rounded-lg shadow-[0_8px_30px_rgba(11,90,112,0.18)] p-2 flex flex-wrap gap-2 items-center z-30">
+                      <div className={`absolute bottom-full left-0 right-0 mb-2 border rounded-lg shadow-[0_8px_30px_rgba(11,90,112,0.18)] p-2 flex flex-wrap gap-2 items-center z-30 ${darkMode ? "bg-[#1e2e33] border-[#0B5A70]/30" : "bg-[#FFFCF8] border-[#0B5A70]/15"}`}>
                         <span className="text-xs text-gray-500 mr-1">
                           <strong>"{currentWord}"</strong> →
                         </span>
@@ -5395,13 +5491,13 @@ const App = () => {
                 {/* Deity and Category */}
                 <div className="grid grid-cols-2 gap-3 mb-4">
                   <div>
-                    <label className="block text-sm font-semibold text-[#0B5A70] mb-1">
+                    <label className={fLabel}>
                       Deity
                     </label>
                     <select
                       value={bhajanForm.deity}
                       onChange={(e) => setBhajanForm({...bhajanForm, deity: e.target.value})}
-                      className="w-full px-4 py-3 border border-[#0B5A70]/15 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none bg-[#FFFCF8]"
+                      className={fSelect}
                     >
                       {allDeityOptions.map(d => (
                         <option key={d.value} value={d.value}>{d.value}</option>
@@ -5410,13 +5506,13 @@ const App = () => {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-semibold text-[#0B5A70] mb-1">
+                    <label className={fLabel}>
                       Category
                     </label>
                     <select
                       value={bhajanForm.category}
                       onChange={(e) => setBhajanForm({...bhajanForm, category: e.target.value})}
-                      className="w-full px-4 py-3 border border-[#0B5A70]/15 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none bg-[#FFFCF8]"
+                      className={fSelect}
                     >
                       {allCategoryOptions.map(c => (
                         <option key={c} value={c}>{c}</option>
@@ -5427,7 +5523,7 @@ const App = () => {
 
                 {/* Dhun / Tarz */}
                 <div className="mb-4">
-                  <label className="block text-sm font-semibold text-[#0B5A70] mb-1">
+                  <label className={fLabel}>
                     तर्ज़ / धुन (Tune)
                   </label>
                   <div className="relative">
@@ -5439,11 +5535,11 @@ const App = () => {
                       onKeyDown={(e) => handleHindiKeyDown(e, 'dhun')}
                       onBlur={() => setTimeout(() => setShowSuggestions(false), 300)}
                       onFocus={() => setActiveTypingField('dhun')}
-                      className="w-full px-4 py-3 border border-[#0B5A70]/15 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none"
+                      className={fInput}
                       placeholder={hindiTypingEnabled ? "Type in English, press space" : "e.g., तर्ज़: तुझे देखा तो..."}
                     />
                     {hindiTypingEnabled && showSuggestions && activeTypingField === 'dhun' && transliterationSuggestions.length > 0 && (
-                      <div className="absolute bottom-full left-0 right-0 mb-2 bg-[#FFFCF8] border border-[#0B5A70]/15 rounded-lg shadow-[0_8px_30px_rgba(11,90,112,0.18)] p-2 flex flex-wrap gap-2 items-center z-30">
+                      <div className={`absolute bottom-full left-0 right-0 mb-2 border rounded-lg shadow-[0_8px_30px_rgba(11,90,112,0.18)] p-2 flex flex-wrap gap-2 items-center z-30 ${darkMode ? "bg-[#1e2e33] border-[#0B5A70]/30" : "bg-[#FFFCF8] border-[#0B5A70]/15"}`}>
                         <span className="text-xs text-gray-500 mr-1">
                           <strong>"{currentWord}"</strong> →
                         </span>
@@ -5490,14 +5586,14 @@ const App = () => {
 
                 {/* Scale */}
                 <div className="mb-4">
-                  <label className="block text-sm font-semibold text-[#0B5A70] mb-1">
+                  <label className={fLabel}>
                     Scale / Raag
                   </label>
                   <input
                     type="text"
                     value={bhajanForm.scale}
                     onChange={(e) => setBhajanForm({...bhajanForm, scale: e.target.value})}
-                    className="w-full px-4 py-3 border border-[#0B5A70]/15 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none"
+                    className={fInput}
                     placeholder="e.g., Raag Yaman, C# Scale"
                   />
                 </div>
@@ -5505,7 +5601,7 @@ const App = () => {
                 {/* Lyrics with Hindi Typing */}
                 <div className="mb-4">
                   <div className="flex items-center justify-between mb-1">
-                    <label className="block text-sm font-semibold text-[#0B5A70]">
+                    <label className={fLabel + " mb-0"}>
                       Lyrics <span className="text-red-500">*</span>
                     </label>
                     <button
@@ -5597,7 +5693,7 @@ const App = () => {
                     />
 
                     {ocrProcessing && (
-                      <div className="mt-3 p-3 bg-[#FFFCF8] border border-[#0B5A70]/15 rounded-lg">
+                      <div className={`mt-3 p-3 border rounded-lg ${darkMode ? "bg-[#1e2e33] border-[#0B5A70]/30" : "bg-[#FFFCF8] border-[#0B5A70]/15"}`}>
                         <div className="w-full bg-[#0B5A70]/10 rounded-full h-3 mb-2">
                           <div
                             className="bg-[#0B5A70] h-3 rounded-full transition-all"
@@ -5640,13 +5736,13 @@ const App = () => {
                       onBlur={() => setTimeout(() => setShowSuggestions(false), 300)}
                       onFocus={() => setActiveTypingField('lyrics')}
                       rows={10}
-                      className="w-full px-4 py-3 border border-[#0B5A70]/15 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none font-mono text-base"
+                      className={fInput + " font-mono text-base"}
                       placeholder={hindiTypingEnabled ? "Type: jai shri babosa (press space to convert)" : "भजन के बोल यहाँ लिखें..."}
                       style={{ lineHeight: '1.8' }}
                     />
 
                     {hindiTypingEnabled && showSuggestions && activeTypingField === 'lyrics' && transliterationSuggestions.length > 0 && (
-                      <div className="absolute bottom-full left-0 right-0 mb-2 bg-[#FFFCF8] border border-[#0B5A70]/15 rounded-xl shadow-[0_8px_30px_rgba(11,90,112,0.18)] p-2 flex flex-wrap gap-2 items-center z-30">
+                      <div className={`absolute bottom-full left-0 right-0 mb-2 border rounded-xl shadow-[0_8px_30px_rgba(11,90,112,0.18)] p-2 flex flex-wrap gap-2 items-center z-30 ${darkMode ? "bg-[#1e2e33] border-[#0B5A70]/30" : "bg-[#FFFCF8] border-[#0B5A70]/15"}`}>
                         <span className="text-xs text-gray-500 mr-1">
                           <strong>"{currentWord}"</strong> →
                         </span>
@@ -5694,7 +5790,7 @@ const App = () => {
 
                 {/* Keywords */}
                 <div className="mb-4">
-                  <label className="block text-sm font-semibold text-[#0B5A70] mb-2">
+                  <label className={fLabel + " mb-2"}>
                     Keywords (tap to select)
                   </label>
                   <div className="flex flex-wrap gap-2">
@@ -5722,14 +5818,14 @@ const App = () => {
 
                 {/* Source URL */}
                 <div className="mb-6">
-                  <label className="block text-sm font-semibold text-[#0B5A70] mb-1">
+                  <label className={fLabel}>
                     Source URL (optional)
                   </label>
                   <input
                     type="url"
                     value={bhajanForm.source}
                     onChange={(e) => setBhajanForm({...bhajanForm, source: e.target.value})}
-                    className="w-full px-4 py-3 border border-[#0B5A70]/15 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none"
+                    className={fInput}
                     placeholder="https://youtube.com/... or reference URL"
                   />
                 </div>
@@ -5763,7 +5859,8 @@ const App = () => {
                 </div>
               </div>
             </>
-          )}
+            );
+          })()}
 
           {/* ==============================================
               PROGRAMS LIST VIEW
@@ -5863,10 +5960,25 @@ const App = () => {
                 >
                   ← Back to Programs
                 </button>
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap">
+                  <button
+                    onClick={() => {
+                      // SESSION 10 (item 5): opens the picker directly from
+                      // program-detail so the singer doesn't have to go
+                      // Edit → scroll to bhajan list → tap Add every time.
+                      openEditProgram(selectedProgram);
+                      setShowBhajanPicker(true);
+                      setBhajanPickerSearch('');
+                      setPickerDeityFilter('');
+                      setPickerKeywordFilter('');
+                    }}
+                    className="text-white bg-[#0B5A70] hover:bg-[#094a5d] px-3 py-1.5 rounded-lg text-sm font-semibold"
+                  >
+                    ➕ Add Bhajan
+                  </button>
                   <button
                     onClick={() => openEditProgram(selectedProgram)}
-                    className="text-[#0B5A70] hover:text-[#0B5A70]/80 px-3 py-1.5 rounded-lg hover:bg-[#0B5A70]/5 text-sm font-semibold"
+                    className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${darkMode ? 'text-teal-200 hover:text-teal-100 hover:bg-[#0B5A70]/15' : 'text-[#0B5A70] hover:text-[#0B5A70]/80 hover:bg-[#0B5A70]/5'}`}
                   >
                     ✏️ Edit
                   </button>
@@ -5959,7 +6071,17 @@ const App = () => {
           {/* ==============================================
               CREATE/EDIT PROGRAM FORM
               ============================================== */}
-          {(currentView === 'create-program' || currentView === 'edit-program') && (
+          {(currentView === 'create-program' || currentView === 'edit-program') && (() => {
+            // SESSION 10 (item 1): same dark-mode form control helpers as bhajan form.
+            const fInput = darkMode
+              ? 'w-full px-4 py-3 border border-[#0B5A70]/30 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/20 focus:border-teal-400 outline-none bg-[#1e2e33] text-amber-50 placeholder-gray-500'
+              : 'w-full px-4 py-3 border border-[#0B5A70]/15 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none bg-[#FFFCF8] text-gray-900 placeholder-gray-400';
+            const fLabel = darkMode ? 'block text-sm font-semibold text-teal-200 mb-1' : 'block text-sm font-semibold text-[#0B5A70] mb-1';
+            const fCard = darkMode
+              ? 'bg-[#162226] rounded-2xl shadow-[0_2px_12px_rgba(11,90,112,0.15)] p-6 md:p-8 border border-[#0B5A70]/15'
+              : 'bg-[#FFFCF8] rounded-2xl shadow-[0_2px_12px_rgba(11,90,112,0.06)] p-6 md:p-8 border border-[#0B5A70]/8';
+            const fTitle = darkMode ? 'text-2xl font-bold text-amber-100 mb-6' : 'text-2xl font-bold text-[#0B5A70] mb-6';
+            return (
             <>
               <div className="flex items-center justify-between mb-4">
                 <button
@@ -5970,44 +6092,44 @@ const App = () => {
                       setCurrentView('programs');
                     }
                   }}
-                  className="text-[#0B5A70] hover:text-[#0B5A70]/80 flex items-center gap-1 text-sm"
+                  className={darkMode ? 'text-teal-200 hover:text-teal-100 flex items-center gap-1 text-sm' : 'text-[#0B5A70] hover:text-[#0B5A70]/80 flex items-center gap-1 text-sm'}
                 >
                   ← Cancel
                 </button>
               </div>
 
-              <div className="bg-[#FFFCF8] rounded-2xl shadow-[0_2px_12px_rgba(11,90,112,0.06)] p-6 md:p-8 border border-[#0B5A70]/8">
-                <h2 className="text-2xl font-bold text-[#0B5A70] mb-6">
+              <div className={fCard}>
+                <h2 className={fTitle}>
                   {currentView === 'edit-program' ? '✏️ Edit Program' : '➕ Create New Program'}
                 </h2>
 
                 <div className="mb-4">
-                  <label className="block text-sm font-semibold text-[#0B5A70] mb-1">
+                  <label className={fLabel}>
                     Program Name <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
                     value={programForm.name}
                     onChange={(e) => setProgramForm({...programForm, name: e.target.value})}
-                    className="w-full px-4 py-3 border border-[#0B5A70]/15 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none text-lg"
+                    className={fInput + " text-lg"}
                     placeholder="e.g., Diwali Jagran 2026"
                   />
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
                   <div>
-                    <label className="block text-sm font-semibold text-[#0B5A70] mb-1">
+                    <label className={fLabel}>
                       Date (optional)
                     </label>
                     <input
                       type="date"
                       value={programForm.date}
                       onChange={(e) => setProgramForm({...programForm, date: e.target.value})}
-                      className="w-full px-4 py-3 border border-[#0B5A70]/15 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none"
+                      className={fInput}
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-semibold text-[#0B5A70] mb-1">
+                    <label className={fLabel}>
                       Venue (optional)
                     </label>
                     <div className="relative">
@@ -6154,7 +6276,11 @@ const App = () => {
               {/* Bhajan Picker Modal */}
               {showBhajanPicker && (() => {
                 const pickerDeities = [...new Set(bhajans.map(b => b.deity).filter(Boolean))].sort();
-                const allPickerKeywords = [...new Set(bhajans.flatMap(b => b.keywords || []))].sort();
+                const allPickerKeywords = allKeywordOptions;
+                // SESSION 10 (item 4): was derived from the user's own
+                // bhajans only, which meant a nearly-empty dropdown for
+                // users with a small personal library. Now uses the
+                // master keyword list (same as home page filter).
 
                 const programKeywords = new Set();
                 programForm.bhajanIds.forEach(id => {
@@ -6383,7 +6509,8 @@ const App = () => {
                 );
               })()}
             </>
-          )}
+            );
+          })()}
 
           {/* ==============================================
               PUBLIC LIBRARY VIEW
@@ -6678,7 +6805,7 @@ const App = () => {
               )}
               <div className="text-center mt-12 mb-4">
                 <p className={`text-xs mb-2 ${darkMode ? 'text-gray-500' : 'text-[#0B5A70]/70'}`}>
-                  Founded for the Bhajan Community 🙏 by Grace of <strong>Babosa Bhagwan</strong> 🕉️
+                  Made for the Bhajan Community 🙏 by Grace of <strong>Babosa Bhagwan</strong> 🕉️
                 </p>
                 <button
                   onClick={() => {
@@ -8189,7 +8316,7 @@ const App = () => {
         </div>
 
         <div className="text-center mt-4 text-[#0B5A70]/60 text-xs">
-          <p>Founded for the Bhajan Community</p>
+          <p>Made for the Bhajan Community</p>
           <p className="mt-1">🎵 by Grace of <strong className="text-[#0B5A70]">Babosa Bhagwan</strong> 🎵</p>
         </div>
       </div>
