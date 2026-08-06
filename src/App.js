@@ -1,48 +1,39 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 
 // ==============================================
-// SANKIRTAN SAAS - SESSION 10
+// SANKIRTAN SAAS - SESSION 11
 // Bhajan Se Bhagwan Tak
-// CHANGES (Session 10 — five user-reported items):
+// CHANGES (Session 11 — three user-requested additions):
 //
-// 1. UX/DARKMODE: Add Bhajan, Edit Bhajan, and Create/Edit Program
-//    forms are now dark-mode aware. All inputs, selects, textareas,
-//    labels, and card backgrounds swap to the dark palette. Text was
-//    previously invisible on dark bg (near-black default on
-//    #0f1a1c). Same fInput/fSelect/fLabel/fCard helpers used across
-//    all three forms so behaviour matches.
+// 1. NEW: "🔥 Popular Bhajans" pinned section at top of Public
+//    Library. Shows top 8 by saveCount, hidden when the user has
+//    an active search/filter (a top-N of a filtered set is
+//    confusing). Gives newcomers a clear starting point instead
+//    of a wall of unfamiliar titles.
 //
-// 2. UX/LIVE MODE:
-//    (a) Below the current bhajan's lyrics, live mode now shows a
-//        "All Bhajans in this Program" list — past bhajans dimmed
-//        with a ✓, current bhajan highlighted with ▶, upcoming
-//        bhajans normal. Any tap jumps directly to that bhajan.
-//        Singers no longer need to hammer the → arrow to reach
-//        bhajan 12 of 15.
-//    (b) iOS edge-swipe (system back gesture) used to exit live
-//        mode entirely — a common accidental gesture that lost the
-//        singer's place mid-program. Now intercepted while in
-//        live-program view: swipe back = previous bhajan, only
-//        exits at bhajan 1. The Exit Live button remains the
-//        explicit way to leave.
+//    Uses saveCount, which is already tracked on every save. Zero
+//    new writes, zero new reads, zero infrastructure cost. Sort
+//    happens in memory over the already-loaded snapshot.
 //
-// 3. COPY: "Founded for the Bhajan Community" → "Made for the
-//    Bhajan Community" in all 3 places (splash footer, reading-view
-//    footer, main app footer).
+// 2. NEW: My Library default sort is now viewCount desc, tiebreak
+//    by lastActive desc. The bhajans you sing most often float to
+//    the top. Search / filter behaviour unchanged — just the base
+//    order changed. viewCount was already tracked in openBhajanDetail;
+//    this only changes how filteredBhajans sorts.
 //
-// 4. UX: Create Program → Add Bhajan picker now uses the master
-//    keyword list (same as home page), not just keywords found in
-//    the user's own bhajans. A user with 5 bhajans in library used
-//    to see a nearly-empty keyword dropdown.
+// 3. NEW: Singer (गायक) + Lyricist (रचनाकार) fields on Add/Edit
+//    Bhajan forms — both user library and admin public library.
+//    Optional; blank fields render nothing on the reading view.
+//    Both fields are included in search — a user can now find
+//    a bhajan by typing "Meera Bai" or "Anup Jalota".
 //
-// 5. UX: Program-detail page now has a prominent "➕ Add Bhajan"
-//    button alongside Edit and Delete. Opens the bhajan picker
-//    directly instead of forcing Edit → scroll → tap-add every
-//    time. Edit and Delete remain accessible.
+// Speed impact: all three additions are <1ms of extra work per
+// render on top of memoized filters. Payload growth per bhajan
+// with singer + lyricist filled in is ~40-60 bytes. Imperceptible.
 //
 // Not touched: Firestore config, security rules, memoized cards,
-// listener setup, transliteration, escape hatch, cache layer —
-// everything from Sessions 6-9 untouched.
+// listener setup, transliteration, escape hatch — everything from
+// Sessions 6-10 intact.
 // ==============================================
 
 // ==============================================
@@ -116,7 +107,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.07.27.s10';
+const APP_VERSION = '2026.07.29.s11';
 
 // Onboarding tour steps
 const ONBOARDING_STEPS = [
@@ -653,6 +644,8 @@ const App = () => {
     language: 'Hindi',
     dhun: '',
     scale: '',
+    singer: '',       // SESSION 11
+    lyricist: '',     // SESSION 11
     keywords: [],
     source: ''
   });
@@ -676,6 +669,8 @@ const App = () => {
     language: 'Hindi',
     dhun: '',
     scale: '',
+    singer: '',      // SESSION 11: गायक — original singer / famous rendition
+    lyricist: '',    // SESSION 11: रचनाकार — lyricist / composer
     keywords: [],
     source: ''
   });
@@ -2404,6 +2399,8 @@ const App = () => {
       language: 'Hindi',
       dhun: '',
       scale: '',
+      singer: '',       // SESSION 11
+      lyricist: '',     // SESSION 11
       keywords: [],
       source: ''
     });
@@ -2424,6 +2421,8 @@ const App = () => {
       language: bhajan.language || 'Hindi',
       dhun: bhajan.dhun || '',
       scale: bhajan.scale || '',
+      singer: bhajan.singer || '',      // SESSION 11
+      lyricist: bhajan.lyricist || '',  // SESSION 11
       keywords: bhajan.keywords || [],
       source: bhajan.source || ''
     });
@@ -2455,6 +2454,8 @@ const App = () => {
         language: bhajanForm.language || 'Hindi',
         dhun: bhajanForm.dhun.trim(),
         scale: bhajanForm.scale.trim(),
+        singer: (bhajanForm.singer || '').trim(),     // SESSION 11
+        lyricist: (bhajanForm.lyricist || '').trim(), // SESSION 11
         keywords: bhajanForm.keywords,
         source: bhajanForm.source.trim(),
         ownerId: user.uid,
@@ -2985,6 +2986,8 @@ const App = () => {
           (bhajan.title && bhajan.title.toLowerCase().includes(q)) ||
           (bhajan.lyrics && bhajan.lyrics.toLowerCase().includes(q)) ||
           (bhajan.dhun && bhajan.dhun.toLowerCase().includes(q)) ||
+          (bhajan.singer && bhajan.singer.toLowerCase().includes(q)) ||
+          (bhajan.lyricist && bhajan.lyricist.toLowerCase().includes(q)) ||
           (bhajan.keywords && bhajan.keywords.some(k => k.toLowerCase().includes(q)));
         if (!matches) return false;
       }
@@ -2995,14 +2998,39 @@ const App = () => {
     });
   }, [publicBhajans, debouncedPublicSearch, publicFilterDeity, publicFilterCategory, publicFilterKeyword]);
 
+  // SESSION 11: Popular Bhajans section — top 8 by saveCount
+  // (already-tracked signal, no new writes needed). Shown only when
+  // no active search or filter, so newcomers get a clear starting
+  // point instead of a wall of unfamiliar titles.
+  const topPublicBhajans = useMemo(() => {
+    return [...publicBhajans]
+      .filter(b => (b.saveCount || 0) > 0)
+      .sort((a, b) => {
+        const sa = a.saveCount || 0;
+        const sb = b.saveCount || 0;
+        if (sb !== sa) return sb - sa;
+        return (a.title || '').localeCompare(b.title || '');
+      })
+      .slice(0, 8);
+  }, [publicBhajans]);
+
+  const hasActivePublicFilters = !!(
+    debouncedPublicSearch ||
+    publicFilterDeity ||
+    publicFilterCategory ||
+    publicFilterKeyword
+  );
+
   const filteredBhajans = useMemo(() => {
     const q = debouncedSearchQuery.toLowerCase();
-    return bhajans.filter(bhajan => {
+    const filtered = bhajans.filter(bhajan => {
       if (q) {
         const matches =
           (bhajan.title && bhajan.title.toLowerCase().includes(q)) ||
           (bhajan.lyrics && bhajan.lyrics.toLowerCase().includes(q)) ||
           (bhajan.dhun && bhajan.dhun.toLowerCase().includes(q)) ||
+          (bhajan.singer && bhajan.singer.toLowerCase().includes(q)) ||
+          (bhajan.lyricist && bhajan.lyricist.toLowerCase().includes(q)) ||
           (bhajan.keywords && bhajan.keywords.some(k => k.toLowerCase().includes(q)));
         if (!matches) return false;
       }
@@ -3010,6 +3038,19 @@ const App = () => {
       if (filterCategory && bhajan.category !== filterCategory) return false;
       if (libraryFilterKeyword && (!bhajan.keywords || !bhajan.keywords.includes(libraryFilterKeyword))) return false;
       return true;
+    });
+    // SESSION 11: default sort by viewCount desc so the bhajans you
+    // sing most often float to the top. Tiebreak by lastActive so
+    // recently-opened bhajans beat older ones with the same view
+    // count. Falls back to title A-Z for bhajans never opened.
+    return filtered.sort((a, b) => {
+      const va = a.viewCount || 0;
+      const vb = b.viewCount || 0;
+      if (vb !== va) return vb - va;
+      const la = a.lastActive?.toMillis ? a.lastActive.toMillis() : 0;
+      const lb = b.lastActive?.toMillis ? b.lastActive.toMillis() : 0;
+      if (lb !== la) return lb - la;
+      return (a.title || '').localeCompare(b.title || '');
     });
   }, [bhajans, debouncedSearchQuery, filterDeity, filterCategory, libraryFilterKeyword]);
 
@@ -3335,6 +3376,8 @@ const App = () => {
       language: 'Hindi',
       dhun: '',
       scale: '',
+      singer: '',       // SESSION 11
+      lyricist: '',     // SESSION 11
       keywords: [],
       source: ''
     });
@@ -3353,6 +3396,8 @@ const App = () => {
       language: bhajan.language || 'Hindi',
       dhun: bhajan.dhun || '',
       scale: bhajan.scale || '',
+      singer: bhajan.singer || '',      // SESSION 11
+      lyricist: bhajan.lyricist || '',  // SESSION 11
       keywords: bhajan.keywords || [],
       source: bhajan.source || ''
     });
@@ -3385,6 +3430,8 @@ const App = () => {
         language: publicBhajanForm.language || 'Hindi',
         dhun: publicBhajanForm.dhun.trim(),
         scale: publicBhajanForm.scale.trim(),
+        singer: (publicBhajanForm.singer || '').trim(),     // SESSION 11
+        lyricist: (publicBhajanForm.lyricist || '').trim(), // SESSION 11
         keywords: publicBhajanForm.keywords,
         source: publicBhajanForm.source.trim(),
         addedByUid: user.uid,
@@ -5244,6 +5291,23 @@ const App = () => {
                   </div>
                 )}
 
+                {/* SESSION 11: Singer + Lyricist credits (blank for
+                    traditional/anonymous bhajans; shown when known) */}
+                {(selectedBhajan.singer || selectedBhajan.lyricist) && (
+                  <div className={`text-xs mb-4 flex flex-wrap gap-x-4 gap-y-1 ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                    {selectedBhajan.singer && (
+                      <span>
+                        <span className={`font-semibold ${darkMode ? 'text-teal-300' : 'text-[#0B5A70]'}`}>गायक / Singer:</span> {selectedBhajan.singer}
+                      </span>
+                    )}
+                    {selectedBhajan.lyricist && (
+                      <span>
+                        <span className={`font-semibold ${darkMode ? 'text-teal-300' : 'text-[#0B5A70]'}`}>रचनाकार / Lyricist:</span> {selectedBhajan.lyricist}
+                      </span>
+                    )}
+                  </div>
+                )}
+
                 <div className="mb-4 flex items-center gap-2">
                   {selectedBhajan.scale ? (
                     <button
@@ -5596,6 +5660,34 @@ const App = () => {
                     className={fInput}
                     placeholder="e.g., Raag Yaman, C# Scale"
                   />
+                </div>
+
+                {/* SESSION 11: Singer (गायक) + Lyricist (रचनाकार) */}
+                <div className="grid grid-cols-2 gap-3 mb-4">
+                  <div>
+                    <label className={fLabel}>
+                      गायक / Singer
+                    </label>
+                    <input
+                      type="text"
+                      value={bhajanForm.singer}
+                      onChange={(e) => setBhajanForm({...bhajanForm, singer: e.target.value})}
+                      className={fInput}
+                      placeholder="e.g., Anup Jalota"
+                    />
+                  </div>
+                  <div>
+                    <label className={fLabel}>
+                      रचनाकार / Lyricist
+                    </label>
+                    <input
+                      type="text"
+                      value={bhajanForm.lyricist}
+                      onChange={(e) => setBhajanForm({...bhajanForm, lyricist: e.target.value})}
+                      className={fInput}
+                      placeholder="e.g., Meera Bai"
+                    />
+                  </div>
                 </div>
 
                 {/* Lyrics with Hindi Typing */}
@@ -6740,6 +6832,50 @@ const App = () => {
                 </div>
               ) : (
                 <>
+                  {/* SESSION 11: Popular Bhajans — pinned top-8 by saveCount.
+                      Hidden when the user has an active search/filter
+                      (a top-N of a filtered set is confusing UX).
+                      Gives newcomers a clear starting point instead of a
+                      wall of unfamiliar titles. Zero infrastructure cost
+                      — saveCount is already tracked on every save. */}
+                  {!hasActivePublicFilters && topPublicBhajans.length > 0 && (
+                    <div className="mb-5">
+                      <div className="flex items-center justify-between mb-3">
+                        <p className={`text-sm font-bold flex items-center gap-1.5 ${darkMode ? 'text-amber-100' : 'text-[#0B5A70]'}`}>
+                          🔥 Popular Bhajans
+                        </p>
+                        <span className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>
+                          Most saved
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        {topPublicBhajans.map((b, idx) => (
+                          <button
+                            key={b.id}
+                            onClick={() => openPublicBhajanDetail(b)}
+                            className={`w-full text-left rounded-xl p-3 border transition-all flex items-center gap-3 ${darkMode ? 'bg-[#162226] border-[#0B5A70]/15 hover:border-[#0B5A70]/30' : 'bg-[#FFFCF8] border-[#0B5A70]/8 shadow-[0_1px_4px_rgba(11,90,112,0.04)] hover:border-[#0B5A70]/25 hover:shadow-[0_2px_8px_rgba(11,90,112,0.10)]'}`}
+                          >
+                            <div className={`text-base font-bold min-w-[24px] text-center flex-shrink-0 ${darkMode ? 'text-orange-300' : 'text-[#E65100]'}`}>
+                              {idx + 1}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className={`text-sm font-bold truncate ${darkMode ? 'text-amber-100' : 'text-[#0B5A70]'}`}>
+                                {b.title}
+                              </p>
+                              <p className={`text-xs truncate ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                                {b.deity} · {b.category}
+                              </p>
+                            </div>
+                            <span className={`text-xs flex-shrink-0 ${darkMode ? 'text-gray-500' : 'text-[#0B5A70]/50'}`}>
+                              ✨ {b.saveCount || 0}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                      <div className={`mt-4 border-t ${darkMode ? 'border-[#0B5A70]/15' : 'border-[#0B5A70]/8'}`} />
+                    </div>
+                  )}
+
                   <div className="flex justify-end mb-2">
                     <div className="inline-flex bg-[#0B5A70]/5 rounded-lg p-0.5 border border-[#0B5A70]/10">
                       <button
@@ -6911,6 +7047,22 @@ const App = () => {
                     <p className={`text-sm ${darkMode ? 'text-orange-200' : 'text-[#E65100]'}`}>
                       <span className="font-semibold">तर्ज़ / धुन:</span> {selectedPublicBhajan.dhun}
                     </p>
+                  </div>
+                )}
+
+                {/* SESSION 11 */}
+                {(selectedPublicBhajan.singer || selectedPublicBhajan.lyricist) && (
+                  <div className={`text-xs mb-4 flex flex-wrap gap-x-4 gap-y-1 ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                    {selectedPublicBhajan.singer && (
+                      <span>
+                        <span className={`font-semibold ${darkMode ? 'text-teal-300' : 'text-[#0B5A70]'}`}>गायक / Singer:</span> {selectedPublicBhajan.singer}
+                      </span>
+                    )}
+                    {selectedPublicBhajan.lyricist && (
+                      <span>
+                        <span className={`font-semibold ${darkMode ? 'text-teal-300' : 'text-[#0B5A70]'}`}>रचनाकार / Lyricist:</span> {selectedPublicBhajan.lyricist}
+                      </span>
+                    )}
                   </div>
                 )}
 
@@ -7715,6 +7867,30 @@ const App = () => {
                     className="w-full px-4 py-3 border border-[#0B5A70]/15 rounded-xl outline-none"
                     placeholder="e.g., Raag Yaman, C# Scale"
                   />
+                </div>
+
+                {/* SESSION 11: Singer + Lyricist (public form) */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-semibold text-[#0B5A70] mb-1">गायक / Singer</label>
+                    <input
+                      type="text"
+                      value={publicBhajanForm.singer}
+                      onChange={(e) => setPublicBhajanForm({...publicBhajanForm, singer: e.target.value})}
+                      className="w-full px-4 py-3 border border-[#0B5A70]/15 rounded-xl outline-none"
+                      placeholder="e.g., Anup Jalota"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-[#0B5A70] mb-1">रचनाकार / Lyricist</label>
+                    <input
+                      type="text"
+                      value={publicBhajanForm.lyricist}
+                      onChange={(e) => setPublicBhajanForm({...publicBhajanForm, lyricist: e.target.value})}
+                      className="w-full px-4 py-3 border border-[#0B5A70]/15 rounded-xl outline-none"
+                      placeholder="e.g., Meera Bai"
+                    />
+                  </div>
                 </div>
 
                 {/* OCR import block (public form) */}
