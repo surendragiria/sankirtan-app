@@ -1,39 +1,35 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 
 // ==============================================
-// SANKIRTAN SAAS - SESSION 11
+// SANKIRTAN SAAS - SESSION 12
 // Bhajan Se Bhagwan Tak
-// CHANGES (Session 11 — three user-requested additions):
+// CHANGES (Session 12 — "fresh library" shuffle):
 //
-// 1. NEW: "🔥 Popular Bhajans" pinned section at top of Public
-//    Library. Shows top 8 by saveCount, hidden when the user has
-//    an active search/filter (a top-N of a filtered set is
-//    confusing). Gives newcomers a clear starting point instead
-//    of a wall of unfamiliar titles.
+// 1. NEW: Public Library main grid is now session-shuffled.
+//    Every browsing session gets a different random order of
+//    bhajans, so returning visitors don't see the same
+//    alphabetical wall each time. Feels like "new content"
+//    without any new content having to arrive.
 //
-//    Uses saveCount, which is already tracked on every save. Zero
-//    new writes, zero new reads, zero infrastructure cost. Sort
-//    happens in memory over the already-loaded snapshot.
+//    Implementation:
+//    - mulberry32 (tiny deterministic PRNG) seeded from a value
+//      stored in sessionStorage under 'sankirtan-shuffle-seed'.
+//    - New session (new tab / next day / app relaunch) → new
+//      seed → new order.
+//    - Same session (filter, search, load-more, back-nav) →
+//      same seed → same stable order. No dizzying re-shuffles
+//      when the user is actively browsing.
+//    - Popular Bhajans section stays deterministic (top 8 by
+//      saveCount). Shuffle only affects the main grid below it.
+//    - Duplication between Popular and main grid is intentional:
+//      well-known bhajans are honestly both "popular" AND part
+//      of the library, and excluding them would create a subtle
+//      "where did that famous one go?" mystery.
 //
-// 2. NEW: My Library default sort is now viewCount desc, tiebreak
-//    by lastActive desc. The bhajans you sing most often float to
-//    the top. Search / filter behaviour unchanged — just the base
-//    order changed. viewCount was already tracked in openBhajanDetail;
-//    this only changes how filteredBhajans sorts.
+//    Zero infrastructure cost — the shuffle is ~1ms in-memory
+//    work on the already-loaded snapshot.
 //
-// 3. NEW: Singer (गायक) + Lyricist (रचनाकार) fields on Add/Edit
-//    Bhajan forms — both user library and admin public library.
-//    Optional; blank fields render nothing on the reading view.
-//    Both fields are included in search — a user can now find
-//    a bhajan by typing "Meera Bai" or "Anup Jalota".
-//
-// Speed impact: all three additions are <1ms of extra work per
-// render on top of memoized filters. Payload growth per bhajan
-// with singer + lyricist filled in is ~40-60 bytes. Imperceptible.
-//
-// Not touched: Firestore config, security rules, memoized cards,
-// listener setup, transliteration, escape hatch — everything from
-// Sessions 6-10 intact.
+// Not touched: everything else from Sessions 6-11.
 // ==============================================
 
 // ==============================================
@@ -107,7 +103,59 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.07.29.s11';
+const APP_VERSION = '2026.08.08.s12';
+
+// ==============================================
+// SESSION 12: Session-scoped shuffle for Public Library
+//
+// mulberry32 is a tiny, fast, deterministic pseudo-random generator.
+// Same seed → same sequence of numbers → same shuffle result. This
+// is what makes the shuffle *stable* within a session (so search,
+// filter, and load-more don't re-randomize) while still giving a
+// fresh order on each new session.
+//
+// The seed itself lives in sessionStorage. sessionStorage clears
+// when the tab closes, so a "session" naturally means "one browsing
+// stretch." Reopening the app in a new tab gets a new seed → new
+// shuffle → feels like new content on return visits.
+// ==============================================
+const mulberry32 = (seed) => {
+  let t = seed >>> 0;
+  return () => {
+    t = (t + 0x6D2B79F5) >>> 0;
+    let r = Math.imul(t ^ (t >>> 15), 1 | t);
+    r = (r + Math.imul(r ^ (r >>> 7), 61 | r)) ^ r;
+    return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+  };
+};
+
+const seededShuffle = (arr, seed) => {
+  const out = arr.slice();
+  const rand = mulberry32(seed);
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+};
+
+const getSessionShuffleSeed = () => {
+  try {
+    const KEY = 'sankirtan-shuffle-seed';
+    let seed = sessionStorage.getItem(KEY);
+    if (!seed) {
+      // 32-bit non-zero seed
+      seed = String((Math.floor(Math.random() * 0xFFFFFFFE) + 1) >>> 0);
+      sessionStorage.setItem(KEY, seed);
+    }
+    return parseInt(seed, 10) || 1;
+  } catch {
+    // sessionStorage disabled (rare) — fall back to a per-page-load
+    // seed. Still gives a shuffle, just not stable if the app
+    // somehow re-mounts within the same load.
+    return (Math.floor(Math.random() * 0xFFFFFFFE) + 1) >>> 0;
+  }
+};
 
 // Onboarding tour steps
 const ONBOARDING_STEPS = [
@@ -609,6 +657,11 @@ const App = () => {
   // Public Library states
   const [publicBhajans, setPublicBhajans] = useState([]);
   const [publicLoading, setPublicLoading] = useState(false);
+  // SESSION 12: session-scoped seed drives seededShuffle in the
+  // filteredPublicBhajans memo. Set once per browsing session so
+  // the order stays stable while the user is here, but reshuffles
+  // on the next visit (new tab / next day / relaunch).
+  const [shuffleSeed] = useState(() => getSessionShuffleSeed());
   // SESSION 8: escape hatch — after 8 seconds of skeleton loading,
   // show a "Having trouble loading" message with a Retry button so
   // users aren't stuck watching skeletons forever if Firestore's
@@ -2980,7 +3033,7 @@ const App = () => {
   // ==============================================
   const filteredPublicBhajans = useMemo(() => {
     const q = debouncedPublicSearch.toLowerCase();
-    return publicBhajans.filter(bhajan => {
+    const filtered = publicBhajans.filter(bhajan => {
       if (q) {
         const matches =
           (bhajan.title && bhajan.title.toLowerCase().includes(q)) ||
@@ -2996,7 +3049,14 @@ const App = () => {
       if (publicFilterKeyword && (!bhajan.keywords || !bhajan.keywords.includes(publicFilterKeyword))) return false;
       return true;
     });
-  }, [publicBhajans, debouncedPublicSearch, publicFilterDeity, publicFilterCategory, publicFilterKeyword]);
+    // SESSION 12: session-scoped seeded shuffle. Same seed for the
+    // whole session means search / filter / load-more don't cause
+    // a re-randomization. New session = new seed = new order,
+    // giving returning visitors a "fresh library" feeling.
+    // Popular Bhajans section stays deterministic (sorted by
+    // saveCount) — this shuffle only affects the main grid below it.
+    return seededShuffle(filtered, shuffleSeed);
+  }, [publicBhajans, debouncedPublicSearch, publicFilterDeity, publicFilterCategory, publicFilterKeyword, shuffleSeed]);
 
   // SESSION 11: Popular Bhajans section — top 8 by saveCount
   // (already-tracked signal, no new writes needed). Shown only when
