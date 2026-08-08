@@ -1,35 +1,42 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 
 // ==============================================
-// SANKIRTAN SAAS - SESSION 12
+// SANKIRTAN SAAS - SESSION 13
 // Bhajan Se Bhagwan Tak
-// CHANGES (Session 12 — "fresh library" shuffle):
+// CHANGES (Session 13 — deep-link sharing):
 //
-// 1. NEW: Public Library main grid is now session-shuffled.
-//    Every browsing session gets a different random order of
-//    bhajans, so returning visitors don't see the same
-//    alphabetical wall each time. Feels like "new content"
-//    without any new content having to arrive.
+// 1. NEW: sharing a public bhajan now appends a deep link
+//    (sankirtan.app/?b=<id>) alongside the lyric preview.
+//    Recipients tap the link and land directly on the bhajan
+//    reading view instead of the home page — turns every share
+//    into a one-tap path back to the app.
 //
-//    Implementation:
-//    - mulberry32 (tiny deterministic PRNG) seeded from a value
-//      stored in sessionStorage under 'sankirtan-shuffle-seed'.
-//    - New session (new tab / next day / app relaunch) → new
-//      seed → new order.
-//    - Same session (filter, search, load-more, back-nav) →
-//      same seed → same stable order. No dizzying re-shuffles
-//      when the user is actively browsing.
-//    - Popular Bhajans section stays deterministic (top 8 by
-//      saveCount). Shuffle only affects the main grid below it.
-//    - Duplication between Popular and main grid is intentional:
-//      well-known bhajans are honestly both "popular" AND part
-//      of the library, and excluding them would create a subtle
-//      "where did that famous one go?" mystery.
+//    - Public reading view share: includes ?b=<id>
+//    - My Library share (private bhajans): unchanged, text-only
+//      (a private-id link wouldn't resolve for the recipient).
+//    - Web Share API gets the URL as a separate field so WhatsApp
+//      / iMessage can render a proper link preview.
 //
-//    Zero infrastructure cost — the shuffle is ~1ms in-memory
-//    work on the already-loaded snapshot.
+// 2. NEW: link-arriving visitors skip the sign-in wall.
+//    A fresh visit to sankirtan.app/?b=<id> auto-enables guestMode
+//    at boot, so the recipient lands in the app immediately. They
+//    can still sign in via the header button if they want to save.
+//    Bare sankirtan.app visits (no ?b) behave exactly as before —
+//    sign-in vs guest choice preserved.
 //
-// Not touched: everything else from Sessions 6-11.
+// 3. NEW: the deep link is consumed once, then stripped from the
+//    URL via replaceState. Page reload doesn't re-open the shared
+//    bhajan; the user is now navigating normally.
+//
+// 4. UX: if the shared id doesn't match a bhajan (deleted, wrong
+//    id in the URL), a toast says "That bhajan couldn't be found.
+//    Browse the library instead." and the user lands on Public
+//    Library rather than a blank screen.
+//
+// Not touched: rich-preview OG cards (would need server-side
+// rendering; deferred until link click-through data justifies it),
+// slug URLs (deferred; ?b=<id> works fine for now), Firestore
+// config, security rules, everything else from Sessions 6-12.
 // ==============================================
 
 // ==============================================
@@ -103,7 +110,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.08.08.s12';
+const APP_VERSION = '2026.08.08.s13';
 
 // ==============================================
 // SESSION 12: Session-scoped shuffle for Public Library
@@ -295,16 +302,35 @@ if (typeof document !== 'undefined' && !document.getElementById('sankirtan-anima
 
 // ==============================================
 // SHARE HELPER — Web Share API with clipboard fallback
+// SESSION 13: for public bhajans, appends a deep link
+// (?b=<id>) so recipients land directly on that bhajan
+// instead of the home page. Private-library bhajans still
+// share as text only — a private-id link wouldn't be
+// resolvable by the recipient anyway.
 // ==============================================
-const shareBhajan = async (bhajan) => {
+const shareBhajan = async (bhajan, isPublic = false) => {
   if (!bhajan) return false;
   const shareTitle = bhajan.title || 'Bhajan';
   const lyricsPreview = (bhajan.lyrics || '').trim().substring(0, 300);
-  const shareText = `${shareTitle}\n\n${lyricsPreview}${(bhajan.lyrics || '').length > 300 ? '…' : ''}\n\n— Shared from Sankirtan App (sankirtan.app)`;
+  const preview = `${shareTitle}\n\n${lyricsPreview}${(bhajan.lyrics || '').length > 300 ? '…' : ''}`;
+
+  const deepLink = isPublic && bhajan.id
+    ? `https://sankirtan.app/?b=${encodeURIComponent(bhajan.id)}`
+    : 'https://sankirtan.app';
+
+  const shareText = isPublic
+    ? `${preview}\n\nRead full at: ${deepLink}`
+    : `${preview}\n\n— Shared from Sankirtan (sankirtan.app)`;
 
   if (navigator.share) {
     try {
-      await navigator.share({ title: shareTitle, text: shareText });
+      // SESSION 13: pass URL as a separate field on public shares so
+      // platforms that render link previews (WhatsApp, iMessage) can
+      // pick it up cleanly. Fallback platforms just see the text.
+      const shareData = isPublic
+        ? { title: shareTitle, text: shareText, url: deepLink }
+        : { title: shareTitle, text: shareText };
+      await navigator.share(shareData);
       return 'shared';
     } catch (err) {
       if (err.name === 'AbortError') return 'cancelled';
@@ -562,7 +588,30 @@ const App = () => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [splashVisible, setSplashVisible] = useState(true);
-  const [guestMode, setGuestMode] = useState(false);
+
+  // SESSION 13: parse a deep link at boot time — links shared out
+  // as `sankirtan.app/?b=<id>` should open the reading view for
+  // that bhajan directly instead of the sign-in wall.
+  //
+  // We read the URL synchronously in the initial state so we know
+  // as early as possible whether the user is arriving via a link.
+  // If they are, we default guestMode to true so the sign-in page
+  // is skipped and they land in the app — recipients of a WhatsApp
+  // forward should not be gated by an auth screen. Existing sign-in
+  // paths remain accessible via the header "Sign In" button.
+  //
+  // The pending id is consumed later by an effect that waits for
+  // publicBhajans to arrive.
+  const initialDeepLinkId = (() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const bId = params.get('b');
+      return bId && /^[A-Za-z0-9_-]{6,64}$/.test(bId) ? bId : null;
+    } catch { return null; }
+  })();
+  const [pendingDeepLinkId, setPendingDeepLinkId] = useState(initialDeepLinkId);
+
+  const [guestMode, setGuestMode] = useState(!!initialDeepLinkId);
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
   const [showBrowserWarning, setShowBrowserWarning] = useState(() => {
     const isIOSChrome = /CriOS/.test(navigator.userAgent);
@@ -2965,6 +3014,37 @@ const App = () => {
     setCurrentView('public-bhajan-detail');
   }, []);
 
+  // SESSION 13: consume a pending deep link once the public library
+  // has loaded. We wait for publicBhajans (rather than opening
+  // eagerly) so that (a) the reading view has real content to show,
+  // (b) we can toast a "couldn't find" message if the id is invalid.
+  //
+  // Runs once when both conditions are true:
+  //   - a pending id exists (someone arrived via ?b=<id>)
+  //   - publicBhajans has arrived (either from cache or network)
+  // Cleaning up the URL after consumption means a page refresh
+  // doesn't re-trigger this — the user is now navigating within
+  // the app normally.
+  useEffect(() => {
+    if (!pendingDeepLinkId) return;
+    if (!publicBhajans || publicBhajans.length === 0) return;
+
+    const target = publicBhajans.find(b => b.id === pendingDeepLinkId);
+    if (target) {
+      openPublicBhajanDetail(target);
+    } else {
+      showToast('That bhajan couldn\'t be found. Browse the library instead.', 'error');
+    }
+
+    setPendingDeepLinkId(null);
+    try {
+      // Strip ?b=... from the URL so a reload doesn't re-open the
+      // link and the back button behaves normally.
+      const clean = window.location.pathname + window.location.hash;
+      window.history.replaceState({ view: target ? 'public-bhajan-detail' : 'public-library' }, '', clean);
+    } catch { /* non-fatal */ }
+  }, [pendingDeepLinkId, publicBhajans, openPublicBhajanDetail, showToast]);
+
   const saveToMyLibrary = useCallback(async (publicBhajan) => {
     if (!user || !userProfile) {
       if (guestMode) { setGuestMode(false); }
@@ -3781,8 +3861,12 @@ const App = () => {
   );
 
   // Share handler with toast feedback
-  const handleShareBhajan = useCallback(async (bhajan) => {
-    const result = await shareBhajan(bhajan);
+  // SESSION 13: isPublic flag determines whether we include a
+  // deep link. Public reading view passes true; my-library
+  // reading view passes false (private ids aren't resolvable
+  // by recipients).
+  const handleShareBhajan = useCallback(async (bhajan, isPublic = false) => {
+    const result = await shareBhajan(bhajan, isPublic);
     if (result === 'copied') showToast('📋 Lyrics copied to clipboard!');
     else if (result === 'shared') showToast('✓ Shared successfully!');
   }, [showToast]);
@@ -7057,7 +7141,7 @@ const App = () => {
                   )}
 
                   <button
-                    onClick={() => handleShareBhajan(selectedPublicBhajan)}
+                    onClick={() => handleShareBhajan(selectedPublicBhajan, true)}
                     className={`px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 transition-colors ${darkMode ? 'bg-[#1e2e33] text-gray-300 hover:bg-[#0B5A70]/20' : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15'}`}
                     title="Share this bhajan"
                   >
