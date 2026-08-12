@@ -1,42 +1,32 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 
 // ==============================================
-// SANKIRTAN SAAS - SESSION 13
+// SANKIRTAN SAAS - SESSION 15
 // Bhajan Se Bhagwan Tak
-// CHANGES (Session 13 — deep-link sharing):
+// CHANGES (Session 15 — landing page guest-button visibility):
 //
-// 1. NEW: sharing a public bhajan now appends a deep link
-//    (sankirtan.app/?b=<id>) alongside the lyric preview.
-//    Recipients tap the link and land directly on the bhajan
-//    reading view instead of the home page — turns every share
-//    into a one-tap path back to the app.
+// User reported: "Browse Public Library as Guest" button on the
+// landing page was nearly invisible — thin 15%-opacity teal border
+// on a cream card, 70%-opacity teal text, no fill. Looked like a
+// disabled state rather than a real option. First-time visitors
+// likely saw only the "Sign in with Google" button and either
+// bounced or signed in when they'd have preferred to browse first.
 //
-//    - Public reading view share: includes ?b=<id>
-//    - My Library share (private bhajans): unchanged, text-only
-//      (a private-id link wouldn't resolve for the recipient).
-//    - Web Share API gets the URL as a separate field so WhatsApp
-//      / iMessage can render a proper link preview.
+// 1. FIX: Guest button now has visible affordance —
+//    - Light saffron fill (bg-[#E65100]/10)
+//    - 40% saffron border (up from 15%)
+//    - Full-opacity saffron text (was 70% teal)
+//    - Small saffron-tinted shadow for depth
+//    - Border widened to 2px so it reads as intentional
 //
-// 2. NEW: link-arriving visitors skip the sign-in wall.
-//    A fresh visit to sankirtan.app/?b=<id> auto-enables guestMode
-//    at boot, so the recipient lands in the app immediately. They
-//    can still sign in via the header button if they want to save.
-//    Bare sankirtan.app visits (no ?b) behave exactly as before —
-//    sign-in vs guest choice preserved.
+// Design intent preserved: Sign In with Google remains the visually
+// primary option (white card with Google logo, high contrast).
+// The guest button now reads as a genuine secondary option in the
+// app's own saffron accent color, matching the wordmark and
+// devotional palette rather than blending into the cream card.
 //
-// 3. NEW: the deep link is consumed once, then stripped from the
-//    URL via replaceState. Page reload doesn't re-open the shared
-//    bhajan; the user is now navigating normally.
-//
-// 4. UX: if the shared id doesn't match a bhajan (deleted, wrong
-//    id in the URL), a toast says "That bhajan couldn't be found.
-//    Browse the library instead." and the user lands on Public
-//    Library rather than a blank screen.
-//
-// Not touched: rich-preview OG cards (would need server-side
-// rendering; deferred until link click-through data justifies it),
-// slug URLs (deferred; ?b=<id> works fine for now), Firestore
-// config, security rules, everything else from Sessions 6-12.
+// Not touched: everything else. No changes to auth logic, gate,
+// data flow, or navigation. Purely a CSS visibility fix.
 // ==============================================
 
 // ==============================================
@@ -110,7 +100,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.08.08.s13';
+const APP_VERSION = '2026.08.12.s15';
 
 // ==============================================
 // SESSION 12: Session-scoped shuffle for Public Library
@@ -4337,7 +4327,11 @@ const App = () => {
     // at evening programs. Dark background is also easier to read
     // from a distance under stage lighting.
     const liveBg = darkMode ? 'bg-[#0f1a1c]' : 'bg-[#FFF8F0]';
-    const liveHeaderBg = darkMode ? 'bg-[#0f1a1c]/95 border-[#0B5A70]/20' : 'bg-[#FFF8F0]/95 border-[#0B5A70]/10';
+    // SESSION 14: opaque background (was /95 + backdrop-blur-md).
+    // iOS Safari renders backdrop-blur on fixed elements by pulling
+    // scrolled content through the blur, which makes the bar look
+    // like it's floating mid-page. Solid bg fixes the visual.
+    const liveHeaderBg = darkMode ? 'bg-[#0f1a1c] border-[#0B5A70]/20' : 'bg-[#FFF8F0] border-[#0B5A70]/10';
     const liveTitleColor = darkMode ? 'text-amber-100' : 'text-[#0B5A70]';
     const liveMutedColor = darkMode ? 'text-gray-400' : 'text-[#0B5A70]/60';
     const liveMutedGray = darkMode ? 'text-gray-500' : 'text-gray-500';
@@ -4368,7 +4362,7 @@ const App = () => {
         {confirmDialogJsx}
         {toastJsx}
         {/* Live Header */}
-        <div className={`backdrop-blur-md sticky top-0 z-40 border-b ${liveHeaderBg}`}>
+        <div className={`sticky top-0 z-40 border-b ${liveHeaderBg}`}>
           <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
             <button
               onClick={exitLiveProgram}
@@ -4521,7 +4515,7 @@ const App = () => {
         </div>
 
         {/* Bottom Navigation Bar (live mode) — SESSION 6: dark-mode aware */}
-        <div className={`fixed bottom-0 left-0 right-0 backdrop-blur-md border-t shadow-2xl z-40 ${liveHeaderBg}`}>
+        <div className={`fixed bottom-0 left-0 right-0 border-t shadow-2xl z-40 ${liveHeaderBg}`}>
           <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
             <button
               onClick={livePrev}
@@ -4964,7 +4958,7 @@ const App = () => {
 
         {/* Header — SESSION 5: navigation moved to bottom tab bar;
             header now carries only branding + utility actions */}
-        <header className={`sticky top-0 z-40 border-b ${darkMode ? 'bg-[#0f1a1c] border-[#0B5A70]/15' : 'bg-[#FFF8F0]/95 backdrop-blur-md border-[#0B5A70]/10'}`}>
+        <header className={`sticky top-0 z-40 border-b ${darkMode ? 'bg-[#0f1a1c] border-[#0B5A70]/15' : 'bg-[#FFF8F0] border-[#0B5A70]/10'}`}>
           <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
             <button
               onClick={() => setCurrentView('public-library')}
@@ -8298,8 +8292,8 @@ const App = () => {
           <nav
             className={`fixed bottom-0 left-0 right-0 z-40 border-t ${
               darkMode
-                ? 'bg-[#0f1a1c]/95 backdrop-blur-md border-[#0B5A70]/20'
-                : 'bg-[#FFF8F0]/95 backdrop-blur-md border-[#0B5A70]/10 shadow-[0_-2px_12px_rgba(11,90,112,0.06)]'
+                ? 'bg-[#0f1a1c] border-[#0B5A70]/20'
+                : 'bg-[#FFF8F0] border-[#0B5A70]/10 shadow-[0_-2px_12px_rgba(11,90,112,0.06)]'
             }`}
             style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
             aria-label="Main navigation"
@@ -8491,7 +8485,7 @@ const App = () => {
                     setSplashVisible(false);
                     setCurrentView('public-library');
                   }}
-                  className="w-full bg-transparent border border-[#0B5A70]/15 hover:border-[#0B5A70]/30 hover:bg-[#0B5A70]/5 transition-all py-3 px-4 rounded-xl font-semibold text-[#0B5A70]/70 text-sm"
+                  className="w-full bg-[#E65100]/10 hover:bg-[#E65100]/20 border-2 border-[#E65100]/40 hover:border-[#E65100]/60 transition-all py-3 px-4 rounded-xl font-semibold text-[#E65100] text-sm shadow-[0_1px_4px_rgba(230,81,0,0.10)]"
                 >
                   Browse Public Library as Guest →
                 </button>
