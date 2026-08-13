@@ -1,66 +1,47 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 
 // ==============================================
-// SANKIRTAN SAAS - SESSION 16
+// SANKIRTAN SAAS - SESSION 17
 // Bhajan Se Bhagwan Tak
-// CHANGES (Session 16 — आज का भजन · Today's Bhajan):
+// CHANGES (Session 17 — "Aaj Ka Bhajan" tag on WhatsApp shares):
 //
-// New feature: an admin-curated "Bhajan of the Day" surfaces at
-// the very top of the Public Library. Turns the app from a
-// searchable library into a daily-return content engine. Every
-// bhakt opening the app sees the same day's featured bhajan —
-// a shared community moment. One-tap Share sends it to WhatsApp
-// with the Session 13 deep link, so today's bhajan becomes a
-// mini-poster that circulates through family groups.
+// When a user shares from the "आज का भजन" card (Session 16), the
+// WhatsApp message now leads with a bilingual "Today's Bhajan"
+// header so recipients in a WhatsApp group understand context
+// before deciding whether to tap. Recipients seeing a random
+// bhajan lyric forward often ignore it; a bhajan tagged as
+// "today's featured pick from Sankirtan" earns the click.
 //
-// Implementation
+// Format (Marwari-bhakt WhatsApp tuned):
 //
-// 1. NEW Firestore collection: `dailyBhajans/{YYYY-MM-DD}`
-//    Fields: { bhajanId, note, curatedByUid, updatedAt }
-//    Read: single doc, one-time per app open.
-//    Write: admin only (rules must be updated — see below).
+//   🌟 आज का भजन · Today's Bhajan
 //
-// 2. NEW state:
-//    - dailyBhajanId / dailyBhajanNote
-//      (fetched on app boot from `dailyBhajans/{today}`)
-//    - resolvedDailyBhajan (memo): uses admin curation if present,
-//      otherwise a deterministic fallback (hash of today's date
-//      biased toward the top ~40 by saveCount so the fallback
-//      isn't an obscure one).
+//   बाबोसा चालीसा
+//   (Babosa · Chalisa)
 //
-// 3. NEW UI:
-//    - Prominent card at top of Public Library, above Popular
-//      Bhajans. Shows title, deity, dhun, note (if curated),
-//      lyric preview, plus [📖 Read] and [↗ Share] buttons.
-//    - Hidden when the user has an active search or filter (a
-//      "today's" card next to filtered results is confusing).
-//    - Admin panel: a scheduler section with date picker,
-//      bhajan dropdown, optional note, save/clear. Loads existing
-//      curation for a chosen date so admin doesn't accidentally
-//      overwrite. Supports batch-curating a week ahead.
+//   "मंगलवार को हनुमानजी के लिए"   ← curator's optional note
 //
-// 4. NEW helpers (module-scope):
-//    - getTodayKey(): YYYY-MM-DD in the user's LOCAL timezone
-//      (Delhi tomorrow, not UTC tomorrow — critical for admin UX).
-//    - hashDateKey(): FNV-1a → 32-bit seed for the fallback pick.
+//   श्री बाबोसा चालीसा जय हो...
 //
-// Firestore rules — YOU MUST UPDATE:
+//   एक tap में पूरा भजन पढ़ें:
+//   https://sankirtan.app/?b=<id>
 //
-//   match /dailyBhajans/{dayKey} {
-//     allow read: if true;
-//     allow write: if isAdmin();
-//   }
+// Changes
+// - shareBhajan() gains a third parameter: opts = { isDaily,
+//   dailyNote }. When isDaily=true AND isPublic=true, the
+//   share text uses the daily format above; otherwise falls
+//   back to the standard Session 13 format.
+// - Native share sheet title also gets prefixed with
+//   "आज का भजन:" so platforms that show a title (iMessage,
+//   some launchers) surface the context there too.
+// - handleShareBhajan() gains matching opts forwarding.
+// - Today's Bhajan card's Share button passes isDaily=true
+//   and the curator's note. Every other share button in the
+//   app continues to use the default (no isDaily) — reading-
+//   view shares stay clean, private-library shares unchanged.
 //
-// Without this, the read fails silently and the fallback pick
-// kicks in for everyone including the admin's own scheduled dates.
-// The client swallows read errors gracefully so no UX regression;
-// the feature just quietly runs on fallback-only mode until rules
-// are pushed.
-//
-// Not touched: everything else. No changes to card memoization,
-// listener flow, cache layer, sharing logic, or deep links —
-// this feature builds on Session 13's share plumbing and
-// Session 11's saveCount signal.
+// Not touched: everything else. No changes to daily fetch,
+// admin scheduler, memoized card, or deep link handling.
 // ==============================================
 
 // ==============================================
@@ -134,7 +115,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.08.13.s16b';
+const APP_VERSION = '2026.08.13.s17';
 
 // ==============================================
 // SESSION 12: Session-scoped shuffle for Public Library
@@ -355,20 +336,48 @@ if (typeof document !== 'undefined' && !document.getElementById('sankirtan-anima
 // instead of the home page. Private-library bhajans still
 // share as text only — a private-id link wouldn't be
 // resolvable by the recipient anyway.
+// SESSION 17: when the share originates from the "आज का भजन"
+// card (isDaily = true), prepend a bilingual tag so recipients
+// in a WhatsApp group understand WHY the sender is sharing it
+// ("today's featured bhajan") and are more likely to tap the
+// link. Also includes the curator's optional note if present.
 // ==============================================
-const shareBhajan = async (bhajan, isPublic = false) => {
+const shareBhajan = async (bhajan, isPublic = false, opts = {}) => {
   if (!bhajan) return false;
+  const isDaily = !!opts.isDaily;
+  const dailyNote = (opts.dailyNote || '').trim();
+
   const shareTitle = bhajan.title || 'Bhajan';
+  const meta = [bhajan.deity, bhajan.category].filter(Boolean).join(' · ');
   const lyricsPreview = (bhajan.lyrics || '').trim().substring(0, 300);
-  const preview = `${shareTitle}\n\n${lyricsPreview}${(bhajan.lyrics || '').length > 300 ? '…' : ''}`;
+  const truncated = (bhajan.lyrics || '').length > 300 ? '…' : '';
 
   const deepLink = isPublic && bhajan.id
     ? `https://sankirtan.app/?b=${encodeURIComponent(bhajan.id)}`
     : 'https://sankirtan.app';
 
-  const shareText = isPublic
-    ? `${preview}\n\nRead full at: ${deepLink}`
-    : `${preview}\n\n— Shared from Sankirtan (sankirtan.app)`;
+  let shareText;
+  if (isDaily && isPublic) {
+    // Bilingual "Today's Bhajan" header + meta + optional curator
+    // note + lyric preview + warm Hindi CTA. Format tuned for
+    // WhatsApp readability in Marwari bhakt groups.
+    const parts = [
+      '🌟 आज का भजन · Today\'s Bhajan',
+      '',
+      shareTitle,
+    ];
+    if (meta) parts.push(`(${meta})`);
+    if (dailyNote) parts.push('', `"${dailyNote}"`);
+    parts.push('', lyricsPreview + truncated);
+    parts.push('', 'एक tap में पूरा भजन पढ़ें:', deepLink);
+    shareText = parts.join('\n');
+  } else if (isPublic) {
+    // Standard public share (from reading view etc)
+    shareText = `${shareTitle}\n\n${lyricsPreview}${truncated}\n\nRead full at: ${deepLink}`;
+  } else {
+    // Private-library bhajan — text-only, no link
+    shareText = `${shareTitle}\n\n${lyricsPreview}${truncated}\n\n— Shared from Sankirtan (sankirtan.app)`;
+  }
 
   if (navigator.share) {
     try {
@@ -376,7 +385,7 @@ const shareBhajan = async (bhajan, isPublic = false) => {
       // platforms that render link previews (WhatsApp, iMessage) can
       // pick it up cleanly. Fallback platforms just see the text.
       const shareData = isPublic
-        ? { title: shareTitle, text: shareText, url: deepLink }
+        ? { title: isDaily ? `आज का भजन: ${shareTitle}` : shareTitle, text: shareText, url: deepLink }
         : { title: shareTitle, text: shareText };
       await navigator.share(shareData);
       return 'shared';
@@ -4097,8 +4106,11 @@ const App = () => {
   // deep link. Public reading view passes true; my-library
   // reading view passes false (private ids aren't resolvable
   // by recipients).
-  const handleShareBhajan = useCallback(async (bhajan, isPublic = false) => {
-    const result = await shareBhajan(bhajan, isPublic);
+  // SESSION 17: opts.isDaily=true (from the "आज का भजन" card)
+  // prepends the bilingual "Today's Bhajan" tag to the share
+  // text so recipients understand context.
+  const handleShareBhajan = useCallback(async (bhajan, isPublic = false, opts = {}) => {
+    const result = await shareBhajan(bhajan, isPublic, opts);
     if (result === 'copied') showToast('📋 Lyrics copied to clipboard!');
     else if (result === 'shared') showToast('✓ Shared successfully!');
   }, [showToast]);
@@ -7275,7 +7287,10 @@ const App = () => {
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              handleShareBhajan(resolvedDailyBhajan.bhajan, true);
+                              handleShareBhajan(resolvedDailyBhajan.bhajan, true, {
+                                isDaily: true,
+                                dailyNote: resolvedDailyBhajan.note || ''
+                              });
                             }}
                             className={`flex-1 font-semibold py-2 rounded-lg text-sm ${darkMode ? 'bg-[#E65100] hover:bg-[#d64800] text-white' : 'bg-[#E65100] hover:bg-[#d64800] text-white'}`}
                           >
