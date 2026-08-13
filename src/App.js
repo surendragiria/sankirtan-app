@@ -134,7 +134,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.08.13.s16a';
+const APP_VERSION = '2026.08.13.s16b';
 
 // ==============================================
 // SESSION 12: Session-scoped shuffle for Public Library
@@ -2132,9 +2132,37 @@ const App = () => {
   // Fires once per day per session — cached in state, so repeated
   // navigations don't re-fetch. Read from cache first (Firestore
   // SDK handles this transparently) so offline users still see it.
+  //
+  // SESSION 16b FIX: WAIT for initFirebase() to finish configuring
+  // db.settings() before touching Firestore. If this effect races
+  // ahead and calls .get() first, the SDK locks its settings to
+  // defaults and initFirebase()'s db.settings({experimentalForceLongPolling})
+  // call throws "Firestore has already been started and its settings
+  // can no longer be changed" — which then breaks the entire app's
+  // Firestore connection (public library empty, all listeners fail).
+  // The initFirebase code path sets window._firestoreConfigured=true
+  // AFTER settings apply; we poll on that flag.
   useEffect(() => {
     let cancelled = false;
+    const waitForFirestoreConfig = () => new Promise((resolve) => {
+      const start = Date.now();
+      const check = () => {
+        if (cancelled) return resolve(false);
+        if (window._firestoreConfigured && window.firebase && window.firebase.firestore) {
+          return resolve(true);
+        }
+        // Bail out after 15s so we don't wait forever if initFirebase
+        // never completed (offline, blocked CDN, etc). Failure path
+        // just leaves the fallback pick showing — no user-visible issue.
+        if (Date.now() - start > 15000) return resolve(false);
+        setTimeout(check, 100);
+      };
+      check();
+    });
+
     const fetchDaily = async () => {
+      const ready = await waitForFirestoreConfig();
+      if (!ready || cancelled) return;
       try {
         const db = window.firebase.firestore();
         const todayKey = getTodayKey();
@@ -2152,8 +2180,8 @@ const App = () => {
           setDailyBhajanNote('');
         }
       } catch (e) {
-        // Rules deny read for unauthenticated? No network?
-        // Either way, fall back to the deterministic pick.
+        // Rules deny read? No network? Either way, fall back to
+        // the deterministic pick — no user-visible regression.
         if (!cancelled) {
           setDailyBhajanId(null);
           setDailyBhajanNote('');
