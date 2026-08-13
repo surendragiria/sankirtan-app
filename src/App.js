@@ -1,32 +1,66 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 
 // ==============================================
-// SANKIRTAN SAAS - SESSION 15
+// SANKIRTAN SAAS - SESSION 16
 // Bhajan Se Bhagwan Tak
-// CHANGES (Session 15 — landing page guest-button visibility):
+// CHANGES (Session 16 — आज का भजन · Today's Bhajan):
 //
-// User reported: "Browse Public Library as Guest" button on the
-// landing page was nearly invisible — thin 15%-opacity teal border
-// on a cream card, 70%-opacity teal text, no fill. Looked like a
-// disabled state rather than a real option. First-time visitors
-// likely saw only the "Sign in with Google" button and either
-// bounced or signed in when they'd have preferred to browse first.
+// New feature: an admin-curated "Bhajan of the Day" surfaces at
+// the very top of the Public Library. Turns the app from a
+// searchable library into a daily-return content engine. Every
+// bhakt opening the app sees the same day's featured bhajan —
+// a shared community moment. One-tap Share sends it to WhatsApp
+// with the Session 13 deep link, so today's bhajan becomes a
+// mini-poster that circulates through family groups.
 //
-// 1. FIX: Guest button now has visible affordance —
-//    - Light saffron fill (bg-[#E65100]/10)
-//    - 40% saffron border (up from 15%)
-//    - Full-opacity saffron text (was 70% teal)
-//    - Small saffron-tinted shadow for depth
-//    - Border widened to 2px so it reads as intentional
+// Implementation
 //
-// Design intent preserved: Sign In with Google remains the visually
-// primary option (white card with Google logo, high contrast).
-// The guest button now reads as a genuine secondary option in the
-// app's own saffron accent color, matching the wordmark and
-// devotional palette rather than blending into the cream card.
+// 1. NEW Firestore collection: `dailyBhajans/{YYYY-MM-DD}`
+//    Fields: { bhajanId, note, curatedByUid, updatedAt }
+//    Read: single doc, one-time per app open.
+//    Write: admin only (rules must be updated — see below).
 //
-// Not touched: everything else. No changes to auth logic, gate,
-// data flow, or navigation. Purely a CSS visibility fix.
+// 2. NEW state:
+//    - dailyBhajanId / dailyBhajanNote / dailyBhajanLoading
+//      (fetched on app boot from `dailyBhajans/{today}`)
+//    - resolvedDailyBhajan (memo): uses admin curation if present,
+//      otherwise a deterministic fallback (hash of today's date
+//      biased toward the top ~40 by saveCount so the fallback
+//      isn't an obscure one).
+//
+// 3. NEW UI:
+//    - Prominent card at top of Public Library, above Popular
+//      Bhajans. Shows title, deity, dhun, note (if curated),
+//      lyric preview, plus [📖 Read] and [↗ Share] buttons.
+//    - Hidden when the user has an active search or filter (a
+//      "today's" card next to filtered results is confusing).
+//    - Admin panel: a scheduler section with date picker,
+//      bhajan dropdown, optional note, save/clear. Loads existing
+//      curation for a chosen date so admin doesn't accidentally
+//      overwrite. Supports batch-curating a week ahead.
+//
+// 4. NEW helpers (module-scope):
+//    - getTodayKey(): YYYY-MM-DD in the user's LOCAL timezone
+//      (Delhi tomorrow, not UTC tomorrow — critical for admin UX).
+//    - hashDateKey(): FNV-1a → 32-bit seed for the fallback pick.
+//
+// Firestore rules — YOU MUST UPDATE:
+//
+//   match /dailyBhajans/{dayKey} {
+//     allow read: if true;
+//     allow write: if isAdmin();
+//   }
+//
+// Without this, the read fails silently and the fallback pick
+// kicks in for everyone including the admin's own scheduled dates.
+// The client swallows read errors gracefully so no UX regression;
+// the feature just quietly runs on fallback-only mode until rules
+// are pushed.
+//
+// Not touched: everything else. No changes to card memoization,
+// listener flow, cache layer, sharing logic, or deep links —
+// this feature builds on Session 13's share plumbing and
+// Session 11's saveCount signal.
 // ==============================================
 
 // ==============================================
@@ -100,7 +134,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.08.12.s15';
+const APP_VERSION = '2026.08.12.s16';
 
 // ==============================================
 // SESSION 12: Session-scoped shuffle for Public Library
@@ -152,6 +186,30 @@ const getSessionShuffleSeed = () => {
     // somehow re-mounts within the same load.
     return (Math.floor(Math.random() * 0xFFFFFFFE) + 1) >>> 0;
   }
+};
+
+// SESSION 16: today's date as a YYYY-MM-DD key in the user's local
+// timezone. Used as the Firestore doc id in the `dailyBhajans`
+// collection AND as the seed for the deterministic fallback pick.
+// Local timezone matters — an admin in Delhi setting "tomorrow's"
+// bhajan needs their tomorrow, not UTC's.
+const getTodayKey = (d = new Date()) => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
+
+// SESSION 16: hash a YYYY-MM-DD date string to a 32-bit int
+// suitable for seeding mulberry32. Simple FNV-1a — deterministic,
+// fast, no collisions we care about at this scale.
+const hashDateKey = (str) => {
+  let h = 2166136261;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return (h >>> 0) || 1;
 };
 
 // Onboarding tour steps
@@ -701,6 +759,14 @@ const App = () => {
   // the order stays stable while the user is here, but reshuffles
   // on the next visit (new tab / next day / relaunch).
   const [shuffleSeed] = useState(() => getSessionShuffleSeed());
+
+  // SESSION 16: "आज का भजन" — admin-curated daily bhajan.
+  // Fetched once on app open. Falls back to a deterministic
+  // pick (same for all users on a given day) if no admin curation
+  // exists for today's date.
+  const [dailyBhajanId, setDailyBhajanId] = useState(null);
+  const [dailyBhajanNote, setDailyBhajanNote] = useState('');
+  const [dailyBhajanLoading, setDailyBhajanLoading] = useState(true);
   // SESSION 8: escape hatch — after 8 seconds of skeleton loading,
   // show a "Having trouble loading" message with a Retry button so
   // users aren't stuck watching skeletons forever if Firestore's
@@ -724,6 +790,13 @@ const App = () => {
   const [importProgress, setImportProgress] = useState({ current: 0, total: 0, message: '' });
   const [importError, setImportError] = useState('');
   const [importSuccess, setImportSuccess] = useState('');
+
+  // SESSION 16: admin state for Bhajan of the Day scheduling
+  const [dailyEditDate, setDailyEditDate] = useState(() => getTodayKey());
+  const [dailyEditBhajanId, setDailyEditBhajanId] = useState('');
+  const [dailyEditNote, setDailyEditNote] = useState('');
+  const [dailyEditSaving, setDailyEditSaving] = useState(false);
+  const [dailyEditLoadedFor, setDailyEditLoadedFor] = useState(null);
 
   // Manual Add/Edit Public Bhajan states (admin)
   const [showPublicBhajanForm, setShowPublicBhajanForm] = useState(false);
@@ -2056,6 +2129,45 @@ const App = () => {
     return () => clearTimeout(t);
   }, [publicLoading]);
 
+  // SESSION 16: fetch today's bhajan curation (admin-set) if any.
+  // Fires once per day per session — cached in state, so repeated
+  // navigations don't re-fetch. Read from cache first (Firestore
+  // SDK handles this transparently) so offline users still see it.
+  useEffect(() => {
+    let cancelled = false;
+    const fetchDaily = async () => {
+      try {
+        const db = window.firebase.firestore();
+        const todayKey = getTodayKey();
+        const doc = await db.collection('dailyBhajans').doc(todayKey).get();
+        if (cancelled) return;
+        if (doc.exists) {
+          const data = doc.data() || {};
+          setDailyBhajanId(data.bhajanId || null);
+          setDailyBhajanNote(data.note || '');
+        } else {
+          // No curation for today — leave dailyBhajanId null.
+          // The UI will use the deterministic fallback (see
+          // resolvedDailyBhajan memo below).
+          setDailyBhajanId(null);
+          setDailyBhajanNote('');
+        }
+      } catch (e) {
+        // Rules deny read for unauthenticated? No network?
+        // Either way, fall back to the deterministic pick.
+        if (!cancelled) {
+          setDailyBhajanId(null);
+          setDailyBhajanNote('');
+        }
+      } finally {
+        if (!cancelled) setDailyBhajanLoading(false);
+      }
+    };
+    fetchDaily();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Track which public bhajans user has already saved
   useEffect(() => {
     if (!user || !bhajans) {
@@ -3144,6 +3256,31 @@ const App = () => {
       .slice(0, 8);
   }, [publicBhajans]);
 
+  // SESSION 16: resolve today's bhajan.
+  //   1. If admin curated a bhajan for today (dailyBhajanId is set
+  //      AND the referenced bhajan exists in publicBhajans), use it.
+  //   2. Otherwise, deterministic fallback — same for every user on
+  //      a given day, so the "आज का भजन" feeling of community is
+  //      preserved even without curation. Bias slightly toward
+  //      higher-saveCount bhajans so the fallback isn't a random
+  //      obscure one.
+  const resolvedDailyBhajan = useMemo(() => {
+    if (!publicBhajans || publicBhajans.length === 0) return null;
+    if (dailyBhajanId) {
+      const curated = publicBhajans.find(b => b.id === dailyBhajanId);
+      if (curated) return { bhajan: curated, curated: true, note: dailyBhajanNote };
+    }
+    // Deterministic fallback — prefer the top 40 by saveCount so the
+    // fallback picks a "known" bhajan rather than a random obscure one.
+    const pool = [...publicBhajans]
+      .sort((a, b) => (b.saveCount || 0) - (a.saveCount || 0))
+      .slice(0, Math.max(20, Math.min(40, publicBhajans.length)));
+    const seed = hashDateKey(getTodayKey());
+    const rand = mulberry32(seed);
+    const pick = pool[Math.floor(rand() * pool.length)];
+    return pick ? { bhajan: pick, curated: false, note: '' } : null;
+  }, [publicBhajans, dailyBhajanId, dailyBhajanNote]);
+
   const hasActivePublicFilters = !!(
     debouncedPublicSearch ||
     publicFilterDeity ||
@@ -3496,6 +3633,86 @@ const App = () => {
   // ==============================================
   // MANUAL ADD/EDIT PUBLIC BHAJAN (Admin only)
   // ==============================================
+  // SESSION 16: admin — load existing curation for a date so we
+  // can pre-populate the form (avoids accidentally overwriting).
+  useEffect(() => {
+    if (!isAdmin || currentView !== 'admin-panel') return;
+    if (!dailyEditDate) return;
+    if (dailyEditLoadedFor === dailyEditDate) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const db = window.firebase.firestore();
+        const snap = await db.collection('dailyBhajans').doc(dailyEditDate).get();
+        if (cancelled) return;
+        if (snap.exists) {
+          const data = snap.data() || {};
+          setDailyEditBhajanId(data.bhajanId || '');
+          setDailyEditNote(data.note || '');
+        } else {
+          setDailyEditBhajanId('');
+          setDailyEditNote('');
+        }
+        setDailyEditLoadedFor(dailyEditDate);
+      } catch (e) {
+        // Non-fatal; leave form empty, allow save attempt.
+        if (!cancelled) setDailyEditLoadedFor(dailyEditDate);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [isAdmin, currentView, dailyEditDate, dailyEditLoadedFor]);
+
+  // SESSION 16: admin — save today's / a specific day's bhajan
+  const saveDailyBhajan = async () => {
+    if (!isAdmin) return;
+    if (!dailyEditDate || !dailyEditBhajanId) {
+      showToast('Please pick a date and a bhajan', 'error');
+      return;
+    }
+    setDailyEditSaving(true);
+    try {
+      const db = window.firebase.firestore();
+      await db.collection('dailyBhajans').doc(dailyEditDate).set({
+        bhajanId: dailyEditBhajanId,
+        note: (dailyEditNote || '').trim(),
+        curatedByUid: user.uid,
+        updatedAt: window.firebase.firestore.FieldValue.serverTimestamp()
+      });
+      showToast(`✓ Saved bhajan for ${dailyEditDate}`);
+      // If we just set today's, update the visible daily card too.
+      if (dailyEditDate === getTodayKey()) {
+        setDailyBhajanId(dailyEditBhajanId);
+        setDailyBhajanNote((dailyEditNote || '').trim());
+      }
+    } catch (e) {
+      showToast('Could not save: ' + (e.message || 'unknown error'), 'error');
+    } finally {
+      setDailyEditSaving(false);
+    }
+  };
+
+  const clearDailyBhajan = async () => {
+    if (!isAdmin) return;
+    if (!dailyEditDate) return;
+    setDailyEditSaving(true);
+    try {
+      const db = window.firebase.firestore();
+      await db.collection('dailyBhajans').doc(dailyEditDate).delete();
+      showToast(`Cleared curation for ${dailyEditDate}`);
+      setDailyEditBhajanId('');
+      setDailyEditNote('');
+      if (dailyEditDate === getTodayKey()) {
+        setDailyBhajanId(null);
+        setDailyBhajanNote('');
+      }
+    } catch (e) {
+      showToast('Could not clear: ' + (e.message || 'unknown error'), 'error');
+    } finally {
+      setDailyEditSaving(false);
+    }
+  };
+
   const openAddPublicBhajan = () => {
     if (!isAdmin) return;
     setPublicBhajanForm({
@@ -6970,6 +7187,80 @@ const App = () => {
                 </div>
               ) : (
                 <>
+                  {/* SESSION 16: आज का भजन · Today's Bhajan
+                      Admin-curated (or deterministic fallback if not
+                      curated). Prominent card at the very top of the
+                      Public Library when no active filter — one-tap
+                      access to the day's featured bhajan, plus a
+                      one-tap Share so it can travel via WhatsApp. */}
+                  {!hasActivePublicFilters && resolvedDailyBhajan && (
+                    <div className="mb-5">
+                      <div
+                        onClick={() => openPublicBhajanDetail(resolvedDailyBhajan.bhajan)}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(e) => { if (e.key === 'Enter') openPublicBhajanDetail(resolvedDailyBhajan.bhajan); }}
+                        className={`rounded-2xl p-5 border-2 cursor-pointer transition-all ${
+                          darkMode
+                            ? 'bg-gradient-to-br from-[#1a2a2f] to-[#162226] border-[#E65100]/40 hover:border-[#E65100]/70 shadow-[0_4px_20px_rgba(230,81,0,0.15)]'
+                            : 'bg-gradient-to-br from-[#FFFCF8] to-[#FFF3E5] border-[#E65100]/40 hover:border-[#E65100]/70 shadow-[0_4px_20px_rgba(230,81,0,0.10)]'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-3">
+                          <div className={`text-xs font-bold uppercase tracking-wider ${darkMode ? 'text-orange-300' : 'text-[#E65100]'}`}>
+                            🌟 आज का भजन · Today's Bhajan
+                          </div>
+                          {resolvedDailyBhajan.curated && (
+                            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${darkMode ? 'bg-[#E65100]/20 text-orange-200' : 'bg-[#E65100]/10 text-[#E65100]'}`}>
+                              Curated
+                            </span>
+                          )}
+                        </div>
+
+                        <h2 className={`text-xl md:text-2xl font-bold mb-1 leading-tight ${darkMode ? 'text-amber-100' : 'text-[#0B5A70]'}`}>
+                          {resolvedDailyBhajan.bhajan.title}
+                        </h2>
+
+                        <p className={`text-sm mb-2 ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                          {resolvedDailyBhajan.bhajan.deity}
+                          {resolvedDailyBhajan.bhajan.category ? ` · ${resolvedDailyBhajan.bhajan.category}` : ''}
+                          {resolvedDailyBhajan.bhajan.dhun ? ` · तर्ज़: ${resolvedDailyBhajan.bhajan.dhun}` : ''}
+                        </p>
+
+                        {resolvedDailyBhajan.note && (
+                          <p className={`text-xs italic mb-3 ${darkMode ? 'text-orange-200/80' : 'text-[#E65100]/80'}`}>
+                            "{resolvedDailyBhajan.note}"
+                          </p>
+                        )}
+
+                        <p className={`text-sm line-clamp-3 whitespace-pre-line max-h-16 overflow-hidden mb-4 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                          {previewLyrics(resolvedDailyBhajan.bhajan.lyrics)}
+                        </p>
+
+                        <div className={`flex gap-2 pt-3 border-t ${darkMode ? 'border-[#E65100]/20' : 'border-[#E65100]/15'}`}>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openPublicBhajanDetail(resolvedDailyBhajan.bhajan);
+                            }}
+                            className={`flex-1 font-semibold py-2 rounded-lg text-sm ${darkMode ? 'bg-[#0B5A70] hover:bg-[#094a5d] text-white' : 'bg-[#0B5A70] hover:bg-[#094a5d] text-white'}`}
+                          >
+                            📖 Read
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleShareBhajan(resolvedDailyBhajan.bhajan, true);
+                            }}
+                            className={`flex-1 font-semibold py-2 rounded-lg text-sm ${darkMode ? 'bg-[#E65100] hover:bg-[#d64800] text-white' : 'bg-[#E65100] hover:bg-[#d64800] text-white'}`}
+                          >
+                            ↗ Share
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {/* SESSION 11: Popular Bhajans — pinned top-8 by saveCount.
                       Hidden when the user has an active search/filter
                       (a top-N of a filtered set is confusing UX).
@@ -7364,6 +7655,84 @@ const App = () => {
                       {new Set(publicBhajans.map(b => b.deity)).size}
                     </div>
                     <div className="text-xs">Deities</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* SESSION 16: Bhajan of the Day scheduler */}
+              <div className="bg-[#FFFCF8] rounded-2xl shadow-[0_2px_12px_rgba(11,90,112,0.06)] p-6 mb-6 border-2 border-[#E65100]/40">
+                <div className="flex items-center gap-2 mb-1">
+                  <h3 className="text-lg font-bold text-[#0B5A70]">🌟 आज का भजन · Today's Bhajan</h3>
+                </div>
+                <p className="text-sm text-gray-600 mb-4">
+                  Curate the bhajan that appears at the top of the Public Library for a chosen date. Leave blank and today's card falls back to a deterministic pick.
+                </p>
+
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-sm font-semibold text-[#0B5A70] mb-1">Date</label>
+                    <input
+                      type="date"
+                      value={dailyEditDate}
+                      onChange={(e) => {
+                        setDailyEditDate(e.target.value);
+                        setDailyEditLoadedFor(null); // re-load for new date
+                      }}
+                      className="w-full px-4 py-2 border border-[#0B5A70]/15 rounded-xl outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-[#0B5A70] mb-1">Bhajan</label>
+                    <select
+                      value={dailyEditBhajanId}
+                      onChange={(e) => setDailyEditBhajanId(e.target.value)}
+                      className="w-full px-4 py-2 border border-[#0B5A70]/15 rounded-xl outline-none bg-white"
+                    >
+                      <option value="">— Select a bhajan —</option>
+                      {[...publicBhajans]
+                        .sort((a, b) => (a.title || '').localeCompare(b.title || ''))
+                        .map(b => (
+                          <option key={b.id} value={b.id}>
+                            {b.title} ({b.deity})
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-[#0B5A70] mb-1">
+                      Note <span className="text-xs text-gray-500 font-normal">(optional — shown as italic caption)</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={dailyEditNote}
+                      onChange={(e) => setDailyEditNote(e.target.value)}
+                      placeholder="e.g., Hanuman Ji ke Mangalvar par vishesh"
+                      maxLength={140}
+                      className="w-full px-4 py-2 border border-[#0B5A70]/15 rounded-xl outline-none"
+                    />
+                  </div>
+
+                  <div className="flex gap-2">
+                    <button
+                      onClick={saveDailyBhajan}
+                      disabled={dailyEditSaving || !dailyEditBhajanId}
+                      className="flex-1 bg-[#E65100] hover:bg-[#d64800] disabled:opacity-50 text-white font-bold py-2 rounded-xl"
+                    >
+                      {dailyEditSaving ? 'Saving…' : '💾 Save'}
+                    </button>
+                    <button
+                      onClick={clearDailyBhajan}
+                      disabled={dailyEditSaving}
+                      className="px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold py-2 rounded-xl"
+                    >
+                      Clear
+                    </button>
+                  </div>
+
+                  <div className="text-xs text-gray-500 pt-2 border-t border-[#0B5A70]/8">
+                    Tip: batch-curate a week at a time — pick tomorrow, then use the arrow to jump ahead.
                   </div>
                 </div>
               </div>
