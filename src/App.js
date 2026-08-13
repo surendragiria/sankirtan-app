@@ -21,7 +21,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 //    Write: admin only (rules must be updated — see below).
 //
 // 2. NEW state:
-//    - dailyBhajanId / dailyBhajanNote / dailyBhajanLoading
+//    - dailyBhajanId / dailyBhajanNote
 //      (fetched on app boot from `dailyBhajans/{today}`)
 //    - resolvedDailyBhajan (memo): uses admin curation if present,
 //      otherwise a deterministic fallback (hash of today's date
@@ -134,7 +134,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.08.12.s16';
+const APP_VERSION = '2026.08.13.s16a';
 
 // ==============================================
 // SESSION 12: Session-scoped shuffle for Public Library
@@ -766,7 +766,6 @@ const App = () => {
   // exists for today's date.
   const [dailyBhajanId, setDailyBhajanId] = useState(null);
   const [dailyBhajanNote, setDailyBhajanNote] = useState('');
-  const [dailyBhajanLoading, setDailyBhajanLoading] = useState(true);
   // SESSION 8: escape hatch — after 8 seconds of skeleton loading,
   // show a "Having trouble loading" message with a Retry button so
   // users aren't stuck watching skeletons forever if Firestore's
@@ -2159,8 +2158,6 @@ const App = () => {
           setDailyBhajanId(null);
           setDailyBhajanNote('');
         }
-      } finally {
-        if (!cancelled) setDailyBhajanLoading(false);
       }
     };
     fetchDaily();
