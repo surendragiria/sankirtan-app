@@ -1,47 +1,49 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 
 // ==============================================
-// SANKIRTAN SAAS - SESSION 17
+// SANKIRTAN SAAS - SESSION 18
 // Bhajan Se Bhagwan Tak
-// CHANGES (Session 17 — "Aaj Ka Bhajan" tag on WhatsApp shares):
+// CHANGES (Session 18 — two user-reported issues):
 //
-// When a user shares from the "आज का भजन" card (Session 16), the
-// WhatsApp message now leads with a bilingual "Today's Bhajan"
-// header so recipients in a WhatsApp group understand context
-// before deciding whether to tap. Recipients seeing a random
-// bhajan lyric forward often ignore it; a bhajan tagged as
-// "today's featured pick from Sankirtan" earns the click.
+// 1. FIX: Hindi typing on mobile — tapping a suggestion word
+//    was dismissing the keyboard and dropping focus out of the
+//    textarea. Root cause: React attaches touch events as
+//    passive listeners by default, which means e.preventDefault()
+//    inside onTouchStart is silently ignored. The suggestion tap
+//    was firing TWICE (native touchstart + synthesized mousedown)
+//    and the touchstart path was moving focus to the button
+//    before mousedown could prevent it.
 //
-// Format (Marwari-bhakt WhatsApp tuned):
+//    Fix: removed all 12 onTouchStart handlers from suggestion
+//    buttons (both user library and admin public forms). Kept
+//    the onMouseDown handlers with e.preventDefault(), which
+//    fire on mobile via touch → synthesized mousedown and are
+//    NOT passive, so preventDefault works. Standard editor
+//    pattern (used by ProseMirror, TinyMCE, Slate).
 //
-//   🌟 आज का भजन · Today's Bhajan
+//    Result: on mobile, tapping a suggestion inserts the word,
+//    keyboard stays up, cursor stays in the textarea. Space bar
+//    behavior unchanged (was already working).
 //
-//   बाबोसा चालीसा
-//   (Babosa · Chalisa)
+// 2. NEW: quick unsave / delete on My Library cards. Small ✕
+//    button in the top-right corner of each full-view card
+//    (compact view unchanged — no room). stopPropagation
+//    prevents the card open. Wording is context-aware:
+//    - Saved-from-public bhajans: "Remove from library" (soft
+//      unsave — public copy still exists; save it back anytime)
+//    - Self-authored bhajans: "Delete" (permanent — cannot undo)
+//    Confirmation dialog and toast reinforce the distinction.
+//    The reading-view header button also switches label based on
+//    context ("✕ Remove" vs "🗑️ Delete").
 //
-//   "मंगलवार को हनुमानजी के लिए"   ← curator's optional note
+//    Card is now a <div role="button"> instead of <button>
+//    because a <button> can't legally contain another <button>
+//    (the remove ✕). onKeyDown handles Enter/Space for
+//    keyboard accessibility.
 //
-//   श्री बाबोसा चालीसा जय हो...
-//
-//   एक tap में पूरा भजन पढ़ें:
-//   https://sankirtan.app/?b=<id>
-//
-// Changes
-// - shareBhajan() gains a third parameter: opts = { isDaily,
-//   dailyNote }. When isDaily=true AND isPublic=true, the
-//   share text uses the daily format above; otherwise falls
-//   back to the standard Session 13 format.
-// - Native share sheet title also gets prefixed with
-//   "आज का भजन:" so platforms that show a title (iMessage,
-//   some launchers) surface the context there too.
-// - handleShareBhajan() gains matching opts forwarding.
-// - Today's Bhajan card's Share button passes isDaily=true
-//   and the curator's note. Every other share button in the
-//   app continues to use the default (no isDaily) — reading-
-//   view shares stay clean, private-library shares unchanged.
-//
-// Not touched: everything else. No changes to daily fetch,
-// admin scheduler, memoized card, or deep link handling.
+// Not touched: everything else. No new state, no new listeners,
+// no new Firestore reads/writes. Uses the existing deleteBhajan
+// function.
 // ==============================================
 
 // ==============================================
@@ -115,7 +117,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.08.13.s17';
+const APP_VERSION = '2026.08.13.s18';
 
 // ==============================================
 // SESSION 12: Session-scoped shuffle for Public Library
@@ -454,7 +456,7 @@ const previewLyrics = (lyrics) =>
   (lyrics || '').trim().split('\n').slice(0, 4).join('\n');
 
 const MyBhajanCard = React.memo(function MyBhajanCard({
-  bhajan, darkMode, compactView, cardIndex, onOpen
+  bhajan, darkMode, compactView, cardIndex, onOpen, onRemove
 }) {
   if (compactView) {
     return (
@@ -474,13 +476,50 @@ const MyBhajanCard = React.memo(function MyBhajanCard({
     );
   }
 
+  // SESSION 18: `<button>` wrapping the entire card means a nested
+  // <button> for remove wouldn't be valid HTML. Using a <div
+  // role="button"> wrapper + inner <button> for remove is the
+  // standard escape hatch. Keyboard-accessible via Enter/Space.
+  const handleKey = (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      onOpen(bhajan);
+    }
+  };
+
+  const isSavedFromPublic = !!bhajan.savedFromPublicId;
+
   return (
-    <button
+    <div
+      role="button"
+      tabIndex={0}
       onClick={() => onOpen(bhajan)}
-      className={`sk-card-animate rounded-2xl p-5 border transition-all text-left ${darkMode ? 'bg-[#162226] border-[#0B5A70]/15 shadow-[0_2px_12px_rgba(11,90,112,0.15)] hover:border-[#0B5A70]/30 hover:shadow-[0_4px_20px_rgba(11,90,112,0.25)]' : 'bg-[#FFFCF8] border-[#0B5A70]/8 shadow-[0_2px_12px_rgba(11,90,112,0.06)] hover:border-[#0B5A70]/25 hover:shadow-[0_4px_20px_rgba(11,90,112,0.12)]'}`}
+      onKeyDown={handleKey}
+      className={`sk-card-animate rounded-2xl p-5 border transition-all text-left cursor-pointer relative ${darkMode ? 'bg-[#162226] border-[#0B5A70]/15 shadow-[0_2px_12px_rgba(11,90,112,0.15)] hover:border-[#0B5A70]/30 hover:shadow-[0_4px_20px_rgba(11,90,112,0.25)]' : 'bg-[#FFFCF8] border-[#0B5A70]/8 shadow-[0_2px_12px_rgba(11,90,112,0.06)] hover:border-[#0B5A70]/25 hover:shadow-[0_4px_20px_rgba(11,90,112,0.12)]'}`}
       style={{ animationDelay: `${Math.min(cardIndex, 8) * 0.04}s` }}
     >
-      <div className="flex items-start justify-between mb-2">
+      {/* SESSION 18: quick unsave / delete button, top-right.
+          stopPropagation prevents the card's onClick from firing.
+          Wording is context-aware: "Remove" (soft) for
+          saved-from-public bhajans, "Delete" (permanent) for
+          personally-authored ones — the confirmation dialog
+          reinforces the difference. */}
+      {onRemove && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onRemove(bhajan);
+          }}
+          aria-label={isSavedFromPublic ? 'Remove from library' : 'Delete bhajan'}
+          title={isSavedFromPublic ? 'Remove from library' : 'Delete bhajan'}
+          className={`absolute top-2 right-2 w-8 h-8 rounded-full flex items-center justify-center text-sm transition-all ${darkMode ? 'text-gray-500 hover:text-red-300 hover:bg-red-900/20' : 'text-gray-400 hover:text-red-600 hover:bg-red-50'}`}
+        >
+          ✕
+        </button>
+      )}
+
+      <div className="flex items-start justify-between mb-2 pr-8">
         <h3 className={`text-lg font-bold flex-1 line-clamp-2 ${darkMode ? 'text-amber-100' : 'text-[#0B5A70]'}`}>
           {bhajan.title}
         </h3>
@@ -522,7 +561,7 @@ const MyBhajanCard = React.memo(function MyBhajanCard({
           )}
         </div>
       )}
-    </button>
+    </div>
   );
 });
 
@@ -2737,11 +2776,17 @@ const App = () => {
 
   // SESSION 5: browser confirm() → branded ConfirmDialog
   const deleteBhajan = (bhajan) => {
+    // SESSION 18: wording depends on whether the bhajan was saved
+    // from the public library (removing it is a soft unsave — the
+    // public copy still exists) vs authored personally (permanent).
+    const isSavedFromPublic = !!bhajan.savedFromPublicId;
     askConfirm(
       {
-        title: 'Delete Bhajan?',
-        message: `"${bhajan.title}" will be permanently deleted from your library. This cannot be undone.`,
-        confirmLabel: '🗑️ Delete'
+        title: isSavedFromPublic ? 'Remove from library?' : 'Delete Bhajan?',
+        message: isSavedFromPublic
+          ? `"${bhajan.title}" will be removed from your personal library. You can save it back anytime from the Public Library.`
+          : `"${bhajan.title}" will be permanently deleted from your library. This cannot be undone.`,
+        confirmLabel: isSavedFromPublic ? '✕ Remove' : '🗑️ Delete'
       },
       async () => {
         try {
@@ -2759,7 +2804,7 @@ const App = () => {
 
           setCurrentView('library');
           setSelectedBhajan(null);
-          showToast('Bhajan deleted');
+          showToast(isSavedFromPublic ? 'Removed from library' : 'Bhajan deleted');
         } catch (error) {
           console.error('Error deleting bhajan:', error);
           showToast('Could not delete: ' + error.message, 'error');
@@ -5588,6 +5633,7 @@ const App = () => {
                       compactView={compactView}
                       cardIndex={cardIndex}
                       onOpen={openBhajanDetail}
+                      onRemove={deleteBhajan}
                     />
                   ))}
                 </div>
@@ -5659,7 +5705,7 @@ const App = () => {
                     onClick={() => deleteBhajan(selectedBhajan)}
                     className="bg-red-100 hover:bg-red-200 text-red-700 font-semibold px-2.5 py-1 rounded-full text-xs flex items-center gap-1"
                   >
-                    🗑️ Delete
+                    {selectedBhajan.savedFromPublicId ? '✕ Remove' : '🗑️ Delete'}
                   </button>
                 </div>
               </div>
@@ -5911,10 +5957,6 @@ const App = () => {
                               e.preventDefault();
                               applySuggestion(suggestion, 'title');
                             }}
-                            onTouchStart={(e) => {
-                              e.preventDefault();
-                              applySuggestion(suggestion, 'title');
-                            }}
                             className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
                               idx === 0
                                 ? 'bg-[#0B5A70] text-white hover:bg-[#094a5d] shadow-md'
@@ -5927,10 +5969,6 @@ const App = () => {
                         <button
                           type="button"
                           onMouseDown={(e) => {
-                            e.preventDefault();
-                            applySuggestion(currentWord, 'title');
-                          }}
-                          onTouchStart={(e) => {
                             e.preventDefault();
                             applySuggestion(currentWord, 'title');
                           }}
@@ -6007,10 +6045,6 @@ const App = () => {
                               e.preventDefault();
                               applySuggestion(suggestion, 'dhun');
                             }}
-                            onTouchStart={(e) => {
-                              e.preventDefault();
-                              applySuggestion(suggestion, 'dhun');
-                            }}
                             className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
                               idx === 0
                                 ? 'bg-[#0B5A70] text-white hover:bg-[#094a5d] shadow-md'
@@ -6023,10 +6057,6 @@ const App = () => {
                         <button
                           type="button"
                           onMouseDown={(e) => {
-                            e.preventDefault();
-                            applySuggestion(currentWord, 'dhun');
-                          }}
-                          onTouchStart={(e) => {
                             e.preventDefault();
                             applySuggestion(currentWord, 'dhun');
                           }}
@@ -6238,10 +6268,6 @@ const App = () => {
                               e.preventDefault();
                               applySuggestion(suggestion, 'lyrics');
                             }}
-                            onTouchStart={(e) => {
-                              e.preventDefault();
-                              applySuggestion(suggestion, 'lyrics');
-                            }}
                             className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
                               idx === 0
                                 ? 'bg-[#0B5A70] text-white hover:bg-[#094a5d] shadow-md'
@@ -6255,10 +6281,6 @@ const App = () => {
                         <button
                           type="button"
                           onMouseDown={(e) => {
-                            e.preventDefault();
-                            applySuggestion(currentWord, 'lyrics');
-                          }}
-                          onTouchStart={(e) => {
                             e.preventDefault();
                             applySuggestion(currentWord, 'lyrics');
                           }}
@@ -8280,10 +8302,6 @@ const App = () => {
                               e.preventDefault();
                               applyPublicSuggestion(suggestion, 'title');
                             }}
-                            onTouchStart={(e) => {
-                              e.preventDefault();
-                              applyPublicSuggestion(suggestion, 'title');
-                            }}
                             className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
                               idx === 0
                                 ? 'bg-[#0B5A70] text-white hover:bg-[#094a5d] shadow-md'
@@ -8296,10 +8314,6 @@ const App = () => {
                         <button
                           type="button"
                           onMouseDown={(e) => {
-                            e.preventDefault();
-                            applyPublicSuggestion(currentWord, 'title');
-                          }}
-                          onTouchStart={(e) => {
                             e.preventDefault();
                             applyPublicSuggestion(currentWord, 'title');
                           }}
@@ -8371,10 +8385,6 @@ const App = () => {
                               e.preventDefault();
                               applyPublicSuggestion(suggestion, 'dhun');
                             }}
-                            onTouchStart={(e) => {
-                              e.preventDefault();
-                              applyPublicSuggestion(suggestion, 'dhun');
-                            }}
                             className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
                               idx === 0
                                 ? 'bg-[#0B5A70] text-white hover:bg-[#094a5d] shadow-md'
@@ -8387,10 +8397,6 @@ const App = () => {
                         <button
                           type="button"
                           onMouseDown={(e) => {
-                            e.preventDefault();
-                            applyPublicSuggestion(currentWord, 'dhun');
-                          }}
-                          onTouchStart={(e) => {
                             e.preventDefault();
                             applyPublicSuggestion(currentWord, 'dhun');
                           }}
@@ -8593,10 +8599,6 @@ const App = () => {
                               e.preventDefault();
                               applyPublicSuggestion(suggestion, 'lyrics');
                             }}
-                            onTouchStart={(e) => {
-                              e.preventDefault();
-                              applyPublicSuggestion(suggestion, 'lyrics');
-                            }}
                             className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
                               idx === 0
                                 ? 'bg-[#0B5A70] text-white hover:bg-[#094a5d] shadow-md'
@@ -8610,10 +8612,6 @@ const App = () => {
                         <button
                           type="button"
                           onMouseDown={(e) => {
-                            e.preventDefault();
-                            applyPublicSuggestion(currentWord, 'lyrics');
-                          }}
-                          onTouchStart={(e) => {
                             e.preventDefault();
                             applyPublicSuggestion(currentWord, 'lyrics');
                           }}
