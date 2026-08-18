@@ -1,49 +1,65 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 
 // ==============================================
-// SANKIRTAN SAAS - SESSION 18
+// SANKIRTAN SAAS - SESSION 19
 // Bhajan Se Bhagwan Tak
-// CHANGES (Session 18 — two user-reported issues):
+// CHANGES (Session 19 — Popular Bhajans by reads, not just saves):
 //
-// 1. FIX: Hindi typing on mobile — tapping a suggestion word
-//    was dismissing the keyboard and dropping focus out of the
-//    textarea. Root cause: React attaches touch events as
-//    passive listeners by default, which means e.preventDefault()
-//    inside onTouchStart is silently ignored. The suggestion tap
-//    was firing TWICE (native touchstart + synthesized mousedown)
-//    and the touchstart path was moving focus to the button
-//    before mousedown could prevent it.
+// User feedback: "Top Bhajans" should reflect what's actually
+// being read, not just what's been saved. A save is aspirational;
+// a read is real practice. Someone opening the same bhajan 20
+// times in a month is a stronger popularity signal than someone
+// saving it once and never opening it again.
 //
-//    Fix: removed all 12 onTouchStart handlers from suggestion
-//    buttons (both user library and admin public forms). Kept
-//    the onMouseDown handlers with e.preventDefault(), which
-//    fire on mobile via touch → synthesized mousedown and are
-//    NOT passive, so preventDefault works. Standard editor
-//    pattern (used by ProseMirror, TinyMCE, Slate).
+// Implementation
 //
-//    Result: on mobile, tapping a suggestion inserts the word,
-//    keyboard stays up, cursor stays in the textarea. Space bar
-//    behavior unchanged (was already working).
+// 1. NEW field on publicBhajans docs: `readCount` (integer).
+//    Signed-in users increment by +1 every time they open a
+//    bhajan's reading view. Guests are excluded on purpose —
+//    (a) allowing anonymous writes invites bot inflation of
+//    the counter, (b) signed-in bhakts are the real community
+//    signal that matters.
 //
-// 2. NEW: quick unsave / delete on My Library cards. Small ✕
-//    button in the top-right corner of each full-view card
-//    (compact view unchanged — no room). stopPropagation
-//    prevents the card open. Wording is context-aware:
-//    - Saved-from-public bhajans: "Remove from library" (soft
-//      unsave — public copy still exists; save it back anytime)
-//    - Self-authored bhajans: "Delete" (permanent — cannot undo)
-//    Confirmation dialog and toast reinforce the distinction.
-//    The reading-view header button also switches label based on
-//    context ("✕ Remove" vs "🗑️ Delete").
+// 2. NEW: hybrid popularity score:
+//      score = readCount + saveCount * 3
+//    Reads are the primary signal but saves still weighted
+//    higher because they're a stronger intent signal (saving
+//    = commitment; reading = curiosity). Roughly, 1 save is
+//    worth 3 reads.
 //
-//    Card is now a <div role="button"> instead of <button>
-//    because a <button> can't legally contain another <button>
-//    (the remove ✕). onKeyDown handles Enter/Space for
-//    keyboard accessibility.
+// 3. NEW: one-shot per-bhajan backfill. First time a bhajan is
+//    opened after this deploy, if its readCount is undefined
+//    AND its saveCount > 0, we seed readCount to saveCount + 1
+//    (instead of starting at 1). Prevents the "Popular Bhajans"
+//    section from becoming volatile on transition day, where
+//    a bhajan with 3 fresh reads would leapfrog famous ones
+//    still sitting at 0. Zero-cost migration — piggybacks on
+//    the read that would happen anyway.
 //
-// Not touched: everything else. No new state, no new listeners,
-// no new Firestore reads/writes. Uses the existing deleteBhajan
-// function.
+// 4. UPDATED: Popular Bhajans section subtitle
+//    "Most saved" → "Most read".
+//
+// 5. UPDATED: per-card indicator on the Popular list
+//    "✨ N" (saveCount) → "📖 N" (readCount || saveCount).
+//    Fallback to saveCount so pre-deploy bhajans still show
+//    a meaningful number instead of a jarring 0.
+//
+// Firestore rules — YOU MUST ADD readCount to the update rule
+// for publicBhajans. Alongside the existing saveCount rule,
+// allow signed-in users to increment readCount by any positive
+// amount (backfill can be > 1). See firestore.rules delivery.
+// Without the rule update, reads silently fail (fire-and-forget)
+// and readCount stays at 0 — the sort falls back to saveCount-
+// weighted behavior. No user-visible regression until rules are
+// pushed.
+//
+// Firestore cost: ~1 write per bhajan open per signed-in user.
+// At 100 daily signed-in users * 5 bhajans each = 500 writes/day.
+// Free tier is 20K writes/day. Comfortable margin.
+//
+// Not touched: everything else. My Library sort (Session 11)
+// still uses local viewCount on user's own copy. Save flow
+// unchanged. All Session 6-18 work intact.
 // ==============================================
 
 // ==============================================
@@ -117,7 +133,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.08.13.s18';
+const APP_VERSION = '2026.08.14.s19';
 
 // ==============================================
 // SESSION 12: Session-scoped shuffle for Public Library
@@ -3193,7 +3209,44 @@ const App = () => {
   const openPublicBhajanDetail = useCallback((bhajan) => {
     setSelectedPublicBhajan(bhajan);
     setCurrentView('public-bhajan-detail');
-  }, []);
+
+    // SESSION 19: increment readCount for signed-in users so
+    // "Popular Bhajans" reflects what's actually being read, not
+    // just what's been saved. Guests are excluded on purpose:
+    // (a) rules would need to allow anonymous writes, which
+    //     invites bot inflation of the counter
+    // (b) the signed-in bhakt community is who matters most for
+    //     this signal — their reading patterns are meaningful,
+    //     random guest reads are noise.
+    //
+    // First-time write also backfills readCount from saveCount so
+    // pre-Session-19 bhajans start with a reasonable ranking
+    // instead of dropping to 0 on the transition day. This is a
+    // one-shot per-bhajan migration piggybacked on the read.
+    //
+    // Fire-and-forget: we don't await or block navigation on it,
+    // and we swallow any error (permission-denied on first deploy
+    // before rules are updated, offline, etc). Worst case the
+    // counter just doesn't move — no user-visible regression.
+    if (user && bhajan && bhajan.id) {
+      try {
+        const db = window.firebase.firestore();
+        const ref = db.collection('publicBhajans').doc(bhajan.id);
+        const currentRead = typeof bhajan.readCount === 'number' ? bhajan.readCount : null;
+        const currentSave = typeof bhajan.saveCount === 'number' ? bhajan.saveCount : 0;
+        if (currentRead === null && currentSave > 0) {
+          // One-shot backfill: seed readCount to saveCount then +1
+          ref.update({
+            readCount: currentSave + 1
+          }).catch(() => { /* rules or network — noop */ });
+        } else {
+          ref.update({
+            readCount: window.firebase.firestore.FieldValue.increment(1)
+          }).catch(() => { /* noop */ });
+        }
+      } catch { /* firebase not ready — extremely rare */ }
+    }
+  }, [user]);
 
   // SESSION 13: consume a pending deep link once the public library
   // has loaded. We wait for publicBhajans (rather than opening
@@ -3323,12 +3376,25 @@ const App = () => {
   // (already-tracked signal, no new writes needed). Shown only when
   // no active search or filter, so newcomers get a clear starting
   // point instead of a wall of unfamiliar titles.
+  // SESSION 19: hybrid popularity score.
+  // score = readCount + saveCount * 3
+  //
+  // Reading is now the primary popularity signal (people opening
+  // a bhajan to sing/read it), but saves are still weighted
+  // higher because they're a stronger intent signal — saving is
+  // a commitment to keep something, reading is just curiosity.
+  // The 3x weight makes 1 save worth roughly the same as 3 reads.
+  //
+  // A bhajan qualifies for the Popular section if its score > 0.
+  // This includes bhajans with EITHER any reads OR any saves,
+  // so the section stays populated during the readCount rollout.
   const topPublicBhajans = useMemo(() => {
+    const scoreOf = (b) => (b.readCount || 0) + (b.saveCount || 0) * 3;
     return [...publicBhajans]
-      .filter(b => (b.saveCount || 0) > 0)
+      .filter(b => scoreOf(b) > 0)
       .sort((a, b) => {
-        const sa = a.saveCount || 0;
-        const sb = b.saveCount || 0;
+        const sb = scoreOf(b);
+        const sa = scoreOf(a);
         if (sb !== sa) return sb - sa;
         return (a.title || '').localeCompare(b.title || '');
       })
@@ -7336,7 +7402,7 @@ const App = () => {
                           🔥 Popular Bhajans
                         </p>
                         <span className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>
-                          Most saved
+                          Most read
                         </span>
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
@@ -7358,7 +7424,7 @@ const App = () => {
                               </p>
                             </div>
                             <span className={`text-xs flex-shrink-0 ${darkMode ? 'text-gray-500' : 'text-[#0B5A70]/50'}`}>
-                              ✨ {b.saveCount || 0}
+                              📖 {b.readCount || b.saveCount || 0}
                             </span>
                           </button>
                         ))}
