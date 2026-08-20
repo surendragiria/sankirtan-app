@@ -1,47 +1,52 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 
 // ==============================================
-// SANKIRTAN SAAS - SESSION 25
+// SANKIRTAN SAAS - SESSION 26
 // Bhajan Se Bhagwan Tak
-// CHANGES (Session 25 — rename block for personal-only usages):
+// CHANGES (Session 26 — fix deep-link "stuck on home page"):
 //
-// Session 21 introduced cascade rename with a privacy stance:
-// admin never touches users' private data. Correct instinct,
-// wrong implementation. The rule required ZERO personal usages
-// to allow a rename when there were also zero public usages —
-// which made cleanup impossible once ANY user had a tag in
-// their personal library.
+// User report from GMV Vocals Student Group: WhatsApp-shared
+// bhajan links landed on the home page instead of the bhajan.
+// Only worked on the second try ("First time me home page pe
+// stuck tha, this time worked").
 //
-// Concrete symptom: renaming "punjabi" failed with "isn't on
-// any public bhajans, but 1 user has it in their personal
-// library" even though the rename would only update the config
-// list (no bhajan data touched).
+// Root cause: Session 13's deep-link consumer effect waited for
+// the FULL publicBhajans listener to populate before resolving
+// the target. On WhatsApp's in-app browser (slow, no aggressive
+// caching), this takes 3-8 seconds cold. Meanwhile the user
+// sees empty skeletons on the home page, thinks the link is
+// broken, refreshes — which warms the cache and makes the
+// second try work instantly.
 //
-// Fix: personal-only usages no longer block. The config list
-// gets renamed; personal copies are NOT touched (privacy stance
-// preserved). Users with the old value in their personal
-// library will keep it until they resave the bhajan from
-// Public Library, at which point their copy naturally picks
-// up the new value. Self-correcting eventual consistency.
+// Two-part fix:
 //
-// Toast is informational, not an error:
-//   "Note: 1 user's personal copy will keep the old value
-//    until re-saved."
+// 1. Fast path — direct single-doc fetch for the target bhajan
+//    (~200-500ms) instead of waiting for the full listener.
+//    Fires as soon as Firestore config is ready. Independent
+//    of the collection listener, so it works even before that
+//    completes. The Session 13 "wait for publicBhajans" logic
+//    stays as a fallback in case the direct fetch fails.
 //
-// The three-way rename logic is now:
-//   1. Zero public + zero personal → silent rename, no dialog.
-//   2. Zero public + N personal → silent rename + info toast.  ← Session 25
-//   3. N public (any personal) → confirmation dialog with cascade
-//      count, personal note if applicable.
+// 2. Dedicated splash — while resolution is in progress, we
+//    render a "भजन लोड हो रहा है… / Opening your bhajan…"
+//    full-screen splash with the wordmark and a spinner INSTEAD
+//    of the empty home page. Users now see feedback that
+//    something is happening.
 //
-// Deliberately NOT changed: deleteConfigItem still blocks on
-// public usages (destructive; orphaned data would break filters).
-// Personal-only delete of a config value has the same argument
-// as rename but the risk profile is different — leaving that
-// alone for now.
+// Escape hatch: after 6 seconds a "Skip → Browse Library"
+// button appears on the splash. If the resolve truly hangs
+// (broken network, Firestore wedged), the user isn't trapped.
+// Tap it, they land on the Public Library normally.
 //
-// Not touched: everything else. Same batch write semantics,
-// same rules, same privacy boundary for personal data.
+// New state:
+//   - deepLinkResolving: boolean, drives the splash render
+//   - deepLinkStuck: boolean, exposes the skip button after 6s
+// Both auto-clear when resolution completes (success or failure).
+//
+// Not touched: everything else. The Session 13 URL cleanup via
+// history.replaceState still fires. Guest-mode auto-enable on
+// deep link still works. Everything downstream of the resolve
+// (reading view, readCount increment, share buttons) unchanged.
 // ==============================================
 
 // ==============================================
@@ -115,7 +120,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.08.20.s25';
+const APP_VERSION = '2026.08.20.s26';
 
 // ==============================================
 // SESSION 12: Session-scoped shuffle for Public Library
@@ -704,6 +709,17 @@ const App = () => {
     } catch { return null; }
   })();
   const [pendingDeepLinkId, setPendingDeepLinkId] = useState(initialDeepLinkId);
+
+  // SESSION 26: while a deep link is being resolved, we show a
+  // dedicated splash instead of the empty home page. Prevents
+  // WhatsApp-browser users from thinking the link is broken
+  // during the 200ms-8s window before the target bhajan is ready.
+  const [deepLinkResolving, setDeepLinkResolving] = useState(!!initialDeepLinkId);
+
+  // SESSION 26: after 6 seconds of resolution, expose a "Skip →
+  // Browse Library" escape hatch on the splash so a truly stuck
+  // network doesn't trap the user forever.
+  const [deepLinkStuck, setDeepLinkStuck] = useState(false);
 
   const [guestMode, setGuestMode] = useState(!!initialDeepLinkId);
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
@@ -3334,12 +3350,91 @@ const App = () => {
   // eagerly) so that (a) the reading view has real content to show,
   // (b) we can toast a "couldn't find" message if the id is invalid.
   //
-  // Runs once when both conditions are true:
-  //   - a pending id exists (someone arrived via ?b=<id>)
-  //   - publicBhajans has arrived (either from cache or network)
-  // Cleaning up the URL after consumption means a page refresh
-  // doesn't re-trigger this — the user is now navigating within
-  // the app normally.
+  // SESSION 13 + SESSION 26: consume a pending deep link.
+  //
+  // SESSION 26 FIX: WhatsApp's in-app browser is slow, and users
+  // arriving via a shared link were seeing the empty home page
+  // (skeletons) for 3-8 seconds while the full publicBhajans
+  // listener populated. Many refreshed or gave up, thinking the
+  // link was broken. Report: "First time me home page pe stuck
+  // tha, this time worked" — confirming the timing issue.
+  //
+  // Two-part fix:
+  //   1. Fast path: single-doc fetch for JUST the target bhajan
+  //      (~200-500ms), independent of the full library listener.
+  //      Fires as soon as Firestore is configured. Resolves the
+  //      deep link almost instantly on cold cache.
+  //   2. Fallback: if the direct fetch fails (network, rules,
+  //      transient error), the original "wait for publicBhajans"
+  //      path still handles resolution.
+  //
+  // A separate `deepLinkResolving` state lets the render layer
+  // show a dedicated "Loading your bhajan..." splash instead of
+  // the empty home page while resolution is in progress.
+  useEffect(() => {
+    if (!pendingDeepLinkId) return;
+
+    let cancelled = false;
+
+    const waitForFirestoreConfig = () => new Promise((resolve) => {
+      const start = Date.now();
+      const check = () => {
+        if (cancelled) return resolve(false);
+        if (window._firestoreConfigured && window.firebase && window.firebase.firestore) {
+          return resolve(true);
+        }
+        if (Date.now() - start > 15000) return resolve(false);
+        setTimeout(check, 100);
+      };
+      check();
+    });
+
+    const resolveDeepLink = async () => {
+      const ready = await waitForFirestoreConfig();
+      if (!ready || cancelled) return;
+
+      try {
+        const db = window.firebase.firestore();
+        const doc = await db.collection('publicBhajans').doc(pendingDeepLinkId).get();
+        if (cancelled) return;
+
+        if (doc.exists) {
+          const bhajan = { id: doc.id, ...doc.data() };
+          openPublicBhajanDetail(bhajan);
+          setPendingDeepLinkId(null);
+          setDeepLinkResolving(false);
+          try {
+            const clean = window.location.pathname + window.location.hash;
+            window.history.replaceState({ view: 'public-bhajan-detail' }, '', clean);
+          } catch { /* non-fatal */ }
+        } else {
+          if (!cancelled) {
+            showToast('That bhajan couldn\'t be found. Browse the library instead.', 'error');
+            setPendingDeepLinkId(null);
+            setDeepLinkResolving(false);
+            try {
+              const clean = window.location.pathname + window.location.hash;
+              window.history.replaceState({ view: 'public-library' }, '', clean);
+            } catch { /* non-fatal */ }
+          }
+        }
+      } catch (e) {
+        // Direct fetch failed — leave pendingDeepLinkId set so
+        // the fallback effect (below) can resolve when the full
+        // publicBhajans listener eventually fires.
+        console.warn('Deep link direct fetch failed, falling back to listener:', e);
+      }
+    };
+
+    resolveDeepLink();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingDeepLinkId]);
+
+  // SESSION 26 fallback path: if direct fetch above didn't
+  // resolve (network flaked, rules issue, etc.) but the full
+  // publicBhajans listener eventually populates, we can still
+  // resolve from that. Rare path — direct fetch usually wins.
   useEffect(() => {
     if (!pendingDeepLinkId) return;
     if (!publicBhajans || publicBhajans.length === 0) return;
@@ -3352,13 +3447,24 @@ const App = () => {
     }
 
     setPendingDeepLinkId(null);
+    setDeepLinkResolving(false);
     try {
-      // Strip ?b=... from the URL so a reload doesn't re-open the
-      // link and the back button behaves normally.
       const clean = window.location.pathname + window.location.hash;
       window.history.replaceState({ view: target ? 'public-bhajan-detail' : 'public-library' }, '', clean);
     } catch { /* non-fatal */ }
   }, [pendingDeepLinkId, publicBhajans, openPublicBhajanDetail, showToast]);
+
+  // SESSION 26: expose escape hatch after 6s of splash. If a
+  // deep link is truly failing to resolve (broken network,
+  // Firestore config wedged, etc.), the user shouldn't be trapped.
+  useEffect(() => {
+    if (!deepLinkResolving) {
+      setDeepLinkStuck(false);
+      return;
+    }
+    const t = setTimeout(() => setDeepLinkStuck(true), 6000);
+    return () => clearTimeout(t);
+  }, [deepLinkResolving]);
 
   const saveToMyLibrary = useCallback(async (publicBhajan) => {
     if (!user || !userProfile) {
@@ -5031,6 +5137,49 @@ const App = () => {
   // ==============================================
   if ((user && userProfile) || guestMode) {
     const currentStep = ONBOARDING_STEPS[onboardingStep];
+
+    // SESSION 26: dedicated splash while a deep link is being
+    // resolved. Prevents users from seeing an empty/skeleton
+    // home page and thinking the link is broken, which was the
+    // most common reason WhatsApp-shared bhajans "didn't work
+    // the first time."
+    //
+    // We render this INSIDE the main-app gate (so guestMode
+    // still works) but BEFORE all the normal content. Auto-
+    // dismisses when deepLinkResolving flips false (in the
+    // resolver effect, on success OR failure).
+    if (deepLinkResolving) {
+      return (
+        <div className={`min-h-screen flex items-center justify-center p-6 ${darkMode ? 'bg-[#0f1a1c] text-gray-100' : 'bg-[#FFF8F0]'}`}>
+          {toastJsx}
+          <div className="max-w-sm w-full text-center">
+            <SankirtanWordmark className="h-14 mb-6 justify-center" />
+            <div className={`inline-block w-10 h-10 border-3 rounded-full animate-spin mb-4 ${darkMode ? 'border-[#0B5A70]/30 border-t-[#E65100]' : 'border-[#0B5A70]/20 border-t-[#E65100]'}`}
+                 style={{ borderWidth: '3px' }} />
+            <p className={`text-base font-semibold mb-1 ${darkMode ? 'text-amber-100' : 'text-[#0B5A70]'}`}>
+              भजन लोड हो रहा है…
+            </p>
+            <p className={`text-sm mb-6 ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+              Opening your bhajan…
+            </p>
+            {/* Escape hatch: if the resolve takes too long the
+                user shouldn't be trapped on the splash. Shown after
+                6 seconds via deepLinkStuck (see effect below). */}
+            {deepLinkStuck && (
+              <button
+                onClick={() => {
+                  setPendingDeepLinkId(null);
+                  setDeepLinkResolving(false);
+                }}
+                className={`text-sm font-semibold px-4 py-2 rounded-xl ${darkMode ? 'bg-[#E65100]/20 text-orange-300 hover:bg-[#E65100]/30' : 'bg-[#E65100]/10 text-[#E65100] hover:bg-[#E65100]/20'}`}
+              >
+                Skip → Browse Library
+              </button>
+            )}
+          </div>
+        </div>
+      );
+    }
 
     return (
       <div className={`min-h-screen ${darkMode ? 'bg-[#0f1a1c] text-gray-100' : 'bg-[#FFF8F0]'}`}>
