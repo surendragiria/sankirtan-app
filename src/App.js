@@ -1,32 +1,47 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 
 // ==============================================
-// SANKIRTAN SAAS - SESSION 24
+// SANKIRTAN SAAS - SESSION 25
 // Bhajan Se Bhagwan Tak
-// CHANGES (Session 24 — one-click unsave from My Library):
+// CHANGES (Session 25 — rename block for personal-only usages):
 //
-// Session 18 added a small ✕ button on each My Library card that
-// removed the bhajan (with a confirmation dialog). User feedback:
-// the confirmation is unnecessary friction for saved-from-public
-// bhajans, since removing them is fully reversible with one tap
-// (save back from Public Library).
+// Session 21 introduced cascade rename with a privacy stance:
+// admin never touches users' private data. Correct instinct,
+// wrong implementation. The rule required ZERO personal usages
+// to allow a rename when there were also zero public usages —
+// which made cleanup impossible once ANY user had a tag in
+// their personal library.
 //
-// New behavior:
-//   - Saved-from-public bhajan: ✕ tap → immediate removal.
-//     Toast: "Removed from library". Recovery = one tap from
-//     Public Library. Zero dialog.
-//   - Self-authored bhajan: ✕ tap → confirmation dialog
-//     (unchanged). Permanent delete is unrecoverable, so it
-//     deserves the extra tap. Toast: "Bhajan deleted".
+// Concrete symptom: renaming "punjabi" failed with "isn't on
+// any public bhajans, but 1 user has it in their personal
+// library" even though the rename would only update the config
+// list (no bhajan data touched).
 //
-// The card × button and the reading-view header button both
-// route through deleteBhajan(), so this behavior applies in both
-// places. No UI change needed at the call sites — the branch
-// happens inside deleteBhajan().
+// Fix: personal-only usages no longer block. The config list
+// gets renamed; personal copies are NOT touched (privacy stance
+// preserved). Users with the old value in their personal
+// library will keep it until they resave the bhajan from
+// Public Library, at which point their copy naturally picks
+// up the new value. Self-correcting eventual consistency.
 //
-// Not touched: everything else. Same delete write, same stats
-// decrement, same toast messages. Only the confirmation path
-// changed for the reversible case.
+// Toast is informational, not an error:
+//   "Note: 1 user's personal copy will keep the old value
+//    until re-saved."
+//
+// The three-way rename logic is now:
+//   1. Zero public + zero personal → silent rename, no dialog.
+//   2. Zero public + N personal → silent rename + info toast.  ← Session 25
+//   3. N public (any personal) → confirmation dialog with cascade
+//      count, personal note if applicable.
+//
+// Deliberately NOT changed: deleteConfigItem still blocks on
+// public usages (destructive; orphaned data would break filters).
+// Personal-only delete of a config value has the same argument
+// as rename but the risk profile is different — leaving that
+// alone for now.
+//
+// Not touched: everything else. Same batch write semantics,
+// same rules, same privacy boundary for personal data.
 // ==============================================
 
 // ==============================================
@@ -100,7 +115,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.08.20.s24';
+const APP_VERSION = '2026.08.20.s25';
 
 // ==============================================
 // SESSION 12: Session-scoped shuffle for Public Library
@@ -1704,11 +1719,20 @@ const App = () => {
       return;
     }
 
-    // Personal-only usages block silently — same guardrail as
-    // before. We CAN'T touch users' private data from admin.
-    // But now the message includes a hint about what admin CAN do.
+    // SESSION 25: personal-only usages used to hard-block the
+    // rename. That was wrong — it made cleanup impossible once
+    // any user had a tag/deity/category in their personal library.
+    // The fix: rename the config entry, DO NOT touch personal
+    // copies (privacy stance preserved), just proceed with a
+    // toast noting the drift. Personal copies will self-correct
+    // when the user resaves the bhajan from Public Library.
+    //
+    // No confirmation needed since there's no public-bhajan
+    // cascade here — just a config list update, same as the
+    // zero-usage case.
     if (publicUsage === 0 && personalUsage > 0) {
-      showToast(`"${oldValue}" isn't on any public bhajans, but ${personalUsage} user${personalUsage !== 1 ? "s have" : ' has'} it in their personal library. Cannot rename their private copies.`, 'error');
+      await doRename();
+      showToast(`Note: ${personalUsage} user's personal ${personalUsage === 1 ? 'copy' : 'copies'} will keep the old value until re-saved.`);
       return;
     }
 
