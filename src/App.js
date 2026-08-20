@@ -1,36 +1,56 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 
 // ==============================================
-// SANKIRTAN SAAS - SESSION 20
+// SANKIRTAN SAAS - SESSION 21
 // Bhajan Se Bhagwan Tak
-// CHANGES (Session 20 — filter dropdown labels):
+// CHANGES (Session 21 — cascade rename for deities/categories/tags):
 //
-// Three filter dropdowns had verbose default labels that read as
-// state descriptions rather than actions. Renamed to be shorter
-// and more inviting on mobile.
+// User pain: renaming a config value ("Rama" → "Ram") was
+// blocked if ANY bhajan already used it. Fixing the typo required
+// (1) find every bhajan using it, (2) edit each one individually,
+// (3) delete the old value, (4) add the new value. Painful for
+// 3 bhajans, undoable for 30.
 //
-//   "All Deities"    → "Deity"
-//   "All Categories" → "Type"
-//   "All Keywords"   → "Tag"
+// New behavior: rename triggers a cascade. In a single atomic
+// Firestore batch:
+//   1. The config list is updated ("Rama" → "Ram" in the deities
+//      array of appConfig/lists).
+//   2. Every publicBhajans doc whose relevant field references
+//      the old value is updated too.
 //
-// Applied in three views (8 places total):
-//   - My Library filter row (3 dropdowns)
-//   - Public Library filter row (3 dropdowns)
-//   - Create/Edit Program bhajan picker (2 dropdowns:
-//     Deity + Tag, no Type)
+// STRICT SAFETY — updates only the specific FIELD:
+//   - Renaming a deity → only `deity` field flipped on matching docs
+//   - Renaming a category → only `category` field
+//   - Renaming a keyword → only that entry in `keywords[]`, order
+//     preserved
+//   - Never touches: title, lyrics, dhun (तर्ज़), singer,
+//     lyricist, source, saveCount, readCount, viewCount, or any
+//     other field. If "Rama" appears in a lyric line, it stays.
+//     If a bhajan is titled "Sita Ram", the title is not touched.
 //
-// "Category" → "Type" because "type of bhajan" is what the
-// dropdown actually filters (bhajan vs aarti vs chalisa etc.).
-// "Keyword" → "Tag" because tags are universal internet
-// vocabulary (Instagram, YouTube, WhatsApp) even for elderly
-// users, and shorter fits mobile better.
+// Confirmation flow:
+//   - Zero public + zero personal usages → silent rename, no dialog.
+//   - Public usages exist → dialog explains exactly what will and
+//     won't change, with the exact count in the button label
+//     ("✓ Rename 3 bhajans").
+//   - Personal-only usages → still blocked, but the error now
+//     explains why (privacy — admin cannot touch users' saved
+//     private copies).
 //
-// Deliberately NOT touched: Add/Edit Bhajan form field labels
-// (still say "Deity", "Category", "Keywords" — those describe
-// input fields, not filters, so the longer noun form is right).
+// Atomicity: uses a Firestore batch write, so config + all
+// affected bhajans commit together or not at all. No partial
+// state possible. Capped at 490 writes per operation (Firestore's
+// 500-per-batch limit with headroom).
 //
-// Not touched: everything else. Purely a label change. No new
-// state, no new components, no schema change, no rules change.
+// User's personal library: NEVER touched. If a user has a saved
+// copy of a bhajan with deity "Rama" in their personal library,
+// their copy will still say "Rama" until they re-save from the
+// public library (which now has "Ram"). Eventually consistent,
+// no silent mutation of private data.
+//
+// Not touched: everything else. Delete rule still blocks removing
+// items that are in use — that's a different guardrail with a
+// different intent.
 // ==============================================
 
 // ==============================================
@@ -104,7 +124,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.08.14.s20';
+const APP_VERSION = '2026.08.20.s21';
 
 // ==============================================
 // SESSION 12: Session-scoped shuffle for Public Library
@@ -1611,49 +1631,127 @@ const App = () => {
                     : type === 'category' ? 'category'
                     : null;
 
-    let usageInfo = { publicUsage: 0, personalUsage: 0 };
-
+    // SESSION 21: count usages separately for public vs personal.
+    // - Public usages: we CAN and WILL update in a cascade batch.
+    // - Personal usages: NEVER touched. Users' saved bhajans are
+    //   their private data; silently mutating them from an admin
+    //   action crosses a boundary. If a user's saved copy has
+    //   the old value, they'll see it until they resave or edit.
+    //   Eventually consistent, no privacy violation.
+    let publicUsage = 0;
+    let personalUsage = 0;
+    let publicMatches = [];  // ← the actual docs we'll update
     if (fieldName) {
-      usageInfo.publicUsage = publicBhajans.filter(b => b[fieldName] === oldValue).length;
-      usageInfo.personalUsage = bhajans.filter(b => b[fieldName] === oldValue).length;
+      publicMatches = publicBhajans.filter(b => b[fieldName] === oldValue);
+      publicUsage = publicMatches.length;
+      personalUsage = bhajans.filter(b => b[fieldName] === oldValue).length;
     } else {
-      usageInfo.publicUsage = publicBhajans.filter(b => (b.keywords || []).includes(oldValue)).length;
-      usageInfo.personalUsage = bhajans.filter(b => (b.keywords || []).includes(oldValue)).length;
+      publicMatches = publicBhajans.filter(b => (b.keywords || []).includes(oldValue));
+      publicUsage = publicMatches.length;
+      personalUsage = bhajans.filter(b => (b.keywords || []).includes(oldValue)).length;
     }
 
-    const totalUsage = usageInfo.publicUsage + usageInfo.personalUsage;
+    // Actual rename work — extracted so we can call it directly OR
+    // from inside a confirmation dialog's callback.
+    const doRename = async () => {
+      try {
+        const db = window.firebase.firestore();
+        const configRef = db.collection('appConfig').doc('lists');
+        const firestoreField = type === 'deity' ? 'deities'
+                              : type === 'category' ? 'categories'
+                              : 'keywords';
 
-    if (totalUsage > 0) {
-      showToast(`Cannot rename "${oldValue}" — ${totalUsage} bhajan${totalUsage !== 1 ? 's' : ''} still use it. Update those first.`, 'error');
+        const newList = current.map(item => item === oldValue ? trimmed : item);
+
+        // Batch write: update the config list AND every public
+        // bhajan that references it, all-or-nothing. If any
+        // single write fails, nothing commits — no partial state.
+        //
+        // SESSION 21 SAFETY: we update ONLY the specific field
+        // (deity / category / keywords). Title, lyrics, dhun,
+        // singer, lyricist, source, etc. are never touched even
+        // if they happen to contain the old value as a substring.
+        // "Rama" in a lyric line stays "Rama" — only the deity
+        // tag flips to "Ram".
+        //
+        // Firestore batches are limited to 500 writes. We should
+        // never approach that (would need 499 bhajans tagged with
+        // the same deity), but we cap and warn just in case.
+        const MAX_BATCH = 490;
+        if (publicMatches.length > MAX_BATCH) {
+          showToast(`Too many bhajans (${publicMatches.length}) — split rename manually.`, 'error');
+          return;
+        }
+
+        const batch = db.batch();
+        batch.set(configRef, {
+          [firestoreField]: newList,
+          updatedAt: window.firebase.firestore.FieldValue.serverTimestamp(),
+          updatedBy: user.uid
+        }, { merge: true });
+
+        publicMatches.forEach(b => {
+          const bRef = db.collection('publicBhajans').doc(b.id);
+          if (fieldName) {
+            // Single-field update (deity or category)
+            batch.update(bRef, { [fieldName]: trimmed });
+          } else {
+            // Keywords array — replace the old value, keep order
+            const newKeywords = (b.keywords || []).map(k => k === oldValue ? trimmed : k);
+            batch.update(bRef, { keywords: newKeywords });
+          }
+        });
+
+        await batch.commit();
+
+        if (type === 'deity') setCustomDeities(newList);
+        else if (type === 'category') setCustomCategories(newList);
+        else setCustomKeywords(newList);
+
+        setEditingItem(null);
+        setEditingValue('');
+
+        const msg = publicMatches.length === 0
+          ? `Renamed to "${trimmed}"`
+          : `Renamed to "${trimmed}" · updated ${publicMatches.length} public bhajan${publicMatches.length !== 1 ? 's' : ''}`;
+        showToast(msg);
+      } catch (error) {
+        console.error(`Error renaming ${type}:`, error);
+        showToast('Could not rename: ' + error.message, 'error');
+      }
+    };
+
+    // Zero public usages AND zero personal usages → rename the
+    // config entry alone, no dialog needed.
+    if (publicUsage === 0 && personalUsage === 0) {
+      await doRename();
       return;
     }
 
-    try {
-      const db = window.firebase.firestore();
-      const configRef = db.collection('appConfig').doc('lists');
-      const firestoreField = type === 'deity' ? 'deities'
-                            : type === 'category' ? 'categories'
-                            : 'keywords';
-
-      const newList = current.map(item => item === oldValue ? trimmed : item);
-
-      await configRef.set({
-        [firestoreField]: newList,
-        updatedAt: window.firebase.firestore.FieldValue.serverTimestamp(),
-        updatedBy: user.uid
-      }, { merge: true });
-
-      if (type === 'deity') setCustomDeities(newList);
-      else if (type === 'category') setCustomCategories(newList);
-      else setCustomKeywords(newList);
-
-      setEditingItem(null);
-      setEditingValue('');
-      showToast(`Renamed to "${trimmed}"`);
-    } catch (error) {
-      console.error(`Error renaming ${type}:`, error);
-      showToast('Could not rename: ' + error.message, 'error');
+    // Personal-only usages block silently — same guardrail as
+    // before. We CAN'T touch users' private data from admin.
+    // But now the message includes a hint about what admin CAN do.
+    if (publicUsage === 0 && personalUsage > 0) {
+      showToast(`"${oldValue}" isn't on any public bhajans, but ${personalUsage} user${personalUsage !== 1 ? "s have" : ' has'} it in their personal library. Cannot rename their private copies.`, 'error');
+      return;
     }
+
+    // Public usages exist → cascade with confirmation.
+    // Message is explicit about what changes and what doesn't,
+    // so admin knows exactly what they're consenting to.
+    const bhajanWord = publicUsage === 1 ? 'bhajan' : 'bhajans';
+    const personalNote = personalUsage > 0
+      ? `\n\nNote: ${personalUsage} user's personal ${personalUsage === 1 ? 'copy' : 'copies'} won't change (privacy).`
+      : '';
+
+    askConfirm(
+      {
+        title: `Rename "${oldValue}" → "${trimmed}"?`,
+        message: `This will update the ${type} field on ${publicUsage} public ${bhajanWord}.\n\nTitles, lyrics, तर्ज़ etc. will NOT be touched — only the ${type} tag.${personalNote}`,
+        confirmLabel: `✓ Rename ${publicUsage} ${bhajanWord}`
+      },
+      doRename
+    );
   };
 
   const deleteConfigItem = (type, value) => {
