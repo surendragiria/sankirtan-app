@@ -1,53 +1,41 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 
 // ==============================================
-// SANKIRTAN SAAS - SESSION 29
+// SANKIRTAN SAAS - SESSION 30
 // Bhajan Se Bhagwan Tak
-// CHANGES (Session 29 — share the app itself):
+// CHANGES (Session 30 — remove stale "App Updated!" modal):
 //
-// Growth channel that was missing: no way for users to invite
-// others to sankirtan.app. Every existing share button shares
-// a specific bhajan — useful, but requires the sharer to pick
-// a bhajan first. For "hey, try this app" there was nothing.
+// User caught a real long-standing bug: the "App Updated!"
+// modal that fires on every version change showed the same
+// 3 hardcoded bullets ("New bottom tab bar", "Hindi typing
+// is now faster", "Faster app opening") for 25+ deploys —
+// features from Sessions 2-4 era. Every version bump since
+// then misled users by claiming those old features were new.
 //
-// Two additions, both intentionally small:
+// This bug was present since Session 4-ish and NOT ONCE was
+// the content updated in later sessions when we bumped the
+// version. Every "Session 6/7/8/...29" deploy has been
+// silently lying to users. My oversight.
 //
-// 1. Footer link: 📤 Share this app with a bhakt
-//    Sits below the existing feedback link with matching
-//    visual weight. Catches users who scroll to the bottom.
-//    Same click behavior as bhajan shares — native share
-//    sheet, clipboard fallback.
+// Fix: remove the auto-fire modal entirely.
+//   - Deleted the version-check useEffect
+//   - Deleted the dismissUpdatePrompt function
+//   - Deleted the showUpdatePrompt state
+//   - Deleted BOTH modal render blocks (there were two —
+//     one for the main app, one for the landing screen —
+//     both with identical stale content)
 //
-// 2. Onboarding final step: 📤 Share with a bhakt in your community
-//    Full-width saffron button on the "You're All Set" step,
-//    right below the description. Fires the same handler.
-//    Placed at the moment of highest enthusiasm — user just
-//    learned what the app does. Skippable by just tapping
-//    the primary "Let's Start" CTA.
+// Silent PWA updates are the modern norm. Users don't need
+// to be interrupted for every deploy. If a truly major
+// change ever needs an announcement, we can add a targeted,
+// hand-authored one-time dialog keyed to a message ID at
+// that time — not a permanent stale-content fixture.
 //
-// Message format (bilingual, short, respects app identity):
-//   🙏 संकीर्तन · Sankirtan.app
+// The 'sankirtan-app-version' localStorage key is left in
+// place (harmless orphan; simply never read again).
 //
-//   250+ bhajans, aartis, chalisas, kathas & more.
-//   भजन से भगवान तक।
-//
-//   https://sankirtan.app
-//
-// Kept intentionally short — recipients get one clean pitch,
-// no feature-dump ad-copy feel. If the sender wants to add
-// their own words, they can before hitting send.
-//
-// New helpers:
-//   - shareApp() module-scope (like shareBhajan)
-//   - handleShareApp() component-scope for toast wiring
-//
-// Toasts:
-//   - "🙏 Thank you for sharing!" on successful share
-//   - "📋 Link copied — paste in WhatsApp" on clipboard fallback
-//
-// Not touched: everything else. No new state, no schema change,
-// no rules change, no analytics. If share behavior turns out
-// to matter, we add tracking later based on evidence.
+// Not touched: everything else. No behavior change other
+// than the modal removal.
 // ==============================================
 
 // ==============================================
@@ -121,7 +109,15 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.08.20.s29';
+const APP_VERSION = '2026.08.20.s30';
+
+// SESSION 30: log at startup so admin can verify which build is
+// running via the browser console (helps diagnose "is my new
+// deploy live?" without needing the removed "App Updated" modal).
+try {
+  // eslint-disable-next-line no-console
+  console.log('Sankirtan build:', APP_VERSION);
+} catch { /* non-fatal */ }
 
 // ==============================================
 // SESSION 12: Session-scoped shuffle for Public Library
@@ -937,7 +933,6 @@ const App = () => {
   });
   const [publicBhajanFormError, setPublicBhajanFormError] = useState('');
   const [publicBhajanFormSaving, setPublicBhajanFormSaving] = useState(false);
-  const [showUpdatePrompt, setShowUpdatePrompt] = useState(false);
 
   // Check if current user is admin (SESSION 5: debug logging removed —
   // never advertise the comparison logic in the console)
@@ -1433,30 +1428,17 @@ const App = () => {
     };
   }, []);
 
-  // ==============================================
-  // VERSION CHECK (SESSION 5 FIX: null-guard so brand-new users
-  // don't see "App Updated!" on their very first visit)
-  // ==============================================
-  useEffect(() => {
-    try {
-      const savedVersion = localStorage.getItem('sankirtan-app-version');
-      if (savedVersion === null) {
-        // First-ever visit — silently record version, no prompt
-        localStorage.setItem('sankirtan-app-version', APP_VERSION);
-      } else if (savedVersion !== APP_VERSION) {
-        setShowUpdatePrompt(true);
-      }
-    } catch (e) {
-      console.log('Version check skipped');
-    }
-  }, []);
-
-  const dismissUpdatePrompt = () => {
-    try {
-      localStorage.setItem('sankirtan-app-version', APP_VERSION);
-    } catch (e) {}
-    setShowUpdatePrompt(false);
-  };
+  // SESSION 30: version-check "App Updated!" modal removed.
+  // The modal content was hardcoded and stale — describing
+  // features from months ago. Every deploy for 25+ sessions
+  // showed users the same misleading "here's what's new"
+  // message. Silent PWA updates (the modern norm) are more
+  // honest. If a truly major change ever needs announcement,
+  // we can add a targeted, hand-authored one-time dialog
+  // keyed to a message ID at that time.
+  //
+  // The 'sankirtan-app-version' localStorage key is left
+  // in place (harmless orphan; will simply never be read again).
 
   // ==============================================
   // PWA INSTALL PROMPT
@@ -5382,42 +5364,9 @@ const App = () => {
         )}
 
         {/* APP UPDATE PROMPT */}
-        {showUpdatePrompt && (
-          <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4">
-            <div className="bg-[#FFFCF8] rounded-3xl shadow-[0_8px_40px_rgba(11,90,112,0.15)] max-w-md w-full overflow-hidden">
-              <div className="bg-[#0B5A70] p-6 text-white text-center">
-                <div className="text-5xl mb-2">🎉</div>
-                <h3 className="text-2xl font-bold">App Updated!</h3>
-                <p className="text-sm text-white/80 mt-1">Sankirtan just got better</p>
-              </div>
-              <div className="p-6">
-                <p className="text-sm text-gray-700 mb-4">
-                  A new version of Sankirtan has been deployed. Here is what is new:
-                </p>
-                <ul className="text-sm text-gray-700 space-y-2 mb-6">
-                  <li className="flex items-start gap-2">
-                    <span className="text-[#0B5A70] font-bold">✓</span>
-                    <span>New bottom tab bar — switch between Public, My Library & Programs with one tap</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-[#0B5A70] font-bold">✓</span>
-                    <span>Hindi typing is now faster (smarter caching)</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-[#0B5A70] font-bold">✓</span>
-                    <span>Faster app opening & smoother confirmations</span>
-                  </li>
-                </ul>
-                <button
-                  onClick={dismissUpdatePrompt}
-                  className="w-full bg-[#0B5A70] hover:bg-[#094a5d] text-white font-bold py-3 rounded-xl shadow-lg"
-                >
-                  Awesome, let us go! 🚀
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        {/* SESSION 30: "App Updated!" modal removed — content was
+            hardcoded and stale for 25+ deploys. Silent PWA updates
+            are the modern norm. */}
 
         {/* FEEDBACK MODAL */}
         {showFeedbackModal && (
@@ -9237,42 +9186,7 @@ const App = () => {
           </span>
         </div>
       )}
-      {showUpdatePrompt && (
-        <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4">
-          <div className="bg-[#FFFCF8] rounded-3xl shadow-[0_8px_40px_rgba(11,90,112,0.15)] max-w-md w-full overflow-hidden">
-            <div className="bg-[#0B5A70] p-6 text-white text-center">
-              <div className="text-5xl mb-2">🎉</div>
-              <h3 className="text-2xl font-bold">App Updated!</h3>
-              <p className="text-sm text-white/80 mt-1">Sankirtan just got better</p>
-            </div>
-            <div className="p-6">
-              <p className="text-sm text-gray-700 mb-4">
-                A new version of Sankirtan has been deployed. Here is what is new:
-              </p>
-              <ul className="text-sm text-gray-700 space-y-2 mb-6">
-                <li className="flex items-start gap-2">
-                  <span className="text-[#0B5A70] font-bold">✓</span>
-                  <span>New bottom tab bar — switch between Public, My Library & Programs with one tap</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="text-[#0B5A70] font-bold">✓</span>
-                  <span>Hindi typing is now faster (smarter caching)</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="text-[#0B5A70] font-bold">✓</span>
-                  <span>Faster app opening & smoother confirmations</span>
-                </li>
-              </ul>
-              <button
-                onClick={dismissUpdatePrompt}
-                className="w-full bg-[#0B5A70] hover:bg-[#094a5d] text-white font-bold py-3 rounded-xl shadow-lg"
-              >
-                Awesome, let us go! 🚀
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* SESSION 30: "App Updated!" modal removed here too. */}
 
       <div className="max-w-md w-full">
         <div className="bg-[#FFFCF8] rounded-3xl shadow-[0_8px_40px_rgba(11,90,112,0.12)] overflow-hidden border border-[#0B5A70]/8">
