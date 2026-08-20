@@ -1,65 +1,36 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 
 // ==============================================
-// SANKIRTAN SAAS - SESSION 19
+// SANKIRTAN SAAS - SESSION 20
 // Bhajan Se Bhagwan Tak
-// CHANGES (Session 19 — Popular Bhajans by reads, not just saves):
+// CHANGES (Session 20 — filter dropdown labels):
 //
-// User feedback: "Top Bhajans" should reflect what's actually
-// being read, not just what's been saved. A save is aspirational;
-// a read is real practice. Someone opening the same bhajan 20
-// times in a month is a stronger popularity signal than someone
-// saving it once and never opening it again.
+// Three filter dropdowns had verbose default labels that read as
+// state descriptions rather than actions. Renamed to be shorter
+// and more inviting on mobile.
 //
-// Implementation
+//   "All Deities"    → "Deity"
+//   "All Categories" → "Type"
+//   "All Keywords"   → "Tag"
 //
-// 1. NEW field on publicBhajans docs: `readCount` (integer).
-//    Signed-in users increment by +1 every time they open a
-//    bhajan's reading view. Guests are excluded on purpose —
-//    (a) allowing anonymous writes invites bot inflation of
-//    the counter, (b) signed-in bhakts are the real community
-//    signal that matters.
+// Applied in three views (8 places total):
+//   - My Library filter row (3 dropdowns)
+//   - Public Library filter row (3 dropdowns)
+//   - Create/Edit Program bhajan picker (2 dropdowns:
+//     Deity + Tag, no Type)
 //
-// 2. NEW: hybrid popularity score:
-//      score = readCount + saveCount * 3
-//    Reads are the primary signal but saves still weighted
-//    higher because they're a stronger intent signal (saving
-//    = commitment; reading = curiosity). Roughly, 1 save is
-//    worth 3 reads.
+// "Category" → "Type" because "type of bhajan" is what the
+// dropdown actually filters (bhajan vs aarti vs chalisa etc.).
+// "Keyword" → "Tag" because tags are universal internet
+// vocabulary (Instagram, YouTube, WhatsApp) even for elderly
+// users, and shorter fits mobile better.
 //
-// 3. NEW: one-shot per-bhajan backfill. First time a bhajan is
-//    opened after this deploy, if its readCount is undefined
-//    AND its saveCount > 0, we seed readCount to saveCount + 1
-//    (instead of starting at 1). Prevents the "Popular Bhajans"
-//    section from becoming volatile on transition day, where
-//    a bhajan with 3 fresh reads would leapfrog famous ones
-//    still sitting at 0. Zero-cost migration — piggybacks on
-//    the read that would happen anyway.
+// Deliberately NOT touched: Add/Edit Bhajan form field labels
+// (still say "Deity", "Category", "Keywords" — those describe
+// input fields, not filters, so the longer noun form is right).
 //
-// 4. UPDATED: Popular Bhajans section subtitle
-//    "Most saved" → "Most read".
-//
-// 5. UPDATED: per-card indicator on the Popular list
-//    "✨ N" (saveCount) → "📖 N" (readCount || saveCount).
-//    Fallback to saveCount so pre-deploy bhajans still show
-//    a meaningful number instead of a jarring 0.
-//
-// Firestore rules — YOU MUST ADD readCount to the update rule
-// for publicBhajans. Alongside the existing saveCount rule,
-// allow signed-in users to increment readCount by any positive
-// amount (backfill can be > 1). See firestore.rules delivery.
-// Without the rule update, reads silently fail (fire-and-forget)
-// and readCount stays at 0 — the sort falls back to saveCount-
-// weighted behavior. No user-visible regression until rules are
-// pushed.
-//
-// Firestore cost: ~1 write per bhajan open per signed-in user.
-// At 100 daily signed-in users * 5 bhajans each = 500 writes/day.
-// Free tier is 20K writes/day. Comfortable margin.
-//
-// Not touched: everything else. My Library sort (Session 11)
-// still uses local viewCount on user's own copy. Save flow
-// unchanged. All Session 6-18 work intact.
+// Not touched: everything else. Purely a label change. No new
+// state, no new components, no schema change, no rules change.
 // ==============================================
 
 // ==============================================
@@ -133,7 +104,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.08.14.s19';
+const APP_VERSION = '2026.08.14.s20';
 
 // ==============================================
 // SESSION 12: Session-scoped shuffle for Public Library
@@ -5555,7 +5526,7 @@ const App = () => {
                       : `${darkMode ? 'border-[#0B5A70]/20' : 'border-[#0B5A70]/12'}`
                   }`}
                 >
-                  <option value="">All Deities</option>
+                  <option value="">Deity</option>
                   {allDeityOptions.map(d => (
                     <option key={d.value} value={d.value}>{d.value}</option>
                   ))}
@@ -5571,7 +5542,7 @@ const App = () => {
                       : `${darkMode ? 'border-[#0B5A70]/20' : 'border-[#0B5A70]/12'}`
                   }`}
                 >
-                  <option value="">All Categories</option>
+                  <option value="">Type</option>
                   {allCategoryOptions.map(c => (
                     <option key={c} value={c}>{c}</option>
                   ))}
@@ -5587,7 +5558,7 @@ const App = () => {
                       : `${darkMode ? 'border-[#0B5A70]/20' : 'border-[#0B5A70]/12'}`
                   }`}
                 >
-                  <option value="">All Keywords</option>
+                  <option value="">Tag</option>
                   {allKeywordOptions.map(kw => (
                     <option key={kw} value={kw}>#{kw}</option>
                   ))}
@@ -6919,7 +6890,7 @@ const App = () => {
                               : 'border-[#0B5A70]/15'
                           }`}
                         >
-                          <option value="">All Deities</option>
+                          <option value="">Deity</option>
                           {pickerDeities.map(d => <option key={d} value={d}>{d}</option>)}
                         </select>
                         <select
@@ -6932,7 +6903,7 @@ const App = () => {
                               : 'border-[#0B5A70]/15'
                           }`}
                         >
-                          <option value="">All Keywords</option>
+                          <option value="">Tag</option>
                           {allPickerKeywords.map(kw => <option key={kw} value={kw}>#{kw}</option>)}
                         </select>
                         {hasActiveFilters && (
@@ -7172,7 +7143,7 @@ const App = () => {
                       : `${darkMode ? 'border-[#0B5A70]/20' : 'border-[#0B5A70]/12'}`
                   }`}
                 >
-                  <option value="">All Deities</option>
+                  <option value="">Deity</option>
                   {allDeityOptions.map(d => (
                     <option key={d.value} value={d.value}>{d.value}</option>
                   ))}
@@ -7188,7 +7159,7 @@ const App = () => {
                       : `${darkMode ? 'border-[#0B5A70]/20' : 'border-[#0B5A70]/12'}`
                   }`}
                 >
-                  <option value="">All Categories</option>
+                  <option value="">Type</option>
                   {allCategoryOptions.map(c => (
                     <option key={c} value={c}>{c}</option>
                   ))}
@@ -7204,7 +7175,7 @@ const App = () => {
                       : `${darkMode ? 'border-[#0B5A70]/20' : 'border-[#0B5A70]/12'}`
                   }`}
                 >
-                  <option value="">All Keywords</option>
+                  <option value="">Tag</option>
                   {allKeywordOptions.map(kw => (
                     <option key={kw} value={kw}>#{kw}</option>
                   ))}
