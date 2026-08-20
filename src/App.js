@@ -1,52 +1,43 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 
 // ==============================================
-// SANKIRTAN SAAS - SESSION 26
+// SANKIRTAN SAAS - SESSION 27
 // Bhajan Se Bhagwan Tak
-// CHANGES (Session 26 — fix deep-link "stuck on home page"):
+// CHANGES (Session 27 — tolerant deep-link parser):
 //
-// User report from GMV Vocals Student Group: WhatsApp-shared
-// bhajan links landed on the home page instead of the bhajan.
-// Only worked on the second try ("First time me home page pe
-// stuck tha, this time worked").
+// New user report: shared WhatsApp bhajan link landed on the
+// sign-in wall instead of the bhajan. URL bar showed the ?b=
+// param contaminated with title + lyrics:
+//   ?b=abcXYZ123 वन्दे मातरम् / Vande Matram वन्दे मातरम्।...
 //
-// Root cause: Session 13's deep-link consumer effect waited for
-// the FULL publicBhajans listener to populate before resolving
-// the target. On WhatsApp's in-app browser (slow, no aggressive
-// caching), this takes 3-8 seconds cold. Meanwhile the user
-// sees empty skeletons on the home page, thinks the link is
-// broken, refreshes — which warms the cache and makes the
-// second try work instantly.
+// Session 26's splash fix couldn't help — the parser rejected
+// the malformed value outright (regex required the ENTIRE param
+// to be a clean ID), so no deep link was registered, guestMode
+// stayed false, and the sign-in wall rendered.
 //
-// Two-part fix:
+// Root cause is downstream of our code — some messenger step
+// (WhatsApp forward chain, copy-paste through an app that
+// strips newlines, an in-app browser's aggressive URL detection)
+// concatenated the share text into the URL. The share function
+// itself still generates clean URLs like ?b=abcXYZ123.
 //
-// 1. Fast path — direct single-doc fetch for the target bhajan
-//    (~200-500ms) instead of waiting for the full listener.
-//    Fires as soon as Firestore config is ready. Independent
-//    of the collection listener, so it works even before that
-//    completes. The Session 13 "wait for publicBhajans" logic
-//    stays as a fallback in case the direct fetch fails.
+// Fix: parser now extracts the leading ID PREFIX rather than
+// requiring the whole ?b= value to be a clean ID. Firestore
+// auto-IDs are 20 characters of [A-Za-z0-9_-], and we match
+// that prefix and ignore anything after. Safe: valid URLs have
+// nothing after the ID to ignore, so their behavior is
+// unchanged.
 //
-// 2. Dedicated splash — while resolution is in progress, we
-//    render a "भजन लोड हो रहा है… / Opening your bhajan…"
-//    full-screen splash with the wordmark and a spinner INSTEAD
-//    of the empty home page. Users now see feedback that
-//    something is happening.
+// Combined with Session 26's fast direct-fetch, mangled-URL
+// visitors will now:
+//   1. Parser extracts the clean ID from the messy ?b= value
+//   2. deepLinkResolving splash appears immediately
+//   3. Direct fetch resolves the bhajan (~200-500ms)
+//   4. Reading view opens
+//   5. URL gets cleaned via history.replaceState
 //
-// Escape hatch: after 6 seconds a "Skip → Browse Library"
-// button appears on the splash. If the resolve truly hangs
-// (broken network, Firestore wedged), the user isn't trapped.
-// Tap it, they land on the Public Library normally.
-//
-// New state:
-//   - deepLinkResolving: boolean, drives the splash render
-//   - deepLinkStuck: boolean, exposes the skip button after 6s
-// Both auto-clear when resolution completes (success or failure).
-//
-// Not touched: everything else. The Session 13 URL cleanup via
-// history.replaceState still fires. Guest-mode auto-enable on
-// deep link still works. Everything downstream of the resolve
-// (reading view, readCount increment, share buttons) unchanged.
+// Not touched: share text format (URL already at end of message,
+// safest position). Rules. Firestore. Everything else.
 // ==============================================
 
 // ==============================================
@@ -120,7 +111,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.08.20.s26';
+const APP_VERSION = '2026.08.20.s27';
 
 // ==============================================
 // SESSION 12: Session-scoped shuffle for Public Library
@@ -701,11 +692,27 @@ const App = () => {
   //
   // The pending id is consumed later by an effect that waits for
   // publicBhajans to arrive.
+  //
+  // SESSION 27: parser now extracts the leading ID PREFIX rather
+  // than requiring the whole ?b= value to be a clean ID. Some
+  // messengers (WhatsApp forward chains, copy-paste through apps
+  // that strip newlines, some in-app browsers) can concatenate
+  // the URL with following text — the ?b= param ends up as
+  // "abcXYZ123 वन्दे मातरम्..." instead of just "abcXYZ123".
+  // Previously that fell through to "no deep link" and the user
+  // saw the sign-in wall instead of the bhajan.
+  //
+  // The ID is always the first token of alphanumeric+underscore+
+  // dash characters (Firestore auto-IDs are 20 chars from that
+  // set). We match the prefix and ignore the rest. Safe because
+  // valid IDs would have nothing after them to ignore.
   const initialDeepLinkId = (() => {
     try {
       const params = new URLSearchParams(window.location.search);
-      const bId = params.get('b');
-      return bId && /^[A-Za-z0-9_-]{6,64}$/.test(bId) ? bId : null;
+      const bIdRaw = params.get('b');
+      if (!bIdRaw) return null;
+      const m = bIdRaw.match(/^([A-Za-z0-9_-]{6,64})/);
+      return m ? m[1] : null;
     } catch { return null; }
   })();
   const [pendingDeepLinkId, setPendingDeepLinkId] = useState(initialDeepLinkId);
