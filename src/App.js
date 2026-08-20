@@ -1,56 +1,32 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 
 // ==============================================
-// SANKIRTAN SAAS - SESSION 21
+// SANKIRTAN SAAS - SESSION 24
 // Bhajan Se Bhagwan Tak
-// CHANGES (Session 21 — cascade rename for deities/categories/tags):
+// CHANGES (Session 24 — one-click unsave from My Library):
 //
-// User pain: renaming a config value ("Rama" → "Ram") was
-// blocked if ANY bhajan already used it. Fixing the typo required
-// (1) find every bhajan using it, (2) edit each one individually,
-// (3) delete the old value, (4) add the new value. Painful for
-// 3 bhajans, undoable for 30.
+// Session 18 added a small ✕ button on each My Library card that
+// removed the bhajan (with a confirmation dialog). User feedback:
+// the confirmation is unnecessary friction for saved-from-public
+// bhajans, since removing them is fully reversible with one tap
+// (save back from Public Library).
 //
-// New behavior: rename triggers a cascade. In a single atomic
-// Firestore batch:
-//   1. The config list is updated ("Rama" → "Ram" in the deities
-//      array of appConfig/lists).
-//   2. Every publicBhajans doc whose relevant field references
-//      the old value is updated too.
+// New behavior:
+//   - Saved-from-public bhajan: ✕ tap → immediate removal.
+//     Toast: "Removed from library". Recovery = one tap from
+//     Public Library. Zero dialog.
+//   - Self-authored bhajan: ✕ tap → confirmation dialog
+//     (unchanged). Permanent delete is unrecoverable, so it
+//     deserves the extra tap. Toast: "Bhajan deleted".
 //
-// STRICT SAFETY — updates only the specific FIELD:
-//   - Renaming a deity → only `deity` field flipped on matching docs
-//   - Renaming a category → only `category` field
-//   - Renaming a keyword → only that entry in `keywords[]`, order
-//     preserved
-//   - Never touches: title, lyrics, dhun (तर्ज़), singer,
-//     lyricist, source, saveCount, readCount, viewCount, or any
-//     other field. If "Rama" appears in a lyric line, it stays.
-//     If a bhajan is titled "Sita Ram", the title is not touched.
+// The card × button and the reading-view header button both
+// route through deleteBhajan(), so this behavior applies in both
+// places. No UI change needed at the call sites — the branch
+// happens inside deleteBhajan().
 //
-// Confirmation flow:
-//   - Zero public + zero personal usages → silent rename, no dialog.
-//   - Public usages exist → dialog explains exactly what will and
-//     won't change, with the exact count in the button label
-//     ("✓ Rename 3 bhajans").
-//   - Personal-only usages → still blocked, but the error now
-//     explains why (privacy — admin cannot touch users' saved
-//     private copies).
-//
-// Atomicity: uses a Firestore batch write, so config + all
-// affected bhajans commit together or not at all. No partial
-// state possible. Capped at 490 writes per operation (Firestore's
-// 500-per-batch limit with headroom).
-//
-// User's personal library: NEVER touched. If a user has a saved
-// copy of a bhajan with deity "Rama" in their personal library,
-// their copy will still say "Rama" until they re-save from the
-// public library (which now has "Ram"). Eventually consistent,
-// no silent mutation of private data.
-//
-// Not touched: everything else. Delete rule still blocks removing
-// items that are in use — that's a different guardrail with a
-// different intent.
+// Not touched: everything else. Same delete write, same stats
+// decrement, same toast messages. Only the confirmation path
+// changed for the reversible case.
 // ==============================================
 
 // ==============================================
@@ -124,7 +100,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.08.20.s21';
+const APP_VERSION = '2026.08.20.s24';
 
 // ==============================================
 // SESSION 12: Session-scoped shuffle for Public Library
@@ -2861,40 +2837,52 @@ const App = () => {
 
   // SESSION 5: browser confirm() → branded ConfirmDialog
   const deleteBhajan = (bhajan) => {
-    // SESSION 18: wording depends on whether the bhajan was saved
-    // from the public library (removing it is a soft unsave — the
-    // public copy still exists) vs authored personally (permanent).
+    // SESSION 24: one-click for saved-from-public bhajans (soft
+    // unsave — public copy still exists, reversible in one tap
+    // by saving again). Confirmation stays for self-authored
+    // bhajans because that's a permanent, unrecoverable delete.
     const isSavedFromPublic = !!bhajan.savedFromPublicId;
+
+    // The actual delete work — used by both the direct path
+    // (saved-from-public) and the confirmed path (self-authored).
+    const doDelete = async () => {
+      try {
+        const db = window.firebase.firestore();
+        await db.collection('users').doc(user.uid).collection('bhajans').doc(bhajan.id).delete();
+
+        await db.collection('users').doc(user.uid).update({
+          'stats.bhajanCount': window.firebase.firestore.FieldValue.increment(-1)
+        });
+
+        setUserProfile(prev => ({
+          ...prev,
+          stats: { ...prev.stats, bhajanCount: Math.max(0, (prev.stats?.bhajanCount || 0) - 1) }
+        }));
+
+        setCurrentView('library');
+        setSelectedBhajan(null);
+        showToast(isSavedFromPublic ? 'Removed from library' : 'Bhajan deleted');
+      } catch (error) {
+        console.error('Error deleting bhajan:', error);
+        showToast('Could not delete: ' + error.message, 'error');
+      }
+    };
+
+    if (isSavedFromPublic) {
+      // One-click removal. No dialog. The toast confirms what
+      // happened; recovery is a one-tap Save from Public Library.
+      doDelete();
+      return;
+    }
+
+    // Self-authored bhajan — permanent, deserves the extra tap.
     askConfirm(
       {
-        title: isSavedFromPublic ? 'Remove from library?' : 'Delete Bhajan?',
-        message: isSavedFromPublic
-          ? `"${bhajan.title}" will be removed from your personal library. You can save it back anytime from the Public Library.`
-          : `"${bhajan.title}" will be permanently deleted from your library. This cannot be undone.`,
-        confirmLabel: isSavedFromPublic ? '✕ Remove' : '🗑️ Delete'
+        title: 'Delete Bhajan?',
+        message: `"${bhajan.title}" will be permanently deleted from your library. This cannot be undone.`,
+        confirmLabel: '🗑️ Delete'
       },
-      async () => {
-        try {
-          const db = window.firebase.firestore();
-          await db.collection('users').doc(user.uid).collection('bhajans').doc(bhajan.id).delete();
-
-          await db.collection('users').doc(user.uid).update({
-            'stats.bhajanCount': window.firebase.firestore.FieldValue.increment(-1)
-          });
-
-          setUserProfile(prev => ({
-            ...prev,
-            stats: { ...prev.stats, bhajanCount: Math.max(0, (prev.stats?.bhajanCount || 0) - 1) }
-          }));
-
-          setCurrentView('library');
-          setSelectedBhajan(null);
-          showToast(isSavedFromPublic ? 'Removed from library' : 'Bhajan deleted');
-        } catch (error) {
-          console.error('Error deleting bhajan:', error);
-          showToast('Could not delete: ' + error.message, 'error');
-        }
-      }
+      doDelete
     );
   };
 
@@ -5517,7 +5505,7 @@ const App = () => {
                   onClick={openAddBhajan}
                   className="bg-[#0B5A70] hover:bg-[#094a5d] text-white font-semibold px-4 py-2 rounded-xl shadow-md flex items-center gap-2 text-sm"
                 >
-                  <span className="text-lg">+</span> Add Bhajan
+                  <span className="text-lg">+</span> Add
                 </button>
               </div>
 
@@ -5557,7 +5545,7 @@ const App = () => {
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="🔍 Search bhajans (title, lyrics, keywords)..."
+                    placeholder="🔍 Search..."
                     aria-label="Search my library"
                     className={`w-full px-4 py-3 pr-24 border rounded-xl focus:ring-4 outline-none ${
                       darkMode
@@ -6483,7 +6471,7 @@ const App = () => {
                     disabled={bhajanFormSaving || !bhajanForm.title.trim() || !bhajanForm.lyrics.trim()}
                     className="flex-1 bg-[#0B5A70] hover:bg-[#094a5d] text-white font-bold py-3 rounded-xl shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {bhajanFormSaving ? 'Saving...' : (currentView === 'edit-bhajan' ? '💾 Save Changes' : '➕ Add Bhajan')}
+                    {bhajanFormSaving ? 'Saving...' : '💾 Save'}
                   </button>
                   <button
                     onClick={() => {
@@ -7164,7 +7152,7 @@ const App = () => {
                     onClick={openAddPublicBhajan}
                     className="bg-[#0B5A70] hover:bg-[#094a5d] text-white font-semibold px-4 py-2 rounded-xl text-sm flex items-center gap-1 shadow-md"
                   >
-                    + Add Bhajan
+                    + Add
                   </button>
                 </div>
               )}
@@ -7175,7 +7163,7 @@ const App = () => {
                     type="text"
                     value={publicSearchQuery}
                     onChange={(e) => setPublicSearchQuery(e.target.value)}
-                    placeholder="🔍 Search public bhajans..."
+                    placeholder="🔍 Search..."
                     aria-label="Search public library"
                     className={`w-full px-4 py-3 pr-24 border rounded-xl focus:ring-4 outline-none ${
                       darkMode
@@ -8805,7 +8793,7 @@ const App = () => {
                     disabled={publicBhajanFormSaving || !publicBhajanForm.title.trim() || !publicBhajanForm.lyrics.trim()}
                     className="flex-1 bg-[#0B5A70] hover:bg-[#094a5d] text-white font-bold py-3 rounded-xl shadow-lg disabled:opacity-50"
                   >
-                    {publicBhajanFormSaving ? 'Saving...' : (editingPublicBhajan ? '💾 Save Changes' : '➕ Add Bhajan')}
+                    {publicBhajanFormSaving ? 'Saving...' : '💾 Save'}
                   </button>
                   <button
                     onClick={() => {
