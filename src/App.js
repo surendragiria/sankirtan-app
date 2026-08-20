@@ -1,52 +1,53 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 
 // ==============================================
-// SANKIRTAN SAAS - SESSION 28
+// SANKIRTAN SAAS - SESSION 29
 // Bhajan Se Bhagwan Tak
-// CHANGES (Session 28 — hotfix for deep-link Firestore race):
+// CHANGES (Session 29 — share the app itself):
 //
-// Deep-link visitors hit a Firestore init race that broke the
-// entire transport: console showed "Firestore has already been
-// started and its settings can no longer be changed", followed
-// by "Could not reach Cloud Firestore backend" 404s. Splash
-// stayed up until the 6s escape hatch.
+// Growth channel that was missing: no way for users to invite
+// others to sankirtan.app. Every existing share button shares
+// a specific bhajan — useful, but requires the sharer to pick
+// a bhajan first. For "hey, try this app" there was nothing.
 //
-// Root cause: the main publicBhajans listener effect fires on
-// mount and immediately calls
-// window.firebase.firestore().collection('publicBhajans')
-// .onSnapshot(...) BEFORE initFirebase()'s db.settings() has
-// run. Once ANY Firestore operation runs, settings are locked
-// forever, so the subsequent db.settings() call throws and
-// takes the whole transport down.
+// Two additions, both intentionally small:
 //
-// The race wasn't hitting regular visitors because their
-// publicBhajans effect had a natural serializing dependency
-// on user/guestMode both being null/false during initial auth
-// load — the effect returned early and only actually fired
-// after auth had resolved (by which time initFirebase had
-// completed). But deep-link visitors set guestMode=true FROM
-// INITIAL RENDER (Session 13 auto-enable), which fires the
-// listener effect immediately, racing with initFirebase.
+// 1. Footer link: 📤 Share this app with a bhakt
+//    Sits below the existing feedback link with matching
+//    visual weight. Catches users who scroll to the bottom.
+//    Same click behavior as bhajan shares — native share
+//    sheet, clipboard fallback.
 //
-// Fix: wrap the publicBhajans listener body in the same
-// waitForFirestoreConfig guard that Session 16b applied to the
-// daily bhajan fetch and Session 26 applied to the direct
-// deep-link fetch. Effect body runs inside an async IIFE that
-// awaits window._firestoreConfigured before touching Firestore.
-// Unsubscribe still fires from cleanup even if effect body
-// hasn't set it yet (guarded by cancelled flag).
+// 2. Onboarding final step: 📤 Share with a bhakt in your community
+//    Full-width saffron button on the "You're All Set" step,
+//    right below the description. Fires the same handler.
+//    Placed at the moment of highest enthusiasm — user just
+//    learned what the app does. Skippable by just tapping
+//    the primary "Let's Start" CTA.
 //
-// This is the third Firestore-race regression in the same
-// class. All three (16b, 26, 28) are variations of the same
-// bug pattern: adding a new useEffect that touches Firestore
-// on mount without waiting for initFirebase to finish
-// configuring it. Rule going forward: any new useEffect that
-// touches Firestore on mount MUST wait for
-// window._firestoreConfigured. No exceptions.
+// Message format (bilingual, short, respects app identity):
+//   🙏 संकीर्तन · Sankirtan.app
 //
-// Not touched: everything else. Direct-fetch path (Session 26),
-// tolerant parser (Session 27), and all other Session 6-27
-// work intact. Firestore rules unchanged.
+//   250+ bhajans, aartis, chalisas, kathas & more.
+//   भजन से भगवान तक।
+//
+//   https://sankirtan.app
+//
+// Kept intentionally short — recipients get one clean pitch,
+// no feature-dump ad-copy feel. If the sender wants to add
+// their own words, they can before hitting send.
+//
+// New helpers:
+//   - shareApp() module-scope (like shareBhajan)
+//   - handleShareApp() component-scope for toast wiring
+//
+// Toasts:
+//   - "🙏 Thank you for sharing!" on successful share
+//   - "📋 Link copied — paste in WhatsApp" on clipboard fallback
+//
+// Not touched: everything else. No new state, no schema change,
+// no rules change, no analytics. If share behavior turns out
+// to matter, we add tracking later based on evidence.
 // ==============================================
 
 // ==============================================
@@ -120,7 +121,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.08.20.s28';
+const APP_VERSION = '2026.08.20.s29';
 
 // ==============================================
 // SESSION 12: Session-scoped shuffle for Public Library
@@ -347,6 +348,49 @@ if (typeof document !== 'undefined' && !document.getElementById('sankirtan-anima
 // ("today's featured bhajan") and are more likely to tap the
 // link. Also includes the curator's optional note if present.
 // ==============================================
+// ==============================================
+// SHARE APP HELPER (Session 29) — one-tap invite to sankirtan.app
+// Same navigator.share + clipboard fallback pattern as shareBhajan.
+// Message is short and bilingual, respecting the app's identity.
+// ==============================================
+const shareApp = async () => {
+  const shareText = [
+    '🙏 संकीर्तन · Sankirtan.app',
+    '',
+    '250+ bhajans, aartis, chalisas, kathas & more.',
+    'भजन से भगवान तक।',
+    '',
+    'https://sankirtan.app'
+  ].join('\n');
+
+  if (navigator.share) {
+    try {
+      await navigator.share({
+        title: 'संकीर्तन · Sankirtan',
+        text: shareText,
+        url: 'https://sankirtan.app'
+      });
+      return 'shared';
+    } catch (err) {
+      if (err.name === 'AbortError') return 'cancelled';
+    }
+  }
+
+  try {
+    await navigator.clipboard.writeText(shareText);
+    return 'copied';
+  } catch {
+    const ta = document.createElement('textarea');
+    ta.value = shareText;
+    ta.style.cssText = 'position:fixed;left:-9999px';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    return 'copied';
+  }
+};
+
 const shareBhajan = async (bhajan, isPublic = false, opts = {}) => {
   if (!bhajan) return false;
   const isDaily = !!opts.isDaily;
@@ -4468,6 +4512,15 @@ const App = () => {
     else if (result === 'shared') showToast('✓ Shared successfully!');
   }, [showToast]);
 
+  // SESSION 29: share the app itself. Used by the footer link and
+  // the final onboarding step to let bhakts invite family/friends
+  // in one tap.
+  const handleShareApp = useCallback(async () => {
+    const result = await shareApp();
+    if (result === 'copied') showToast('📋 Link copied — paste in WhatsApp');
+    else if (result === 'shared') showToast('🙏 Thank you for sharing!');
+  }, [showToast]);
+
   // ==============================================
   // AUTHENTICATION - GOOGLE
   // ==============================================
@@ -5284,6 +5337,19 @@ const App = () => {
                 <p className="text-gray-700 leading-relaxed text-base mb-6">
                   {currentStep.description}
                 </p>
+
+                {/* SESSION 29: on the final onboarding step, offer
+                    a share button. Moment of highest enthusiasm —
+                    user just learned what the app does. Skippable
+                    by just tapping the primary CTA. */}
+                {onboardingStep === ONBOARDING_STEPS.length - 1 && (
+                  <button
+                    onClick={handleShareApp}
+                    className="w-full mb-3 bg-[#E65100]/10 hover:bg-[#E65100]/20 text-[#E65100] font-semibold py-3 rounded-xl text-sm flex items-center justify-center gap-2 transition-colors"
+                  >
+                    📤 Share with a bhakt in your community
+                  </button>
+                )}
 
                 <div className="flex gap-3">
                   {onboardingStep > 0 && (
@@ -7796,6 +7862,18 @@ const App = () => {
                 >
                   💬 Share feedback or suggestions
                 </button>
+                {/* SESSION 29: share app button. Small, subtle,
+                    same visual weight as the feedback link. Sits
+                    below feedback because feedback is more
+                    important for iteration; share is optional. */}
+                <div className="mt-1">
+                  <button
+                    onClick={handleShareApp}
+                    className={`text-xs underline hover:no-underline transition-colors ${darkMode ? 'text-blue-400 hover:text-blue-300' : 'text-[#0B5A70] hover:text-[#0B5A70]/80'}`}
+                  >
+                    📤 Share this app with a bhakt
+                  </button>
+                </div>
                 <div className={`flex items-center justify-center gap-3 mt-2 text-xs ${darkMode ? 'text-gray-600' : 'text-[#0B5A70]/50'}`}>
                   <a href="/privacy-policy.html" className="hover:underline">Privacy Policy</a>
                   <span>·</span>
