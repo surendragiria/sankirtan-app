@@ -1,43 +1,52 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 
 // ==============================================
-// SANKIRTAN SAAS - SESSION 27
+// SANKIRTAN SAAS - SESSION 28
 // Bhajan Se Bhagwan Tak
-// CHANGES (Session 27 — tolerant deep-link parser):
+// CHANGES (Session 28 — hotfix for deep-link Firestore race):
 //
-// New user report: shared WhatsApp bhajan link landed on the
-// sign-in wall instead of the bhajan. URL bar showed the ?b=
-// param contaminated with title + lyrics:
-//   ?b=abcXYZ123 वन्दे मातरम् / Vande Matram वन्दे मातरम्।...
+// Deep-link visitors hit a Firestore init race that broke the
+// entire transport: console showed "Firestore has already been
+// started and its settings can no longer be changed", followed
+// by "Could not reach Cloud Firestore backend" 404s. Splash
+// stayed up until the 6s escape hatch.
 //
-// Session 26's splash fix couldn't help — the parser rejected
-// the malformed value outright (regex required the ENTIRE param
-// to be a clean ID), so no deep link was registered, guestMode
-// stayed false, and the sign-in wall rendered.
+// Root cause: the main publicBhajans listener effect fires on
+// mount and immediately calls
+// window.firebase.firestore().collection('publicBhajans')
+// .onSnapshot(...) BEFORE initFirebase()'s db.settings() has
+// run. Once ANY Firestore operation runs, settings are locked
+// forever, so the subsequent db.settings() call throws and
+// takes the whole transport down.
 //
-// Root cause is downstream of our code — some messenger step
-// (WhatsApp forward chain, copy-paste through an app that
-// strips newlines, an in-app browser's aggressive URL detection)
-// concatenated the share text into the URL. The share function
-// itself still generates clean URLs like ?b=abcXYZ123.
+// The race wasn't hitting regular visitors because their
+// publicBhajans effect had a natural serializing dependency
+// on user/guestMode both being null/false during initial auth
+// load — the effect returned early and only actually fired
+// after auth had resolved (by which time initFirebase had
+// completed). But deep-link visitors set guestMode=true FROM
+// INITIAL RENDER (Session 13 auto-enable), which fires the
+// listener effect immediately, racing with initFirebase.
 //
-// Fix: parser now extracts the leading ID PREFIX rather than
-// requiring the whole ?b= value to be a clean ID. Firestore
-// auto-IDs are 20 characters of [A-Za-z0-9_-], and we match
-// that prefix and ignore anything after. Safe: valid URLs have
-// nothing after the ID to ignore, so their behavior is
-// unchanged.
+// Fix: wrap the publicBhajans listener body in the same
+// waitForFirestoreConfig guard that Session 16b applied to the
+// daily bhajan fetch and Session 26 applied to the direct
+// deep-link fetch. Effect body runs inside an async IIFE that
+// awaits window._firestoreConfigured before touching Firestore.
+// Unsubscribe still fires from cleanup even if effect body
+// hasn't set it yet (guarded by cancelled flag).
 //
-// Combined with Session 26's fast direct-fetch, mangled-URL
-// visitors will now:
-//   1. Parser extracts the clean ID from the messy ?b= value
-//   2. deepLinkResolving splash appears immediately
-//   3. Direct fetch resolves the bhajan (~200-500ms)
-//   4. Reading view opens
-//   5. URL gets cleaned via history.replaceState
+// This is the third Firestore-race regression in the same
+// class. All three (16b, 26, 28) are variations of the same
+// bug pattern: adding a new useEffect that touches Firestore
+// on mount without waiting for initFirebase to finish
+// configuring it. Rule going forward: any new useEffect that
+// touches Firestore on mount MUST wait for
+// window._firestoreConfigured. No exceptions.
 //
-// Not touched: share text format (URL already at end of message,
-// safest position). Rules. Firestore. Everything else.
+// Not touched: everything else. Direct-fetch path (Session 26),
+// tolerant parser (Session 27), and all other Session 6-27
+// work intact. Firestore rules unchanged.
 // ==============================================
 
 // ==============================================
@@ -111,7 +120,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.08.20.s27';
+const APP_VERSION = '2026.08.20.s28';
 
 // ==============================================
 // SESSION 12: Session-scoped shuffle for Public Library
@@ -2189,87 +2198,126 @@ const App = () => {
       return;
     }
 
-    setPublicLoading(true);
-    const db = window.firebase.firestore();
-    const publicRef = db.collection('publicBhajans');
-
-    const CACHE_KEY = 'sankirtan-public-bhajans-cache';
-    const CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days — public library changes rarely; extended TTL avoids blank-then-repaint on weekly visitors
-    let cacheHit = false;
-    try {
-      const raw = localStorage.getItem(CACHE_KEY);
-      if (raw) {
-        const cached = JSON.parse(raw);
-        const isStale = !cached.savedAt || (Date.now() - cached.savedAt) > CACHE_MAX_AGE_MS;
-        if (cached.list && cached.list.length > 0 && !isStale) {
-          setPublicBhajans(cached.list);
-          setPublicLoading(false);
-          cacheHit = true;
-        }
-      }
-    } catch (e) { /* non-fatal */ }
-
-    // Progressive load for cold-cache users: fetch the newest 30 bhajans
-    // immediately so the library renders in ~200-400ms, then the full
-    // onSnapshot below delivers the rest in the background (~800-1500ms).
-    // The onSnapshotFired flag prevents a slow .get() from overwriting the
-    // full data if onSnapshot happens to arrive first.
-    let onSnapshotFired = false;
-    if (!cacheHit) {
-      publicRef.orderBy('createdAt', 'desc').limit(30).get()
-        .then((snapshot) => {
-          if (onSnapshotFired) return;
-          const list = [];
-          snapshot.forEach((doc) => list.push({ id: doc.id, ...doc.data() }));
-          setPublicBhajans(list);
-          setPublicLoading(false);
-        })
-        .catch((e) => console.log('Initial 30-bhajan fetch failed:', e.message));
-    }
-
-    const saveCache = (list) => {
-      try {
-        localStorage.setItem(CACHE_KEY, JSON.stringify({ list, savedAt: Date.now() }));
-      } catch (e) { /* non-fatal */ }
-    };
-
-    const sortAndSet = (snapshot) => {
-      onSnapshotFired = true;
-      const list = [];
-      snapshot.forEach((doc) => {
-        list.push({ id: doc.id, ...doc.data() });
-      });
-      list.sort((a, b) => {
-        const timeA = a.createdAt?.seconds || 0;
-        const timeB = b.createdAt?.seconds || 0;
-        return timeB - timeA;
-      });
-      setPublicBhajans(list);
-      setPublicLoading(false);
-      saveCache(list);
-    };
-
+    // SESSION 28 FIX: wait for initFirebase() to finish configuring
+    // db.settings() before touching Firestore. If this listener fires
+    // ahead of the config (as it does for deep-link visitors where
+    // guestMode is true from initial render, bypassing the auth-load
+    // delay that used to naturally serialize things), the SDK locks
+    // its settings to defaults and initFirebase()'s
+    // db.settings({experimentalForceLongPolling}) call throws —
+    // "Firestore has already been started and its settings can no
+    // longer be changed" — which breaks the entire Firestore
+    // transport and results in "Could not reach Cloud Firestore
+    // backend" 404 spam.
+    //
+    // Same pattern as Session 16b (daily bhajan fetch) and Session
+    // 26 (direct deep-link fetch). Applied here too because the
+    // guard was missing on the main public library listener.
+    let cancelled = false;
     let unsubscribe = () => {};
-    try {
-      unsubscribe = publicRef.onSnapshot(
-        sortAndSet,
-        async (error) => {
-          console.log('Public listener error, trying one-time fetch:', error.message);
-          try {
-            const snapshot = await publicRef.get();
-            sortAndSet(snapshot);
-          } catch (getErr) {
-            console.error('Public fallback fetch failed:', getErr);
+
+    const waitForFirestoreConfig = () => new Promise((resolve) => {
+      const start = Date.now();
+      const check = () => {
+        if (cancelled) return resolve(false);
+        if (window._firestoreConfigured && window.firebase && window.firebase.firestore) {
+          return resolve(true);
+        }
+        if (Date.now() - start > 15000) return resolve(false);
+        setTimeout(check, 100);
+      };
+      check();
+    });
+
+    (async () => {
+      const ready = await waitForFirestoreConfig();
+      if (!ready || cancelled) return;
+
+      setPublicLoading(true);
+      const db = window.firebase.firestore();
+      const publicRef = db.collection('publicBhajans');
+
+      const CACHE_KEY = 'sankirtan-public-bhajans-cache';
+      const CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days — public library changes rarely; extended TTL avoids blank-then-repaint on weekly visitors
+      let cacheHit = false;
+      try {
+        const raw = localStorage.getItem(CACHE_KEY);
+        if (raw) {
+          const cached = JSON.parse(raw);
+          const isStale = !cached.savedAt || (Date.now() - cached.savedAt) > CACHE_MAX_AGE_MS;
+          if (cached.list && cached.list.length > 0 && !isStale) {
+            setPublicBhajans(cached.list);
             setPublicLoading(false);
+            cacheHit = true;
           }
         }
-      );
-    } catch (listenerErr) {
-      console.log('Could not set up public listener:', listenerErr.message);
-      setPublicLoading(false);
-    }
+      } catch (e) { /* non-fatal */ }
 
-    return () => unsubscribe();
+      // Progressive load for cold-cache users: fetch the newest 30 bhajans
+      // immediately so the library renders in ~200-400ms, then the full
+      // onSnapshot below delivers the rest in the background (~800-1500ms).
+      // The onSnapshotFired flag prevents a slow .get() from overwriting the
+      // full data if onSnapshot happens to arrive first.
+      let onSnapshotFired = false;
+      if (!cacheHit) {
+        publicRef.orderBy('createdAt', 'desc').limit(30).get()
+          .then((snapshot) => {
+            if (onSnapshotFired || cancelled) return;
+            const list = [];
+            snapshot.forEach((doc) => list.push({ id: doc.id, ...doc.data() }));
+            setPublicBhajans(list);
+            setPublicLoading(false);
+          })
+          .catch((e) => console.log('Initial 30-bhajan fetch failed:', e.message));
+      }
+
+      const saveCache = (list) => {
+        try {
+          localStorage.setItem(CACHE_KEY, JSON.stringify({ list, savedAt: Date.now() }));
+        } catch (e) { /* non-fatal */ }
+      };
+
+      const sortAndSet = (snapshot) => {
+        onSnapshotFired = true;
+        if (cancelled) return;
+        const list = [];
+        snapshot.forEach((doc) => {
+          list.push({ id: doc.id, ...doc.data() });
+        });
+        list.sort((a, b) => {
+          const timeA = a.createdAt?.seconds || 0;
+          const timeB = b.createdAt?.seconds || 0;
+          return timeB - timeA;
+        });
+        setPublicBhajans(list);
+        setPublicLoading(false);
+        saveCache(list);
+      };
+
+      try {
+        unsubscribe = publicRef.onSnapshot(
+          sortAndSet,
+          async (error) => {
+            console.log('Public listener error, trying one-time fetch:', error.message);
+            try {
+              const snapshot = await publicRef.get();
+              sortAndSet(snapshot);
+            } catch (getErr) {
+              console.error('Public fallback fetch failed:', getErr);
+              setPublicLoading(false);
+            }
+          }
+        );
+      } catch (listenerErr) {
+        console.log('Could not set up public listener:', listenerErr.message);
+        setPublicLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
   }, [user, guestMode]);
 
   // SESSION 8: after 8s of skeleton loading, show a "Having trouble
