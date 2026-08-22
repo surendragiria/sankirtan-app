@@ -1,41 +1,37 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 
 // ==============================================
-// SANKIRTAN SAAS - SESSION 30
+// SANKIRTAN SAAS - SESSION 31
 // Bhajan Se Bhagwan Tak
-// CHANGES (Session 30 — remove stale "App Updated!" modal):
+// CHANGES (Session 31 — three Daily Bhajan improvements):
 //
-// User caught a real long-standing bug: the "App Updated!"
-// modal that fires on every version change showed the same
-// 3 hardcoded bullets ("New bottom tab bar", "Hindi typing
-// is now faster", "Faster app opening") for 25+ deploys —
-// features from Sessions 2-4 era. Every version bump since
-// then misled users by claiming those old features were new.
+// 1. Compact card on Public Library
+//    The "आज का भजन" card used to take significant vertical
+//    space (lyric preview + large padding). Removed the lyric
+//    preview, tightened padding, slightly smaller title. Card
+//    is now ~half the previous height. Still visually
+//    distinctive (saffron border, gradient bg, "TODAY'S
+//    BHAJAN" chip) — just doesn't dominate the scroll.
 //
-// This bug was present since Session 4-ish and NOT ONCE was
-// the content updated in later sessions when we bumped the
-// version. Every "Session 6/7/8/...29" deploy has been
-// silently lying to users. My oversight.
+// 2. Searchable bhajan picker in admin scheduler
+//    Old <select> dropdown listed all 250+ bhajans alphabetically.
+//    Finding a specific one meant scrolling forever. Replaced
+//    with a search input that filters by title, deity, or दhun
+//    as you type. Shows up to 20 matches in a scrollable
+//    dropdown. Once selected, shows a chip with a Change button
+//    to swap. New state: dailyEditSearch, dailyEditSearchOpen.
 //
-// Fix: remove the auto-fire modal entirely.
-//   - Deleted the version-check useEffect
-//   - Deleted the dismissUpdatePrompt function
-//   - Deleted the showUpdatePrompt state
-//   - Deleted BOTH modal render blocks (there were two —
-//     one for the main app, one for the landing screen —
-//     both with identical stale content)
+// 3. Share button in admin scheduler
+//    Admin used to have to save the daily pick, then navigate
+//    to Public Library, then tap the daily card, then Share.
+//    Now there's a "↗ Share" button right next to Save in the
+//    admin scheduler. Uses the currently-selected bhajan + note
+//    (regardless of whether it's been saved yet — useful for
+//    previewing what today's share would look like).
 //
-// Silent PWA updates are the modern norm. Users don't need
-// to be interrupted for every deploy. If a truly major
-// change ever needs an announcement, we can add a targeted,
-// hand-authored one-time dialog keyed to a message ID at
-// that time — not a permanent stale-content fixture.
-//
-// The 'sankirtan-app-version' localStorage key is left in
-// place (harmless orphan; simply never read again).
-//
-// Not touched: everything else. No behavior change other
-// than the modal removal.
+// Not touched: everything else. resolvedDailyBhajan memo, the
+// Firestore schema, the read/save/share flow, all Session 6-30
+// work. No new dependencies, no rules changes.
 // ==============================================
 
 // ==============================================
@@ -109,7 +105,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.08.20.s30';
+const APP_VERSION = '2026.08.20.s31';
 
 // SESSION 30: log at startup so admin can verify which build is
 // running via the browser console (helps diagnose "is my new
@@ -914,6 +910,10 @@ const App = () => {
   const [dailyEditNote, setDailyEditNote] = useState('');
   const [dailyEditSaving, setDailyEditSaving] = useState(false);
   const [dailyEditLoadedFor, setDailyEditLoadedFor] = useState(null);
+  // SESSION 31: search query for admin's bhajan picker + dropdown open state.
+  // With 250+ public bhajans, the old dropdown was impractical.
+  const [dailyEditSearch, setDailyEditSearch] = useState('');
+  const [dailyEditSearchOpen, setDailyEditSearchOpen] = useState(false);
 
   // Manual Add/Edit Public Bhajan states (admin)
   const [showPublicBhajanForm, setShowPublicBhajanForm] = useState(false);
@@ -7617,7 +7617,12 @@ const App = () => {
                       curated). Prominent card at the very top of the
                       Public Library when no active filter — one-tap
                       access to the day's featured bhajan, plus a
-                      one-tap Share so it can travel via WhatsApp. */}
+                      one-tap Share so it can travel via WhatsApp.
+                      SESSION 31: compacted — removed lyric preview
+                      and tightened padding. Card is now ~half its
+                      previous height, giving Popular Bhajans and the
+                      library grid more room without losing the
+                      "today's featured" visibility. */}
                   {!hasActivePublicFilters && resolvedDailyBhajan && (
                     <div className="mb-5">
                       <div
@@ -7625,14 +7630,14 @@ const App = () => {
                         role="button"
                         tabIndex={0}
                         onKeyDown={(e) => { if (e.key === 'Enter') openPublicBhajanDetail(resolvedDailyBhajan.bhajan); }}
-                        className={`rounded-2xl p-5 border-2 cursor-pointer transition-all ${
+                        className={`rounded-2xl p-4 border-2 cursor-pointer transition-all ${
                           darkMode
                             ? 'bg-gradient-to-br from-[#1a2a2f] to-[#162226] border-[#E65100]/40 hover:border-[#E65100]/70 shadow-[0_4px_20px_rgba(230,81,0,0.15)]'
                             : 'bg-gradient-to-br from-[#FFFCF8] to-[#FFF3E5] border-[#E65100]/40 hover:border-[#E65100]/70 shadow-[0_4px_20px_rgba(230,81,0,0.10)]'
                         }`}
                       >
-                        <div className="flex items-center justify-between mb-3">
-                          <div className={`text-xs font-bold uppercase tracking-wider ${darkMode ? 'text-orange-300' : 'text-[#E65100]'}`}>
+                        <div className="flex items-center justify-between mb-2">
+                          <div className={`text-[11px] font-bold uppercase tracking-wider ${darkMode ? 'text-orange-300' : 'text-[#E65100]'}`}>
                             🌟 आज का भजन · Today's Bhajan
                           </div>
                           {resolvedDailyBhajan.curated && (
@@ -7642,11 +7647,11 @@ const App = () => {
                           )}
                         </div>
 
-                        <h2 className={`text-xl md:text-2xl font-bold mb-1 leading-tight ${darkMode ? 'text-amber-100' : 'text-[#0B5A70]'}`}>
+                        <h2 className={`text-lg md:text-xl font-bold mb-0.5 leading-tight line-clamp-2 ${darkMode ? 'text-amber-100' : 'text-[#0B5A70]'}`}>
                           {resolvedDailyBhajan.bhajan.title}
                         </h2>
 
-                        <p className={`text-sm mb-2 ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                        <p className={`text-xs mb-2 ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
                           {resolvedDailyBhajan.bhajan.deity}
                           {resolvedDailyBhajan.bhajan.category ? ` · ${resolvedDailyBhajan.bhajan.category}` : ''}
                           {resolvedDailyBhajan.bhajan.dhun ? ` · तर्ज़: ${resolvedDailyBhajan.bhajan.dhun}` : ''}
@@ -7658,11 +7663,7 @@ const App = () => {
                           </p>
                         )}
 
-                        <p className={`text-sm line-clamp-3 whitespace-pre-line max-h-16 overflow-hidden mb-4 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                          {previewLyrics(resolvedDailyBhajan.bhajan.lyrics)}
-                        </p>
-
-                        <div className={`flex gap-2 pt-3 border-t ${darkMode ? 'border-[#E65100]/20' : 'border-[#E65100]/15'}`}>
+                        <div className="flex gap-2">
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
@@ -8124,20 +8125,107 @@ const App = () => {
 
                   <div>
                     <label className="block text-sm font-semibold text-[#0B5A70] mb-1">Bhajan</label>
-                    <select
-                      value={dailyEditBhajanId}
-                      onChange={(e) => setDailyEditBhajanId(e.target.value)}
-                      className="w-full px-4 py-2 border border-[#0B5A70]/15 rounded-xl outline-none bg-white"
-                    >
-                      <option value="">— Select a bhajan —</option>
-                      {[...publicBhajans]
-                        .sort((a, b) => (a.title || '').localeCompare(b.title || ''))
-                        .map(b => (
-                          <option key={b.id} value={b.id}>
-                            {b.title} ({b.deity})
-                          </option>
-                        ))}
-                    </select>
+                    {/* SESSION 31: searchable picker replaces the old
+                        250+ item <select> dropdown. Type a title or
+                        deity fragment to filter. Selected bhajan
+                        shows as a chip with an × to clear. */}
+                    {(() => {
+                      const selectedBhajan = dailyEditBhajanId
+                        ? publicBhajans.find(b => b.id === dailyEditBhajanId)
+                        : null;
+
+                      if (selectedBhajan) {
+                        // Selected state: chip + Change button
+                        return (
+                          <div className={`flex items-center justify-between gap-2 px-3 py-2 border border-[#0B5A70]/15 rounded-xl ${darkMode ? 'bg-[#162226]' : 'bg-white'}`}>
+                            <div className="min-w-0 flex-1">
+                              <p className={`text-sm font-semibold truncate ${darkMode ? 'text-amber-100' : 'text-[#0B5A70]'}`}>
+                                {selectedBhajan.title}
+                              </p>
+                              <p className={`text-xs truncate ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                                {selectedBhajan.deity}
+                                {selectedBhajan.category ? ` · ${selectedBhajan.category}` : ''}
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setDailyEditBhajanId('');
+                                setDailyEditSearch('');
+                                setDailyEditSearchOpen(true);
+                              }}
+                              className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 flex-shrink-0"
+                            >
+                              Change
+                            </button>
+                          </div>
+                        );
+                      }
+
+                      // Unselected state: search input + dropdown of matches
+                      const q = dailyEditSearch.trim().toLowerCase();
+                      const matches = q
+                        ? publicBhajans
+                            .filter(b => {
+                              const title = (b.title || '').toLowerCase();
+                              const deity = (b.deity || '').toLowerCase();
+                              const dhun = (b.dhun || '').toLowerCase();
+                              return title.includes(q) || deity.includes(q) || dhun.includes(q);
+                            })
+                            .slice(0, 20)
+                        : [...publicBhajans]
+                            .sort((a, b) => (a.title || '').localeCompare(b.title || ''))
+                            .slice(0, 20);
+
+                      return (
+                        <div className="relative">
+                          <input
+                            type="text"
+                            value={dailyEditSearch}
+                            onChange={(e) => {
+                              setDailyEditSearch(e.target.value);
+                              setDailyEditSearchOpen(true);
+                            }}
+                            onFocus={() => setDailyEditSearchOpen(true)}
+                            onBlur={() => {
+                              // Delay so click on a match option registers first
+                              setTimeout(() => setDailyEditSearchOpen(false), 200);
+                            }}
+                            placeholder="🔍 Search by title, deity, or तर्ज़…"
+                            className="w-full px-4 py-2 border border-[#0B5A70]/15 rounded-xl outline-none bg-white"
+                          />
+                          {dailyEditSearchOpen && matches.length > 0 && (
+                            <div className={`absolute z-10 left-0 right-0 mt-1 max-h-64 overflow-y-auto rounded-xl border shadow-lg ${darkMode ? 'bg-[#162226] border-[#0B5A70]/30' : 'bg-white border-[#0B5A70]/15'}`}>
+                              {matches.map(b => (
+                                <button
+                                  key={b.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setDailyEditBhajanId(b.id);
+                                    setDailyEditSearch('');
+                                    setDailyEditSearchOpen(false);
+                                  }}
+                                  className={`w-full text-left px-3 py-2 border-b last:border-b-0 ${darkMode ? 'border-[#0B5A70]/10 hover:bg-[#0B5A70]/10' : 'border-gray-100 hover:bg-[#FFF3E5]'}`}
+                                >
+                                  <p className={`text-sm font-semibold truncate ${darkMode ? 'text-amber-100' : 'text-[#0B5A70]'}`}>
+                                    {b.title}
+                                  </p>
+                                  <p className={`text-xs truncate ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                                    {b.deity}
+                                    {b.category ? ` · ${b.category}` : ''}
+                                  </p>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                          {dailyEditSearchOpen && q && matches.length === 0 && (
+                            <div className={`absolute z-10 left-0 right-0 mt-1 rounded-xl border p-3 text-sm text-center ${darkMode ? 'bg-[#162226] border-[#0B5A70]/30 text-gray-400' : 'bg-white border-[#0B5A70]/15 text-gray-500'}`}>
+                              No bhajan matches "{dailyEditSearch}"
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
 
                   <div>
@@ -8161,6 +8249,24 @@ const App = () => {
                       className="flex-1 bg-[#E65100] hover:bg-[#d64800] disabled:opacity-50 text-white font-bold py-2 rounded-xl"
                     >
                       {dailyEditSaving ? 'Saving…' : '💾 Save'}
+                    </button>
+                    {/* SESSION 31: one-tap share from admin — no need
+                        to leave the admin panel to broadcast today's
+                        pick. Only enabled once a bhajan is selected. */}
+                    <button
+                      onClick={() => {
+                        const b = publicBhajans.find(x => x.id === dailyEditBhajanId);
+                        if (!b) return;
+                        handleShareBhajan(b, true, {
+                          isDaily: true,
+                          dailyNote: (dailyEditNote || '').trim()
+                        });
+                      }}
+                      disabled={!dailyEditBhajanId}
+                      className="px-4 bg-[#0B5A70] hover:bg-[#094a5d] disabled:opacity-50 text-white font-semibold py-2 rounded-xl"
+                      title="Share this bhajan (uses current selection + note)"
+                    >
+                      ↗ Share
                     </button>
                     <button
                       onClick={clearDailyBhajan}
