@@ -1,6 +1,55 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 
 // ==============================================
+// SANKIRTAN SAAS - SESSION 32
+// Bhajan Se Bhagwan Tak
+// CHANGES (Session 32 — Playlists as a sibling to Programs):
+//
+// User asked to add a "playlist" concept alongside the existing
+// "program" concept. Playlists are recurring undated collections
+// (Morning Prayers, Krishna Favorites); Programs are one-time
+// dated events (Tuesday Jagran).
+//
+// Design decisions
+//
+// - Single Firestore collection (users/{uid}/programs). No new
+//   subcollection, no data migration. Type distinguished by a
+//   new optional `type` field ('playlist' | 'program').
+//
+// - Legacy documents (created before Session 32, no `type` field)
+//   are inferred at display time via getProgramType():
+//     - date present → 'program'
+//     - date empty → 'playlist'
+//   Trusts the data. Users can edit to correct if inference wrong.
+//
+// - Bottom tab renamed "Programs" → "Playlists" (single word,
+//   friendlier). Internal view identifier stays 'programs' to
+//   avoid needless churn.
+//
+// - Toggle at top switches Playlists / Programs views. Same
+//   visual style as compact/full card toggle in the libraries.
+//   Selection persists in localStorage ('sankirtan-playlist-view').
+//
+// - Create form: type toggle at top. When 'playlist', shows a
+//   short optional "Purpose" field instead of date/venue. When
+//   'program', shows date + venue as before. Switching doesn't
+//   clear fields.
+//
+// - Cards: differentiated by type (🎵 vs 📅, purpose vs date/venue).
+//   Empty-state copy adapts to selected toggle.
+//
+// - Toasts, delete-confirms, validation errors, form title —
+//   all type-aware.
+//
+// - New Create button seeds programForm.type from playlistViewMode.
+//
+// Not touched: existing programs' data, Live Mode, share/save/read
+// flows, Firestore rules. Pure UX addition on top of existing schema.
+//
+// Meta-audit (per Session 30 promise): "Back to Playlists" nav,
+// tab bar, header, onboarding step all updated.
+// ==============================================
+//
 // SANKIRTAN SAAS - SESSION 31
 // Bhajan Se Bhagwan Tak
 // CHANGES (Session 31 — three Daily Bhajan improvements):
@@ -105,7 +154,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.08.20.s31';
+const APP_VERSION = '2026.08.20.s32';
 
 // SESSION 30: log at startup so admin can verify which build is
 // running via the browser console (helps diagnose "is my new
@@ -213,8 +262,8 @@ const ONBOARDING_STEPS = [
   },
   {
     target: 'programs',
-    title: '🎵 Programs & Live Mode',
-    description: 'Create setlists for jagrans & satsangs. Live Mode shows big text, keeps screen awake, and lets you navigate hands-free during performances.',
+    title: '🎵 Playlists & Programs',
+    description: 'Playlists for daily practice, Programs for jagrans & sankirtans. Live Mode shows big text, keeps screen awake, and lets you navigate hands-free during performances.',
     emoji: '🎤'
   },
   {
@@ -345,6 +394,28 @@ if (typeof document !== 'undefined' && !document.getElementById('sankirtan-anima
 // Same navigator.share + clipboard fallback pattern as shareBhajan.
 // Message is short and bilingual, respecting the app's identity.
 // ==============================================
+// ==============================================
+// PROGRAM/PLAYLIST TYPE HELPER (Session 32)
+// Returns 'playlist' or 'program' for any doc, whether it was
+// created before Session 32 (no explicit type field) or after.
+//
+// Rule:
+//   - If explicit `type` field exists and is valid → use it
+//   - Else, legacy inference: date present → 'program', else → 'playlist'
+//
+// Trusting the data on legacy docs: if a user created a program
+// without a date, we treat it as a playlist. If they intended it
+// as an unfinished event, they can add a date via edit to move it
+// back. Assumption: most existing programs have dates.
+// ==============================================
+const getProgramType = (program) => {
+  if (!program) return 'program';
+  if (program.type === 'playlist' || program.type === 'program') {
+    return program.type;
+  }
+  return (program.date && String(program.date).trim()) ? 'program' : 'playlist';
+};
+
 const shareApp = async () => {
   const shareText = [
     '🙏 संकीर्तन · Sankirtan.app',
@@ -857,7 +928,30 @@ const App = () => {
     name: '',
     date: '',
     venue: '',
-    bhajanIds: []
+    bhajanIds: [],
+    // SESSION 32: 'playlist' or 'program'. Playlists are recurring
+    // undated collections (e.g., "Morning Prayers"). Programs are
+    // one-time dated events (e.g., "Tuesday Jagran"). Default is
+    // 'program' to preserve the pre-Session-32 behavior when users
+    // just tap Create without touching the toggle.
+    type: 'program',
+    // For playlists: an optional short label like "Daily practice"
+    // that appears where date/venue would for a program.
+    purpose: ''
+  });
+
+  // SESSION 32: which sub-view of the Playlists tab is currently
+  // shown — 'playlist' or 'program'. Persisted in localStorage so
+  // a user who mostly uses playlists doesn't have to re-toggle on
+  // every visit. Default to 'program' for backward compatibility
+  // — existing users have programs, and this shows them first.
+  const [playlistViewMode, setPlaylistViewMode] = useState(() => {
+    try {
+      const saved = localStorage.getItem('sankirtan-playlist-view');
+      return saved === 'playlist' || saved === 'program' ? saved : 'program';
+    } catch {
+      return 'program';
+    }
   });
 
   // Live Program Mode states
@@ -4250,11 +4344,17 @@ const App = () => {
   // PROGRAMS CRUD OPERATIONS
   // ==============================================
   const openCreateProgram = () => {
+    // SESSION 32: seed the new form's type based on which sub-view
+    // the user is currently on. If they're on Playlists tab and
+    // hit Create, they most likely want a playlist. Still
+    // switchable via the toggle inside the form.
     setProgramForm({
       name: '',
       date: '',
       venue: '',
-      bhajanIds: []
+      bhajanIds: [],
+      type: playlistViewMode,
+      purpose: ''
     });
     setProgramFormError('');
     setEditingProgram(null);
@@ -4266,11 +4366,15 @@ const App = () => {
   };
 
   const openEditProgram = (program) => {
+    // SESSION 32: derive type from doc or infer for legacy docs.
+    // Purpose field is new; defaults to empty for legacy.
     setProgramForm({
       name: program.name || '',
       date: program.date || '',
       venue: program.venue || '',
-      bhajanIds: program.bhajanIds || []
+      bhajanIds: program.bhajanIds || [],
+      type: getProgramType(program),
+      purpose: program.purpose || ''
     });
     setProgramFormError('');
     setEditingProgram(program);
@@ -4284,7 +4388,11 @@ const App = () => {
 
   const saveProgram = async () => {
     if (!programForm.name.trim()) {
-      setProgramFormError('Please enter a program name');
+      setProgramFormError(
+        programForm.type === 'playlist'
+          ? 'Please enter a playlist name'
+          : 'Please enter a program name'
+      );
       return;
     }
 
@@ -4293,10 +4401,18 @@ const App = () => {
       setProgramFormError('');
       const db = window.firebase.firestore();
 
+      const isPlaylist = programForm.type === 'playlist';
+
       const programData = {
         name: programForm.name.trim(),
-        date: programForm.date.trim(),
-        venue: programForm.venue.trim(),
+        // SESSION 32: for playlists, date/venue are always empty
+        // (the form doesn't show these fields when type=playlist).
+        // For programs, purpose is empty. Keep the doc shape
+        // predictable — no field surprises for downstream code.
+        date: isPlaylist ? '' : programForm.date.trim(),
+        venue: isPlaylist ? '' : programForm.venue.trim(),
+        purpose: isPlaylist ? programForm.purpose.trim() : '',
+        type: programForm.type,
         bhajanIds: programForm.bhajanIds,
         ownerId: user.uid,
         ownerName: userProfile.displayName,
@@ -4306,17 +4422,18 @@ const App = () => {
       };
 
       const programsRef = db.collection('users').doc(user.uid).collection('programs');
+      const label = isPlaylist ? 'Playlist' : 'Program';
 
       if (editingProgram) {
         await programsRef.doc(editingProgram.id).update(programData);
         setSelectedProgram({ ...editingProgram, ...programData });
         setCurrentView('program-detail');
-        showToast('💾 Program updated');
+        showToast(`💾 ${label} updated`);
       } else {
         programData.createdAt = window.firebase.firestore.FieldValue.serverTimestamp();
         await programsRef.add(programData);
         setCurrentView('programs');
-        showToast(`✅ Program "${programData.name}" created`);
+        showToast(`✅ ${label} "${programData.name}" created`);
       }
     } catch (error) {
       console.error('Error saving program:', error);
@@ -4327,9 +4444,11 @@ const App = () => {
   };
 
   const deleteProgram = (program) => {
+    const isPlaylist = getProgramType(program) === 'playlist';
+    const label = isPlaylist ? 'Playlist' : 'Program';
     askConfirm(
       {
-        title: 'Delete Program?',
+        title: `Delete ${label}?`,
         message: `"${program.name}" and its setlist will be permanently deleted. Your bhajans stay in your library.`,
         confirmLabel: '🗑️ Delete'
       },
@@ -4339,7 +4458,7 @@ const App = () => {
           await db.collection('users').doc(user.uid).collection('programs').doc(program.id).delete();
           setCurrentView('programs');
           setSelectedProgram(null);
-          showToast('Program deleted');
+          showToast(`${label} deleted`);
         } catch (error) {
           console.error('Error deleting program:', error);
           showToast('Could not delete: ' + error.message, 'error');
@@ -6737,12 +6856,24 @@ const App = () => {
           {/* ==============================================
               PROGRAMS LIST VIEW
               ============================================== */}
-          {currentView === 'programs' && (
+          {currentView === 'programs' && (() => {
+            // SESSION 32: split existing programs into two groups by
+            // effective type (using getProgramType helper — handles
+            // both explicit `type` field and legacy inference from
+            // date presence). Toggle switches which group is shown.
+            const playlists = filteredPrograms.filter(p => getProgramType(p) === 'playlist');
+            const events = filteredPrograms.filter(p => getProgramType(p) === 'program');
+            const visibleItems = playlistViewMode === 'playlist' ? playlists : events;
+            const isPlaylistView = playlistViewMode === 'playlist';
+
+            return (
             <>
               <div className="flex items-center justify-between mb-4">
                 <div>
-                  <h2 className="text-2xl font-bold text-[#0B5A70]">🎵 Programs & Setlists</h2>
-                  <p className="text-sm text-[#0B5A70]/70">Your live performance programs ({programs.length})</p>
+                  <h2 className="text-2xl font-bold text-[#0B5A70]">🎵 Playlists</h2>
+                  <p className="text-sm text-[#0B5A70]/70">
+                    Playlists ({playlists.length}) · Programs ({events.length})
+                  </p>
                 </div>
                 <button
                   onClick={openCreateProgram}
@@ -6752,13 +6883,46 @@ const App = () => {
                 </button>
               </div>
 
+              {/* SESSION 32: Playlists / Programs toggle. Matches the
+                  visual style of the compact/full card toggle in the
+                  libraries — pill container, saffron accent on active
+                  side. Persists selection in localStorage. */}
+              <div className="mb-4 flex items-center gap-1 p-1 bg-[#0B5A70]/5 rounded-xl w-fit">
+                <button
+                  onClick={() => {
+                    setPlaylistViewMode('playlist');
+                    try { localStorage.setItem('sankirtan-playlist-view', 'playlist'); } catch {}
+                  }}
+                  className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
+                    isPlaylistView
+                      ? 'bg-[#E65100] text-white shadow-sm'
+                      : 'text-[#0B5A70]/70 hover:text-[#0B5A70]'
+                  }`}
+                >
+                  🎵 Playlists
+                </button>
+                <button
+                  onClick={() => {
+                    setPlaylistViewMode('program');
+                    try { localStorage.setItem('sankirtan-playlist-view', 'program'); } catch {}
+                  }}
+                  className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
+                    !isPlaylistView
+                      ? 'bg-[#E65100] text-white shadow-sm'
+                      : 'text-[#0B5A70]/70 hover:text-[#0B5A70]'
+                  }`}
+                >
+                  📅 Programs
+                </button>
+              </div>
+
               <div className="mb-6">
                 <input
                   type="text"
                   value={programSearchQuery}
                   onChange={(e) => setProgramSearchQuery(e.target.value)}
-                  placeholder="🔍 Search programs by name or venue..."
-                  aria-label="Search programs"
+                  placeholder={isPlaylistView ? "🔍 Search playlists..." : "🔍 Search programs by name or venue..."}
+                  aria-label="Search"
                   className="w-full px-4 py-3 border border-[#0B5A70]/15 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none"
                 />
               </div>
@@ -6766,59 +6930,98 @@ const App = () => {
               {programsLoading ? (
                 <div className="text-center py-12">
                   <div className="animate-spin rounded-full h-10 w-10 border-4 border-[#0B5A70]/40 border-t-transparent mx-auto mb-3"></div>
-                  <p className="text-[#0B5A70]/70">Loading programs...</p>
+                  <p className="text-[#0B5A70]/70">Loading...</p>
                 </div>
-              ) : filteredPrograms.length === 0 ? (
+              ) : visibleItems.length === 0 ? (
                 <div className="text-center py-12 bg-[#FFFCF8] rounded-2xl border-2 border-dashed border-[#0B5A70]/12">
                   {programs.length === 0 ? (
                     <>
                       <div className="text-6xl mb-4">🎵</div>
-                      <h3 className="text-lg font-bold text-[#0B5A70] mb-2">No programs yet!</h3>
-                      <p className="text-sm text-gray-600 mb-4">Create your first program for a live performance</p>
+                      <h3 className="text-lg font-bold text-[#0B5A70] mb-2">Nothing here yet!</h3>
+                      <p className="text-sm text-gray-600 mb-4">
+                        {isPlaylistView
+                          ? 'Create your first playlist for daily practice or a themed collection'
+                          : 'Create your first program for an upcoming jagran or sankirtan'}
+                      </p>
                       <button
                         onClick={openCreateProgram}
                         className="bg-[#0B5A70] hover:bg-[#094a5d] text-white font-semibold px-6 py-3 rounded-xl shadow-md inline-flex items-center gap-2"
                       >
-                        <span className="text-lg">+</span> Create Your First Program
+                        <span className="text-lg">+</span> {isPlaylistView ? 'Create Your First Playlist' : 'Create Your First Program'}
                       </button>
+                    </>
+                  ) : programSearchQuery ? (
+                    <>
+                      <div className="text-4xl mb-3">🔍</div>
+                      <p className="text-[#0B5A70] font-semibold">No matches for your search</p>
                     </>
                   ) : (
                     <>
-                      <div className="text-4xl mb-3">🔍</div>
-                      <p className="text-[#0B5A70] font-semibold">No programs match your search</p>
+                      <div className="text-4xl mb-3">{isPlaylistView ? '🎵' : '📅'}</div>
+                      <p className="text-[#0B5A70] font-semibold mb-2">
+                        {isPlaylistView ? 'No playlists yet' : 'No programs yet'}
+                      </p>
+                      <p className="text-sm text-gray-600 mb-4">
+                        {isPlaylistView
+                          ? 'Playlists are undated collections for daily practice or themed listening.'
+                          : 'Programs are dated events like jagrans and sankirtans.'}
+                      </p>
+                      <button
+                        onClick={openCreateProgram}
+                        className="bg-[#0B5A70] hover:bg-[#094a5d] text-white font-semibold px-5 py-2 rounded-xl shadow-md inline-flex items-center gap-2 text-sm"
+                      >
+                        <span className="text-lg">+</span> {isPlaylistView ? 'Create a Playlist' : 'Create a Program'}
+                      </button>
                     </>
                   )}
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {filteredPrograms.map(program => (
-                    <button
-                      key={program.id}
-                      onClick={() => openProgramDetail(program)}
-                      className="bg-[#FFFCF8] rounded-2xl shadow-[0_2px_12px_rgba(11,90,112,0.06)] p-5 border border-[#0B5A70]/8 hover:border-[#0B5A70]/25 hover:shadow-[0_4px_20px_rgba(11,90,112,0.12)] transition-all text-left"
-                    >
-                      <div className="flex items-start justify-between mb-2">
-                        <div className="text-3xl">🎵</div>
-                        <span className="text-xs bg-[#0B5A70]/8 text-[#0B5A70] px-2 py-1 rounded-full font-semibold">
-                          {program.bhajanCount || 0} bhajans
-                        </span>
-                      </div>
-                      <h3 className="text-lg font-bold text-[#0B5A70] mb-1">
-                        {program.name}
-                      </h3>
-                      {program.date && (
-                        <p className="text-sm text-[#E65100] mb-1">📅 {program.date}</p>
-                      )}
-                      {program.venue && (
-                        <p className="text-sm text-gray-600 mb-2">📍 {program.venue}</p>
-                      )}
-                      <p className="text-xs text-[#0B5A70]/60 mt-3">View Program →</p>
-                    </button>
-                  ))}
+                  {visibleItems.map(program => {
+                    const pType = getProgramType(program);
+                    const isPl = pType === 'playlist';
+                    return (
+                      <button
+                        key={program.id}
+                        onClick={() => openProgramDetail(program)}
+                        className="bg-[#FFFCF8] rounded-2xl shadow-[0_2px_12px_rgba(11,90,112,0.06)] p-5 border border-[#0B5A70]/8 hover:border-[#0B5A70]/25 hover:shadow-[0_4px_20px_rgba(11,90,112,0.12)] transition-all text-left"
+                      >
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="text-3xl">{isPl ? '🎵' : '📅'}</div>
+                          <span className="text-xs bg-[#0B5A70]/8 text-[#0B5A70] px-2 py-1 rounded-full font-semibold">
+                            {program.bhajanCount || 0} bhajans
+                          </span>
+                        </div>
+                        <h3 className="text-lg font-bold text-[#0B5A70] mb-1">
+                          {program.name}
+                        </h3>
+                        {isPl ? (
+                          program.purpose ? (
+                            <p className="text-sm text-[#E65100] mb-1">{program.purpose}</p>
+                          ) : (
+                            <p className="text-xs text-gray-500 mb-1 italic">Playlist</p>
+                          )
+                        ) : (
+                          <>
+                            {program.date && (
+                              <p className="text-sm text-[#E65100] mb-1">📅 {program.date}</p>
+                            )}
+                            {program.venue && (
+                              <p className="text-sm text-gray-600 mb-2">📍 {program.venue}</p>
+                            )}
+                          </>
+                        )}
+                        <p className="text-xs text-[#0B5A70]/60 mt-3">
+                          {isPl ? 'Open Playlist →' : 'View Program →'}
+                        </p>
+                      </button>
+                    );
+                  })}
                 </div>
               )}
             </>
-          )}
+            );
+          })()}
 
           {/* ==============================================
               PROGRAM DETAIL VIEW
@@ -6830,7 +7033,7 @@ const App = () => {
                   onClick={() => setCurrentView('programs')}
                   className="text-[#0B5A70] hover:text-[#0B5A70]/80 flex items-center gap-1 text-sm"
                 >
-                  ← Back to Programs
+                  ← Back to Playlists
                 </button>
                 <div className="flex gap-2 flex-wrap">
                   <button
@@ -6972,23 +7175,80 @@ const App = () => {
 
               <div className={fCard}>
                 <h2 className={fTitle}>
-                  {currentView === 'edit-program' ? '✏️ Edit Program' : '➕ Create New Program'}
+                  {currentView === 'edit-program'
+                    ? (programForm.type === 'playlist' ? '✏️ Edit Playlist' : '✏️ Edit Program')
+                    : (programForm.type === 'playlist' ? '➕ Create New Playlist' : '➕ Create New Program')}
                 </h2>
+
+                {/* SESSION 32: type toggle. Same visual style as the
+                    list-view toggle for consistency. Switching type
+                    doesn't clear the fields — just hides/shows them —
+                    so switching accidentally isn't destructive. */}
+                <div className="mb-5">
+                  <label className={fLabel}>Type</label>
+                  <div className={`inline-flex items-center gap-1 p-1 rounded-xl ${darkMode ? 'bg-[#0B5A70]/20' : 'bg-[#0B5A70]/5'}`}>
+                    <button
+                      type="button"
+                      onClick={() => setProgramForm({...programForm, type: 'playlist'})}
+                      className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
+                        programForm.type === 'playlist'
+                          ? 'bg-[#E65100] text-white shadow-sm'
+                          : (darkMode ? 'text-teal-200/70 hover:text-teal-100' : 'text-[#0B5A70]/70 hover:text-[#0B5A70]')
+                      }`}
+                    >
+                      🎵 Playlist
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setProgramForm({...programForm, type: 'program'})}
+                      className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
+                        programForm.type === 'program'
+                          ? 'bg-[#E65100] text-white shadow-sm'
+                          : (darkMode ? 'text-teal-200/70 hover:text-teal-100' : 'text-[#0B5A70]/70 hover:text-[#0B5A70]')
+                      }`}
+                    >
+                      📅 Program
+                    </button>
+                  </div>
+                  <p className={`text-xs mt-1.5 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                    {programForm.type === 'playlist'
+                      ? 'A recurring collection — no date or venue. Good for daily practice or themed sets.'
+                      : 'A one-time event with date and venue — like a jagran or sankirtan.'}
+                  </p>
+                </div>
 
                 <div className="mb-4">
                   <label className={fLabel}>
-                    Program Name <span className="text-red-500">*</span>
+                    {programForm.type === 'playlist' ? 'Playlist Name' : 'Program Name'} <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
                     value={programForm.name}
                     onChange={(e) => setProgramForm({...programForm, name: e.target.value})}
                     className={fInput + " text-lg"}
-                    placeholder="e.g., Diwali Jagran 2026"
+                    placeholder={programForm.type === 'playlist' ? 'e.g., Morning Prayers' : 'e.g., Diwali Jagran 2026'}
                   />
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+                {programForm.type === 'playlist' ? (
+                  <div className="mb-4">
+                    <label className={fLabel}>
+                      Purpose (optional)
+                    </label>
+                    <input
+                      type="text"
+                      value={programForm.purpose}
+                      onChange={(e) => setProgramForm({...programForm, purpose: e.target.value})}
+                      className={fInput}
+                      placeholder="e.g., Daily practice, kids' prayer time"
+                      maxLength={80}
+                    />
+                    <p className={`text-xs mt-1 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                      Short label that shows on the playlist card.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
                   <div>
                     <label className={fLabel}>
                       Date (optional)
@@ -7027,11 +7287,12 @@ const App = () => {
                     </div>
                   </div>
                 </div>
+                )}
 
                 <div className="mb-4 pt-4 border-t border-[#0B5A70]/8">
                   <div className="flex items-center justify-between mb-3">
                     <label className="block text-sm font-semibold text-[#0B5A70]">
-                      Bhajans in Program ({programForm.bhajanIds.length})
+                      Bhajans in {programForm.type === 'playlist' ? 'Playlist' : 'Program'} ({programForm.bhajanIds.length})
                     </label>
                     <button
                       type="button"
@@ -7128,7 +7389,7 @@ const App = () => {
                     disabled={programFormSaving || !programForm.name.trim()}
                     className="flex-1 bg-[#0B5A70] hover:bg-[#094a5d] text-white font-bold py-3 rounded-xl shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {programFormSaving ? 'Saving...' : (currentView === 'edit-program' ? '💾 Save Changes' : '➕ Create Program')}
+                    {programFormSaving ? 'Saving...' : '💾 Save'}
                   </button>
                   <button
                     onClick={() => {
@@ -9193,7 +9454,7 @@ const App = () => {
               {[
                 { view: 'public-library', label: 'Public', icon: '🌐', requiresAuth: false },
                 { view: 'library', label: 'My Library', icon: '📚', requiresAuth: true },
-                { view: 'programs', label: 'Programs', icon: '🎵', requiresAuth: true },
+                { view: 'programs', label: 'Playlists', icon: '🎵', requiresAuth: true },
               ].map(tab => {
                 const isActive = currentView === tab.view;
                 const isLocked = tab.requiresAuth && guestMode && !user;
