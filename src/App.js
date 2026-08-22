@@ -1,6 +1,24 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 
 // ==============================================
+// SANKIRTAN SAAS - SESSION 33
+// Bhajan Se Bhagwan Tak
+// CHANGES (Session 33 — cleaner daily card):
+//
+// Removed Read and Share buttons from the "आज का भजन" card
+// on the Public Library. The whole card is still tappable
+// (opens the reading view via the parent onClick handler);
+// Share is still available in the reading view header.
+//
+// One extra tap to share, but the card is visually cleaner
+// and matches Session 31's compact-card direction.
+//
+// Not touched: everything else. Card structure, gradient bg,
+// Curated chip, note display, meta line, tap-to-open behavior
+// all unchanged. handleShareBhajan and openPublicBhajanDetail
+// are still called elsewhere so nothing orphaned.
+// ==============================================
+//
 // SANKIRTAN SAAS - SESSION 32
 // Bhajan Se Bhagwan Tak
 // CHANGES (Session 32 — Playlists as a sibling to Programs):
@@ -154,7 +172,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.08.20.s32';
+const APP_VERSION = '2026.08.20.s33';
 
 // SESSION 30: log at startup so admin can verify which build is
 // running via the browser console (helps diagnose "is my new
@@ -7923,30 +7941,12 @@ const App = () => {
                             "{resolvedDailyBhajan.note}"
                           </p>
                         )}
-
-                        <div className="flex gap-2">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              openPublicBhajanDetail(resolvedDailyBhajan.bhajan);
-                            }}
-                            className={`flex-1 font-semibold py-2 rounded-lg text-sm ${darkMode ? 'bg-[#0B5A70] hover:bg-[#094a5d] text-white' : 'bg-[#0B5A70] hover:bg-[#094a5d] text-white'}`}
-                          >
-                            📖 Read
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleShareBhajan(resolvedDailyBhajan.bhajan, true, {
-                                isDaily: true,
-                                dailyNote: resolvedDailyBhajan.note || ''
-                              });
-                            }}
-                            className={`flex-1 font-semibold py-2 rounded-lg text-sm ${darkMode ? 'bg-[#E65100] hover:bg-[#d64800] text-white' : 'bg-[#E65100] hover:bg-[#d64800] text-white'}`}
-                          >
-                            ↗ Share
-                          </button>
-                        </div>
+                        {/* SESSION 33: Read and Share buttons removed
+                            from the daily card. Whole card is still
+                            tappable (opens reading view via parent
+                            onClick). Share is still accessible from
+                            the reading view header. Cleaner, matches
+                            Session 31's compact-card direction. */}
                       </div>
                     </div>
                   )}
