@@ -1,6 +1,53 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 
 // ==============================================
+// SANKIRTAN SAAS - SESSION 34
+// Bhajan Se Bhagwan Tak
+// CHANGES (Session 34 — playlist context in reading view + no Live
+//                     Performance for playlists):
+//
+// User raised two Session-32 issues while using the new Playlists:
+//
+// 1. "Start Live Performance" showed on a Playlist. Live Mode is
+//    for jagrans/sankirtans (dated events, performance-focused),
+//    not for daily-practice playlists. Now hidden when
+//    getProgramType(program) === 'playlist'. Users who want Live
+//    Mode on a playlist can convert it to a Program via edit.
+//
+// 2. "Related Bhajans" (keyword-matched from library) appeared
+//    below the reading view even when the user opened the bhajan
+//    from a playlist. Broke the mental model of "I'm reading
+//    through my playlist." Now, when opened from a playlist/
+//    program context, the reading view shows "🎵 More in this
+//    playlist" with the OTHER bhajans from that specific
+//    playlist/program (siblings, current one excluded, in order).
+//    Falls back to the original Related Bhajans behavior for
+//    bhajans opened directly from My Library.
+//
+// Implementation
+// - New state: programContext, set when tapping a bhajan card
+//   from program-detail view, holds the whole program object.
+// - Auto-clear effect: whenever currentView leaves the playlist
+//   flow (not bhajan-detail AND not program-detail), context
+//   clears. So navigating to Public / My Library / Programs
+//   list resets the context. Navigating bhajan → program-detail
+//   → another bhajan preserves it (both views are "in flow").
+// - Context validity check: programContext is only used if the
+//   currently-selected bhajan is actually IN the program's
+//   bhajanIds. Handles the edge case where user navigates via
+//   Prev/Next arrows to a bhajan outside the playlist.
+//
+// Also fixed (Session 32 meta-audit miss):
+// - "Bhajans in this Program:" heading — now says "Playlist"
+//   for playlist type.
+// - "No bhajans in this program yet" empty-state — same fix.
+//
+// Not touched: Related Bhajans on Public Library reading view
+// (public-bhajan-detail is not reached from a playlist tap; the
+// playlist references personal-library IDs, so this doesn't
+// apply). Live Mode logic unchanged for actual programs.
+// ==============================================
+//
 // SANKIRTAN SAAS - SESSION 33
 // Bhajan Se Bhagwan Tak
 // CHANGES (Session 33 — cleaner daily card):
@@ -172,7 +219,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.08.20.s33';
+const APP_VERSION = '2026.08.20.s34';
 
 // SESSION 30: log at startup so admin can verify which build is
 // running via the browser console (helps diagnose "is my new
@@ -932,6 +979,26 @@ const App = () => {
   // Programs states
   const [programs, setPrograms] = useState([]);
   const [selectedProgram, setSelectedProgram] = useState(null);
+  // SESSION 34: when a bhajan is opened from a playlist/program's
+  // detail view, we remember which one so the reading view can show
+  // "Other bhajans in this playlist" (contextual siblings) instead of
+  // "Related Bhajans" (unrelated keyword matches from the library).
+  // Cleared when user navigates back to a list view, opens a bhajan
+  // from another surface (public library, my library), or logs out.
+  const [programContext, setProgramContext] = useState(null);
+
+  // SESSION 34: auto-clear programContext when user navigates away
+  // from the playlist reading flow. Keeps context alive across
+  // bhajan-detail → program-detail → bhajan-detail (natural
+  // navigation within a playlist). Clears when they leave to
+  // Public / My Library / Programs list / anywhere else.
+  useEffect(() => {
+    const inPlaylistFlow = currentView === 'bhajan-detail' || currentView === 'program-detail';
+    if (!inPlaylistFlow && programContext) {
+      setProgramContext(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentView]);
   const [editingProgram, setEditingProgram] = useState(null);
   const [programsLoading, setProgramsLoading] = useState(false);
   const [programSearchQuery, setProgramSearchQuery] = useState('');
@@ -6329,38 +6396,97 @@ const App = () => {
                 )}
               </div>
 
-              {/* Related Bhajans — SESSION 6: uses memoized relatedMyBhajans */}
-              {relatedMyBhajans.length > 0 && (
-                <div className="mt-6">
-                  <p className={`text-sm font-bold mb-3 flex items-center gap-1.5 ${darkMode ? 'text-gray-300' : 'text-[#0B5A70]'}`}>
-                    ✨ Related Bhajans
-                  </p>
-                  <div className="space-y-1.5">
-                    {relatedMyBhajans.map(b => (
-                      <button
-                        key={b.id}
-                        onClick={() => {
-                          setSelectedBhajan(b);
-                          trackRecentRead(b);
-                          window.scrollTo({ top: 0, behavior: 'smooth' });
-                        }}
-                        className={`w-full text-left rounded-xl p-3 border transition-all flex items-center gap-3 ${darkMode ? 'bg-[#162226] border-[#0B5A70]/15 hover:border-[#0B5A70]/30' : 'bg-[#FFFCF8] border-[#0B5A70]/8 shadow-[0_1px_4px_rgba(11,90,112,0.04)] hover:border-[#0B5A70]/25 hover:shadow-[0_2px_8px_rgba(11,90,112,0.10)]'}`}
-                      >
-                        <div className="flex-1 min-w-0">
-                          <p className={`text-sm font-bold truncate ${darkMode ? 'text-amber-100' : 'text-[#0B5A70]'}`}>{b.title}</p>
-                          <p className={`text-xs truncate ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                            {b.deity} · {b.category}
-                            {b.matchedKws.length > 0 && (
-                              <span className={darkMode ? 'text-orange-300/70' : 'text-[#E65100]/60'}> · {b.matchedKws.slice(0, 2).map(k => `#${k}`).join(' ')}</span>
-                            )}
-                          </p>
-                        </div>
-                        <span className={`text-lg flex-shrink-0 ${darkMode ? 'text-gray-500' : 'text-[#0B5A70]/30'}`}>›</span>
-                      </button>
-                    ))}
+              {/* SESSION 34: context-aware "next-tap" list below reading view.
+                  If we came from a playlist/program, show OTHER bhajans in
+                  that playlist/program (siblings in order, current one
+                  excluded). Otherwise, keep the Session 6 Related Bhajans
+                  behavior (keyword-matched from library). */}
+              {(() => {
+                const contextIsValid =
+                  programContext &&
+                  Array.isArray(programContext.bhajanIds) &&
+                  selectedBhajan &&
+                  programContext.bhajanIds.includes(selectedBhajan.id);
+
+                if (contextIsValid) {
+                  const siblings = programContext.bhajanIds
+                    .filter(id => id !== selectedBhajan.id)
+                    .map(id => getBhajanById(id))
+                    .filter(Boolean);
+
+                  if (siblings.length === 0) return null;
+
+                  const ctxLabel = getProgramType(programContext) === 'playlist'
+                    ? 'this playlist'
+                    : 'this program';
+
+                  return (
+                    <div className="mt-6">
+                      <p className={`text-sm font-bold mb-3 flex items-center gap-1.5 ${darkMode ? 'text-gray-300' : 'text-[#0B5A70]'}`}>
+                        🎵 More in {ctxLabel}
+                        <span className={`text-xs font-normal ${darkMode ? 'text-gray-500' : 'text-[#0B5A70]/50'}`}>
+                          · {programContext.name}
+                        </span>
+                      </p>
+                      <div className="space-y-1.5">
+                        {siblings.map(b => (
+                          <button
+                            key={b.id}
+                            onClick={() => {
+                              setSelectedBhajan(b);
+                              trackRecentRead(b);
+                              window.scrollTo({ top: 0, behavior: 'smooth' });
+                            }}
+                            className={`w-full text-left rounded-xl p-3 border transition-all flex items-center gap-3 ${darkMode ? 'bg-[#162226] border-[#0B5A70]/15 hover:border-[#0B5A70]/30' : 'bg-[#FFFCF8] border-[#0B5A70]/8 shadow-[0_1px_4px_rgba(11,90,112,0.04)] hover:border-[#0B5A70]/25 hover:shadow-[0_2px_8px_rgba(11,90,112,0.10)]'}`}
+                          >
+                            <div className="flex-1 min-w-0">
+                              <p className={`text-sm font-bold truncate ${darkMode ? 'text-amber-100' : 'text-[#0B5A70]'}`}>{b.title}</p>
+                              <p className={`text-xs truncate ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                                {b.deity} · {b.category}
+                              </p>
+                            </div>
+                            <span className={`text-lg flex-shrink-0 ${darkMode ? 'text-gray-500' : 'text-[#0B5A70]/30'}`}>›</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                }
+
+                // Fallback: original Related Bhajans (keyword-matched)
+                if (relatedMyBhajans.length === 0) return null;
+                return (
+                  <div className="mt-6">
+                    <p className={`text-sm font-bold mb-3 flex items-center gap-1.5 ${darkMode ? 'text-gray-300' : 'text-[#0B5A70]'}`}>
+                      ✨ Related Bhajans
+                    </p>
+                    <div className="space-y-1.5">
+                      {relatedMyBhajans.map(b => (
+                        <button
+                          key={b.id}
+                          onClick={() => {
+                            setSelectedBhajan(b);
+                            trackRecentRead(b);
+                            window.scrollTo({ top: 0, behavior: 'smooth' });
+                          }}
+                          className={`w-full text-left rounded-xl p-3 border transition-all flex items-center gap-3 ${darkMode ? 'bg-[#162226] border-[#0B5A70]/15 hover:border-[#0B5A70]/30' : 'bg-[#FFFCF8] border-[#0B5A70]/8 shadow-[0_1px_4px_rgba(11,90,112,0.04)] hover:border-[#0B5A70]/25 hover:shadow-[0_2px_8px_rgba(11,90,112,0.10)]'}`}
+                        >
+                          <div className="flex-1 min-w-0">
+                            <p className={`text-sm font-bold truncate ${darkMode ? 'text-amber-100' : 'text-[#0B5A70]'}`}>{b.title}</p>
+                            <p className={`text-xs truncate ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                              {b.deity} · {b.category}
+                              {b.matchedKws.length > 0 && (
+                                <span className={darkMode ? 'text-orange-300/70' : 'text-[#E65100]/60'}> · {b.matchedKws.slice(0, 2).map(k => `#${k}`).join(' ')}</span>
+                              )}
+                            </p>
+                          </div>
+                          <span className={`text-lg flex-shrink-0 ${darkMode ? 'text-gray-500' : 'text-[#0B5A70]/30'}`}>›</span>
+                        </button>
+                      ))}
                   </div>
                 </div>
-              )}
+                );
+              })()}
 
               {/* Prev / Next navigation — SESSION 6: uses memoized myPrevNext */}
               {myPrevNext && (
@@ -7101,7 +7227,7 @@ const App = () => {
                   </span>
                 </div>
 
-                {selectedProgram.bhajanIds && selectedProgram.bhajanIds.length > 0 && (
+                {selectedProgram.bhajanIds && selectedProgram.bhajanIds.length > 0 && getProgramType(selectedProgram) !== 'playlist' && (
                   <button
                     onClick={() => startLiveProgram(selectedProgram)}
                     className="w-full mt-6 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-bold py-4 rounded-xl shadow-lg text-lg flex items-center justify-center gap-2"
@@ -7112,10 +7238,14 @@ const App = () => {
               </div>
 
               <div className="mb-4">
-                <h3 className="text-lg font-bold text-[#0B5A70] mb-3">Bhajans in this Program:</h3>
+                <h3 className="text-lg font-bold text-[#0B5A70] mb-3">
+                  Bhajans in this {getProgramType(selectedProgram) === 'playlist' ? 'Playlist' : 'Program'}:
+                </h3>
                 {(!selectedProgram.bhajanIds || selectedProgram.bhajanIds.length === 0) ? (
                   <div className="bg-[#FFFCF8] rounded-2xl p-6 text-center border-2 border-dashed border-[#0B5A70]/12">
-                    <p className="text-[#0B5A70] mb-2">No bhajans in this program yet</p>
+                    <p className="text-[#0B5A70] mb-2">
+                      No bhajans in this {getProgramType(selectedProgram) === 'playlist' ? 'playlist' : 'program'} yet
+                    </p>
                     <button
                       onClick={() => openEditProgram(selectedProgram)}
                       className="text-[#0B5A70] hover:text-[#0B5A70]/80 font-semibold text-sm"
@@ -7135,7 +7265,13 @@ const App = () => {
                       return (
                         <button
                           key={bhajanId}
-                          onClick={() => openBhajanDetail(bhajan)}
+                          onClick={() => {
+                            // SESSION 34: remember we came from this
+                            // program/playlist, so the reading view
+                            // shows siblings instead of Related.
+                            setProgramContext(selectedProgram);
+                            openBhajanDetail(bhajan);
+                          }}
                           className="w-full bg-[#FFFCF8] rounded-xl p-4 border border-[#0B5A70]/8 hover:border-[#0B5A70]/25 transition-all text-left flex items-center gap-3 shadow-[0_1px_4px_rgba(11,90,112,0.04)]"
                         >
                           <div className="text-2xl font-bold text-[#E65100] min-w-[40px] text-center">
