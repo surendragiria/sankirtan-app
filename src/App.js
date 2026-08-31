@@ -1,6 +1,58 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 
 // ==============================================
+// SANKIRTAN SAAS - SESSION 40
+// Bhajan Se Bhagwan Tak
+// CHANGES (Session 40 — three focused improvements):
+//
+// 1. UPDATE-AVAILABLE BANNER (undoes some of Session 30, but
+//    RIGHT this time). Session 30 removed the old "App Updated!"
+//    modal because its content was hardcoded and stale. Now
+//    users don't know when to refresh to get new features.
+//    New approach: non-blocking bottom banner, no marketing
+//    copy, no feature list, just "New version available.
+//    Refresh?" with a button. Refresh triggers window.location
+//    .reload() which pulls the new bundle.
+//    Detection: poll index.html every 5 min + on tab focus,
+//    hash the content, compare against the mount-time baseline.
+//    Any change = new deploy (Vercel bundles reference hashed
+//    JS filenames from index.html — deterministic per deploy).
+//    Zero manual version-file maintenance.
+//    Dismissible per-session. Won't nag; won't stay silent.
+//
+// 2. COMPACT DAILY CARD. Session 31 shrunk it; Session 33
+//    removed buttons; user wanted it even smaller — same size
+//    as regular compact cards. Now it's a normal card layout
+//    (rounded-xl p-3, flex row) with a small "🌟 आज का" chip
+//    on the right where the Save button would be. No gradient
+//    bg, no big header text. Note (if curated) shows as one
+//    italic line below meta. Whole card still tappable.
+//
+// 3. PERSONAL-READ → PUBLIC READCOUNT. Popular Bhajans ranking
+//    used readCount from Public Library reads only. Now,
+//    when a user reads a bhajan from their personal library
+//    that ORIGINATED as a public bhajan (savedFromPublicId
+//    set), we also bump the source public bhajan's readCount.
+//    Both surface reads and personal-library reads contribute
+//    to popularity signal. Fire-and-forget write — doesn't
+//    block the reading view if it fails.
+//    Firestore rules (Session 19) already permit this.
+//
+// Skipped from user request: realtime voice search. User asked
+// to defer to a later session. Web Speech API works well on
+// Android Chrome but iOS Safari support is spotty — worth
+// building carefully in its own session.
+//
+// Not touched: everything else. All Session 6-39 work intact.
+// Firestore rules unchanged.
+//
+// Meta-audit (per Session 30 promise): update banner detection
+// won't false-positive on first mount (baseline set on first
+// fetch). Dismiss is per-session (natural page reload resets).
+// Personal-read → public counter uses fire-and-forget so
+// Firestore failure doesn't block user flow.
+// ==============================================
+//
 // SANKIRTAN SAAS - SESSION 39
 // Bhajan Se Bhagwan Tak
 // CHANGES (Session 39 — तर्ज़ in parody mukhda blocks):
@@ -432,7 +484,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.08.24.s39';
+const APP_VERSION = '2026.08.24.s40';
 
 // SESSION 30: log at startup so admin can verify which build is
 // running via the browser console (helps diagnose "is my new
@@ -1285,6 +1337,13 @@ const App = () => {
   const [programFormError, setProgramFormError] = useState('');
   const [programFormSaving, setProgramFormSaving] = useState(false);
   const [showBhajanPicker, setShowBhajanPicker] = useState(false);
+  // SESSION 40: update banner state. When a new deploy is detected
+  // (via periodic index.html hash check), this flips true and a
+  // non-blocking banner shows at the bottom of the screen with a
+  // Refresh button. Dismissible per-session (banner won't reappear
+  // until the next detected update).
+  const [updateAvailable, setUpdateAvailable] = useState(false);
+  const [updateBannerDismissed, setUpdateBannerDismissed] = useState(false);
   // SESSION 38: state for the "Add to Program/Playlist/Parody"
   // picker that opens from the bhajan-detail reading view.
   // Stores the bhajan being added so the picker can target it,
@@ -1896,17 +1955,84 @@ const App = () => {
     };
   }, []);
 
-  // SESSION 30: version-check "App Updated!" modal removed.
-  // The modal content was hardcoded and stale — describing
-  // features from months ago. Every deploy for 25+ sessions
-  // showed users the same misleading "here's what's new"
-  // message. Silent PWA updates (the modern norm) are more
-  // honest. If a truly major change ever needs announcement,
-  // we can add a targeted, hand-authored one-time dialog
-  // keyed to a message ID at that time.
+  // SESSION 40: update detection via index.html hash polling.
   //
-  // The 'sankirtan-app-version' localStorage key is left
-  // in place (harmless orphan; will simply never be read again).
+  // Session 30 removed the old "App Updated!" modal because its
+  // content was hardcoded and stale for 25+ deploys. This is
+  // different — no marketing copy, no feature list, just a
+  // non-blocking banner saying "New version — refresh?" with a
+  // refresh button. It fires only when a real deploy is detected,
+  // not on every version bump we happen to make in code.
+  //
+  // Detection strategy:
+  // 1. On first mount, fetch /index.html (bypass cache) and record
+  //    its content hash as the "baseline".
+  // 2. Every 5 minutes, re-fetch and hash. If hash differs from
+  //    baseline → new deploy was pushed. Set updateAvailable=true.
+  // 3. Banner appears at bottom of screen with Refresh button.
+  //    User can dismiss with X (per-session).
+  //
+  // Why hash the whole file: Vercel bundles reference hashed JS
+  // filenames from index.html (e.g. main.abc123.js). Any deploy
+  // changes those references, so index.html content changes
+  // deterministically per deploy. No manual version-file needed.
+  useEffect(() => {
+    let baselineHash = null;
+    let cancelled = false;
+
+    const simpleHash = (s) => {
+      // Small, fast hash — enough to detect any change
+      let h = 5381;
+      for (let i = 0; i < s.length; i++) {
+        h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+      }
+      return h.toString(36);
+    };
+
+    const fetchAndHash = async () => {
+      try {
+        const res = await fetch('/index.html', {
+          cache: 'no-store',
+          credentials: 'omit'
+        });
+        if (!res.ok) return null;
+        const text = await res.text();
+        return simpleHash(text);
+      } catch {
+        return null;
+      }
+    };
+
+    const check = async () => {
+      if (cancelled) return;
+      const h = await fetchAndHash();
+      if (cancelled || !h) return;
+      if (baselineHash === null) {
+        baselineHash = h;
+      } else if (h !== baselineHash) {
+        setUpdateAvailable(true);
+      }
+    };
+
+    // Initial baseline read shortly after mount (don't compete
+    // with the app's own load resources).
+    const initialTimer = setTimeout(check, 3000);
+    // Periodic re-check every 5 minutes
+    const interval = setInterval(check, 5 * 60 * 1000);
+    // Also re-check when the tab regains focus (common: user
+    // switches back to sankirtan.app after using something else)
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') check();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(initialTimer);
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, []);
 
   // ==============================================
   // PWA INSTALL PROMPT
@@ -3485,10 +3611,25 @@ const App = () => {
     try {
       if (!user) return;
       const db = window.firebase.firestore();
+      // Personal viewCount — always increment
       await db.collection('users').doc(user.uid).collection('bhajans').doc(bhajan.id).update({
         viewCount: window.firebase.firestore.FieldValue.increment(1),
         lastActive: window.firebase.firestore.FieldValue.serverTimestamp()
       });
+
+      // SESSION 40: if this personal bhajan originated from a
+      // public bhajan (savedFromPublicId set), also bump the
+      // source public bhajan's readCount so Popular Bhajans
+      // reflects both surface reads (directly from Public
+      // Library) AND personal-library reads of the same bhajan.
+      // Firestore rules (Session 19) already permit signed-in
+      // users to increment readCount only. Fire-and-forget:
+      // failure here shouldn't block the reading view.
+      if (bhajan.savedFromPublicId) {
+        db.collection('publicBhajans').doc(bhajan.savedFromPublicId).update({
+          readCount: window.firebase.firestore.FieldValue.increment(1)
+        }).catch(e => console.log('Could not bump public readCount:', e.message));
+      }
     } catch (error) {
       console.log('Could not update view count:', error);
     }
@@ -6223,6 +6364,42 @@ const App = () => {
           </div>
         )}
 
+        {/* SESSION 40: UPDATE-AVAILABLE BANNER
+            Non-blocking. Sits above the bottom nav (bottom-20).
+            Shows only when a new deploy was detected by the
+            version-check effect AND user hasn't dismissed it
+            this session. Refresh button reloads the page,
+            which pulls the new bundle. */}
+        {updateAvailable && !updateBannerDismissed && (
+          <div className="fixed bottom-20 left-4 right-4 md:left-auto md:right-6 md:max-w-sm z-50">
+            <div className={`rounded-2xl shadow-[0_8px_40px_rgba(11,90,112,0.15)] border p-4 flex items-center gap-3 ${darkMode ? 'bg-[#1e2e33] border-[#E65100]/30 text-gray-100' : 'bg-[#FFFCF8] border-[#E65100]/30'}`}>
+              <div className="text-2xl flex-shrink-0" aria-hidden="true">✨</div>
+              <div className="flex-1 min-w-0">
+                <p className={`text-sm font-bold ${darkMode ? 'text-amber-100' : 'text-[#0B5A70]'}`}>
+                  New version available
+                </p>
+                <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                  Refresh to get the latest features
+                </p>
+              </div>
+              <button
+                onClick={() => window.location.reload()}
+                className="bg-[#E65100] hover:bg-[#d64800] text-white text-xs font-bold px-3 py-2 rounded-lg flex-shrink-0"
+              >
+                Refresh
+              </button>
+              <button
+                onClick={() => setUpdateBannerDismissed(true)}
+                className={`text-xl leading-none px-1 flex-shrink-0 ${darkMode ? 'text-gray-500 hover:text-gray-300' : 'text-gray-400 hover:text-gray-600'}`}
+                aria-label="Dismiss"
+                title="Dismiss (banner will return on next update)"
+              >
+                ×
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* PWA INSTALL PROMPT (Android/Desktop) */}
         {showInstallPrompt && deferredInstallPrompt && (
           <div className="fixed bottom-20 left-4 right-4 md:left-auto md:max-w-md z-50">
@@ -8745,49 +8922,39 @@ const App = () => {
                       "today's featured" visibility. */}
                   {!hasActivePublicFilters && resolvedDailyBhajan && (
                     <div className="mb-5">
+                      {/* SESSION 40: compacted to match regular
+                          compact-card size. No gradient bg, no
+                          large saffron border, no big header —
+                          just a normal-looking card with a small
+                          "🌟 TODAY" chip so the featured bhajan
+                          doesn't dominate the scroll. Note (if
+                          curated) appears as a small italic line
+                          below meta. */}
                       <div
                         onClick={() => openPublicBhajanDetail(resolvedDailyBhajan.bhajan)}
                         role="button"
                         tabIndex={0}
                         onKeyDown={(e) => { if (e.key === 'Enter') openPublicBhajanDetail(resolvedDailyBhajan.bhajan); }}
-                        className={`rounded-2xl p-4 border-2 cursor-pointer transition-all ${
-                          darkMode
-                            ? 'bg-gradient-to-br from-[#1a2a2f] to-[#162226] border-[#E65100]/40 hover:border-[#E65100]/70 shadow-[0_4px_20px_rgba(230,81,0,0.15)]'
-                            : 'bg-gradient-to-br from-[#FFFCF8] to-[#FFF3E5] border-[#E65100]/40 hover:border-[#E65100]/70 shadow-[0_4px_20px_rgba(230,81,0,0.10)]'
-                        }`}
+                        className={`w-full rounded-xl p-3 border cursor-pointer transition-all flex items-center gap-3 ${darkMode ? 'bg-[#162226] border-[#E65100]/25 hover:border-[#E65100]/50' : 'bg-[#FFFCF8] border-[#E65100]/20 shadow-[0_1px_4px_rgba(11,90,112,0.04)] hover:border-[#E65100]/40 hover:shadow-[0_2px_8px_rgba(11,90,112,0.10)]'}`}
                       >
-                        <div className="flex items-center justify-between mb-2">
-                          <div className={`text-[11px] font-bold uppercase tracking-wider ${darkMode ? 'text-orange-300' : 'text-[#E65100]'}`}>
-                            🌟 आज का भजन · Today's Bhajan
-                          </div>
-                          {resolvedDailyBhajan.curated && (
-                            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${darkMode ? 'bg-[#E65100]/20 text-orange-200' : 'bg-[#E65100]/10 text-[#E65100]'}`}>
-                              Curated
-                            </span>
+                        <div className="flex-1 min-w-0">
+                          <h3 className={`text-sm font-bold truncate ${darkMode ? 'text-amber-100' : 'text-[#0B5A70]'}`}>
+                            {resolvedDailyBhajan.bhajan.title}
+                          </h3>
+                          <p className={`text-xs truncate ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                            {resolvedDailyBhajan.bhajan.deity}
+                            {resolvedDailyBhajan.bhajan.category ? ` · ${resolvedDailyBhajan.bhajan.category}` : ''}
+                            {resolvedDailyBhajan.bhajan.dhun ? ` · तर्ज़: ${resolvedDailyBhajan.bhajan.dhun}` : ''}
+                          </p>
+                          {resolvedDailyBhajan.note && (
+                            <p className={`text-xs italic truncate mt-0.5 ${darkMode ? 'text-orange-300/80' : 'text-[#E65100]/80'}`}>
+                              "{resolvedDailyBhajan.note}"
+                            </p>
                           )}
                         </div>
-
-                        <h2 className={`text-lg md:text-xl font-bold mb-0.5 leading-tight line-clamp-2 ${darkMode ? 'text-amber-100' : 'text-[#0B5A70]'}`}>
-                          {resolvedDailyBhajan.bhajan.title}
-                        </h2>
-
-                        <p className={`text-xs mb-2 ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                          {resolvedDailyBhajan.bhajan.deity}
-                          {resolvedDailyBhajan.bhajan.category ? ` · ${resolvedDailyBhajan.bhajan.category}` : ''}
-                          {resolvedDailyBhajan.bhajan.dhun ? ` · तर्ज़: ${resolvedDailyBhajan.bhajan.dhun}` : ''}
-                        </p>
-
-                        {resolvedDailyBhajan.note && (
-                          <p className={`text-xs italic mb-3 ${darkMode ? 'text-orange-200/80' : 'text-[#E65100]/80'}`}>
-                            "{resolvedDailyBhajan.note}"
-                          </p>
-                        )}
-                        {/* SESSION 33: Read and Share buttons removed
-                            from the daily card. Whole card is still
-                            tappable (opens reading view via parent
-                            onClick). Share is still accessible from
-                            the reading view header. Cleaner, matches
-                            Session 31's compact-card direction. */}
+                        <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-full flex-shrink-0 ${darkMode ? 'bg-[#E65100]/20 text-orange-200' : 'bg-[#E65100]/10 text-[#E65100]'}`}>
+                          🌟 आज का
+                        </span>
                       </div>
                     </div>
                   )}
