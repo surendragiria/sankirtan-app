@@ -1,6 +1,36 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 
 // ==============================================
+// SANKIRTAN SAAS - SESSION 39
+// Bhajan Se Bhagwan Tak
+// CHANGES (Session 39 — तर्ज़ in parody mukhda blocks):
+//
+// User asked to show तर्ज़ (dhun / tune) along with the bhajan
+// title in the parody view. Small addition, real value — the
+// singer performing a parody medley needs to know the tune at
+// a glance, not just the title.
+//
+// Sub-line below title, before the mukhda:
+//   1. श्री दुर्गा चालीसा             Tap for full →
+//      तर्ज़: कोई कहे कि जीत गया
+//
+//      [mukhda lines large]
+//
+// Only rendered when bhajan.dhun is set (many bhajans don't
+// have a dhun — no empty line for those).
+//
+// Convention "तर्ज़: X" matches the standard playlist/program
+// bhajan list render (line ~7420). Consistent across the app.
+// Saffron/orange color chosen to visually associate it with
+// the number marker (already saffron) rather than the title
+// (teal). Truncates on overflow so long dhun names don't
+// break card layout.
+//
+// Not touched: everything else. Standard playlist/program
+// render (which already shows dhun), reading view, all other
+// Session 6-38 work.
+// ==============================================
+//
 // SANKIRTAN SAAS - SESSION 38
 // Bhajan Se Bhagwan Tak
 // CHANGES (Session 38 — Add to Program/Playlist/Parody + back-nav
@@ -402,7 +432,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.08.24.s38';
+const APP_VERSION = '2026.08.24.s39';
 
 // SESSION 30: log at startup so admin can verify which build is
 // running via the browser console (helps diagnose "is my new
@@ -7869,7 +7899,7 @@ const App = () => {
                           }}
                           className={`w-full rounded-2xl p-4 border transition-all text-left shadow-[0_1px_4px_rgba(11,90,112,0.04)] ${darkMode ? 'bg-[#162226] border-[#0B5A70]/15 hover:border-[#0B5A70]/30' : 'bg-[#FFFCF8] border-[#0B5A70]/8 hover:border-[#0B5A70]/25'}`}
                         >
-                          <div className="flex items-baseline justify-between mb-2 gap-2">
+                          <div className="flex items-baseline justify-between mb-1 gap-2">
                             <div className="flex items-baseline gap-2 min-w-0">
                               <span className="text-sm font-bold text-[#E65100]">{index + 1}.</span>
                               <p className={`text-xs font-semibold truncate ${darkMode ? 'text-teal-300' : 'text-[#0B5A70]/80'}`}>
@@ -7878,6 +7908,16 @@ const App = () => {
                             </div>
                             <span className="text-xs text-[#0B5A70]/50 flex-shrink-0">Tap for full →</span>
                           </div>
+                          {/* SESSION 39: तर्ज़ (dhun) sub-line — singer
+                              needs the tune to sing a parody medley.
+                              Only rendered if the bhajan actually has
+                              a dhun. Same "तर्ज़: X" convention as the
+                              standard playlist/program bhajan list. */}
+                          {bhajan.dhun && (
+                            <p className={`text-xs mb-2 ml-6 truncate ${darkMode ? 'text-orange-300/80' : 'text-[#E65100]/80'}`}>
+                              तर्ज़: {bhajan.dhun}
+                            </p>
+                          )}
                           <p
                             className={`whitespace-pre-line leading-relaxed text-lg font-medium ${darkMode ? 'text-amber-100' : 'text-[#0B5A70]'}`}
                             style={{ fontFamily: "'Noto Sans Devanagari', 'Noto Serif Devanagari', system-ui, sans-serif" }}
