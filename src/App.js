@@ -1,6 +1,52 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 
 // ==============================================
+// SANKIRTAN SAAS - SESSION 38
+// Bhajan Se Bhagwan Tak
+// CHANGES (Session 38 — Add to Program/Playlist/Parody + back-nav
+//                     bug fix):
+//
+// Two user asks in one session:
+//
+// 1. BUG FIX: bhajan-detail back button ignored programContext
+//    (Session 34 state). Even after tapping into a bhajan FROM
+//    a parody, hitting Back went to the library home. Now the
+//    button routes back to program-detail when programContext
+//    is set, with type-aware label: "← Back to Parody" / "← Back
+//    to Playlist" / "← Back to Program". Falls back to library
+//    behavior when no context.
+//
+// 2. NEW FEATURE: "📋 Add to" button in the bhajan-detail action
+//    row opens a picker of all the user's programs/playlists/
+//    parodies. Tap one → append this bhajan's ID to that
+//    program's bhajanIds. Toast confirms. Modal stays open so
+//    user can add to multiple in one flow.
+//
+// Picker design
+// - Grouped by type: Parodies first (newest concept), then
+//   Playlists, then Programs. Each section alphabetical.
+// - Already-added rows show "✓ Added" and are disabled.
+// - Saving spinner during Firestore write (rapid-tap guard).
+// - Empty-state CTA when user has no programs yet.
+// - Bottom sheet on mobile, centered dialog on desktop.
+// - ESC key + tap-outside close it.
+//
+// Optimistic UI
+// - addBhajanToProgram updates local `programs` state
+//   immediately, then writes to Firestore. On failure, reverts
+//   the local update and shows an error toast. Feels instant on
+//   good networks; still correct on bad networks.
+//
+// Scope
+// - Only on My Library reading view (bhajan-detail). Public
+//   Library reading view (public-bhajan-detail) NOT included in
+//   this pass — that surface needs a save-then-add flow which
+//   is a bigger design decision. Ship the common case first.
+// - Only for logged-in users (guests have no programs).
+//
+// Not touched: schema, rules, existing modals, all Session 6-37.
+// ==============================================
+//
 // SANKIRTAN SAAS - SESSION 37
 // Bhajan Se Bhagwan Tak
 // CHANGES (Session 37 — mukhda detection by blank line):
@@ -356,7 +402,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.08.24.s37';
+const APP_VERSION = '2026.08.24.s38';
 
 // SESSION 30: log at startup so admin can verify which build is
 // running via the browser console (helps diagnose "is my new
@@ -1209,6 +1255,13 @@ const App = () => {
   const [programFormError, setProgramFormError] = useState('');
   const [programFormSaving, setProgramFormSaving] = useState(false);
   const [showBhajanPicker, setShowBhajanPicker] = useState(false);
+  // SESSION 38: state for the "Add to Program/Playlist/Parody"
+  // picker that opens from the bhajan-detail reading view.
+  // Stores the bhajan being added so the picker can target it,
+  // and a "saving" set tracking which programs are mid-update
+  // (for spinner + disable on rapid taps).
+  const [addToProgramFor, setAddToProgramFor] = useState(null);
+  const [addToProgramSaving, setAddToProgramSaving] = useState(new Set());
   const [bhajanPickerSearch, setBhajanPickerSearch] = useState('');
   const [pickerDeityFilter, setPickerDeityFilter] = useState('');
   const [pickerKeywordFilter, setPickerKeywordFilter] = useState('');
@@ -1510,6 +1563,7 @@ const App = () => {
     const handleEsc = (e) => {
       if (e.key !== 'Escape') return;
       if (confirmDialog) { setConfirmDialog(null); return; }
+      if (addToProgramFor) { setAddToProgramFor(null); return; }
       if (showBhajanPicker) { setShowBhajanPicker(false); return; }
       if (showReadingSettings) { setShowReadingSettings(false); return; }
       if (showOnboarding) { setShowOnboarding(false); return; }
@@ -1517,7 +1571,7 @@ const App = () => {
     };
     document.addEventListener('keydown', handleEsc);
     return () => document.removeEventListener('keydown', handleEsc);
-  }, [confirmDialog, showBhajanPicker, showReadingSettings, showOnboarding, showPhoneLogin]);
+  }, [confirmDialog, showBhajanPicker, showReadingSettings, showOnboarding, showPhoneLogin, addToProgramFor]);
 
   const PAGE_SIZE = 20;
   const [publicVisibleCount, setPublicVisibleCount] = useState(PAGE_SIZE);
@@ -4676,6 +4730,68 @@ const App = () => {
     setCurrentView('program-detail');
   };
 
+  // SESSION 38: append a bhajan to a program/playlist/parody's
+  // bhajanIds array. Called from the "Add to..." picker in the
+  // bhajan-detail reading view.
+  //
+  // No-op if bhajan already in the list (button is disabled in
+  // that case, but defensive check catches racing double-taps).
+  // Optimistic UI: update programs state immediately, then write
+  // to Firestore. If the write fails, we revert and show an error
+  // toast so the user knows.
+  const addBhajanToProgram = async (program, bhajan) => {
+    if (!program || !bhajan || !user) return;
+    if (Array.isArray(program.bhajanIds) && program.bhajanIds.includes(bhajan.id)) {
+      // Already in — no work
+      return;
+    }
+    const programId = program.id;
+    // Mark as saving (drives spinner/disabled state)
+    setAddToProgramSaving(prev => {
+      const next = new Set(prev);
+      next.add(programId);
+      return next;
+    });
+
+    const prevBhajanIds = Array.isArray(program.bhajanIds) ? program.bhajanIds : [];
+    const nextBhajanIds = [...prevBhajanIds, bhajan.id];
+
+    // Optimistic local update
+    setPrograms(prev => prev.map(p =>
+      p.id === programId
+        ? { ...p, bhajanIds: nextBhajanIds, bhajanCount: nextBhajanIds.length }
+        : p
+    ));
+
+    try {
+      const db = window.firebase.firestore();
+      await db.collection('users').doc(user.uid).collection('programs').doc(programId).update({
+        bhajanIds: nextBhajanIds,
+        bhajanCount: nextBhajanIds.length,
+        updatedAt: window.firebase.firestore.FieldValue.serverTimestamp(),
+        lastActive: window.firebase.firestore.FieldValue.serverTimestamp()
+      });
+      const t = getProgramType(program);
+      const label = t === 'parody' ? 'parody' : t === 'playlist' ? 'playlist' : 'program';
+      showToast(`✓ Added to ${label} "${program.name}"`);
+    } catch (error) {
+      console.error('Add-to-program failed:', error);
+      // Revert optimistic update
+      setPrograms(prev => prev.map(p =>
+        p.id === programId
+          ? { ...p, bhajanIds: prevBhajanIds, bhajanCount: prevBhajanIds.length }
+          : p
+      ));
+      showToast('Could not add: ' + error.message, 'error');
+    } finally {
+      setAddToProgramSaving(prev => {
+        const next = new Set(prev);
+        next.delete(programId);
+        return next;
+      });
+    }
+  };
+
   const saveProgram = async () => {
     if (!programForm.name.trim()) {
       const t = programForm.type;
@@ -5939,6 +6055,144 @@ const App = () => {
           </div>
         )}
 
+        {/* SESSION 38: ADD-TO PROGRAM/PLAYLIST/PARODY PICKER */}
+        {addToProgramFor && (
+          <div
+            onClick={() => setAddToProgramFor(null)}
+            className="fixed inset-0 bg-black/60 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4"
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className={`rounded-t-3xl sm:rounded-3xl shadow-[0_8px_40px_rgba(11,90,112,0.15)] max-w-md w-full max-h-[85vh] flex flex-col overflow-hidden ${darkMode ? 'bg-[#162226] text-gray-100' : 'bg-[#FFFCF8]'}`}
+            >
+              {/* Header */}
+              <div className={`p-5 ${darkMode ? 'bg-[#1e2e33]' : 'bg-[#0B5A70]'} text-white flex items-start justify-between gap-3 flex-shrink-0`}>
+                <div className="min-w-0">
+                  <h3 className="text-lg font-bold">📋 Add to…</h3>
+                  <p className="text-sm opacity-90 truncate mt-0.5">{addToProgramFor.title}</p>
+                </div>
+                <button
+                  onClick={() => setAddToProgramFor(null)}
+                  className="text-white/80 hover:text-white text-2xl leading-none flex-shrink-0 -mr-1 -mt-1 px-2 py-1"
+                  aria-label="Close"
+                >
+                  ×
+                </button>
+              </div>
+
+              {/* List */}
+              <div className="overflow-y-auto flex-1 p-4">
+                {programs.length === 0 ? (
+                  <div className="text-center py-10">
+                    <div className="text-5xl mb-3">🎵</div>
+                    <p className={`text-sm font-semibold mb-1 ${darkMode ? 'text-amber-100' : 'text-[#0B5A70]'}`}>
+                      No playlists, programs, or parodies yet
+                    </p>
+                    <p className={`text-xs mb-4 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                      Create one first, then come back to add this bhajan.
+                    </p>
+                    <button
+                      onClick={() => {
+                        setAddToProgramFor(null);
+                        setCurrentView('programs');
+                      }}
+                      className="bg-[#0B5A70] hover:bg-[#094a5d] text-white font-semibold px-5 py-2 rounded-xl text-sm"
+                    >
+                      Go to Playlists →
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {(() => {
+                      // Group by type (parody, playlist, program) —
+                      // parody at top since it's the newest concept
+                      // and often what users add short bhajans to.
+                      const byType = { parody: [], playlist: [], program: [] };
+                      for (const p of programs) {
+                        const t = getProgramType(p);
+                        byType[t] = byType[t] || [];
+                        byType[t].push(p);
+                      }
+                      // Sort each group alphabetically by name
+                      for (const key of Object.keys(byType)) {
+                        byType[key].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+                      }
+                      const sections = [
+                        { key: 'parody', label: '🎭 Parodies', items: byType.parody },
+                        { key: 'playlist', label: '🎵 Playlists', items: byType.playlist },
+                        { key: 'program', label: '📅 Programs', items: byType.program },
+                      ].filter(s => s.items.length > 0);
+
+                      return sections.map(section => (
+                        <div key={section.key} className="mb-4 last:mb-0">
+                          <p className={`text-xs font-bold uppercase tracking-wider mb-2 px-1 ${darkMode ? 'text-gray-400' : 'text-[#0B5A70]/60'}`}>
+                            {section.label}
+                          </p>
+                          <div className="space-y-1.5">
+                            {section.items.map(program => {
+                              const alreadyIn = Array.isArray(program.bhajanIds) && program.bhajanIds.includes(addToProgramFor.id);
+                              const saving = addToProgramSaving.has(program.id);
+                              return (
+                                <button
+                                  key={program.id}
+                                  onClick={() => {
+                                    if (alreadyIn || saving) return;
+                                    addBhajanToProgram(program, addToProgramFor);
+                                  }}
+                                  disabled={alreadyIn || saving}
+                                  className={`w-full rounded-xl p-3 border transition-all text-left flex items-center gap-3 ${
+                                    alreadyIn
+                                      ? (darkMode ? 'bg-[#0B5A70]/10 border-[#0B5A70]/20 opacity-70' : 'bg-[#0B5A70]/5 border-[#0B5A70]/12 opacity-70')
+                                      : (darkMode ? 'bg-[#1e2e33] border-[#0B5A70]/15 hover:border-[#0B5A70]/40' : 'bg-white border-[#0B5A70]/10 hover:border-[#0B5A70]/30 hover:shadow-sm')
+                                  }`}
+                                >
+                                  <div className="flex-1 min-w-0">
+                                    <p className={`text-sm font-semibold truncate ${darkMode ? 'text-amber-100' : 'text-[#0B5A70]'}`}>
+                                      {program.name}
+                                    </p>
+                                    <p className={`text-xs truncate ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                                      {program.bhajanCount || 0} bhajans
+                                      {program.purpose ? ` · ${program.purpose}` : ''}
+                                      {program.date ? ` · ${program.date}` : ''}
+                                    </p>
+                                  </div>
+                                  <div className="flex-shrink-0">
+                                    {saving ? (
+                                      <div className="w-5 h-5 border-2 border-[#0B5A70]/30 border-t-[#0B5A70] rounded-full animate-spin"></div>
+                                    ) : alreadyIn ? (
+                                      <span className={`text-xs font-semibold ${darkMode ? 'text-teal-300' : 'text-[#0B5A70]'}`}>
+                                        ✓ Added
+                                      </span>
+                                    ) : (
+                                      <span className={`text-xl font-bold ${darkMode ? 'text-teal-300' : 'text-[#0B5A70]'}`}>
+                                        +
+                                      </span>
+                                    )}
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ));
+                    })()}
+                  </div>
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className={`p-3 border-t flex-shrink-0 ${darkMode ? 'border-[#0B5A70]/20 bg-[#1e2e33]/50' : 'border-[#0B5A70]/10 bg-[#FFFCF8]'}`}>
+                <button
+                  onClick={() => setAddToProgramFor(null)}
+                  className={`w-full font-semibold py-2.5 rounded-xl text-sm ${darkMode ? 'bg-[#0B5A70]/20 hover:bg-[#0B5A70]/30 text-teal-200' : 'bg-[#0B5A70]/10 hover:bg-[#0B5A70]/15 text-[#0B5A70]'}`}
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* PWA INSTALL PROMPT (Android/Desktop) */}
         {showInstallPrompt && deferredInstallPrompt && (
           <div className="fixed bottom-20 left-4 right-4 md:left-auto md:max-w-md z-50">
@@ -6451,10 +6705,30 @@ const App = () => {
             >
               <div className="flex items-center justify-between mb-4">
                 <button
-                  onClick={() => { if (guestMode && !user) { setGuestMode(false); } else { setCurrentView('library'); } }}
+                  onClick={() => {
+                    // SESSION 38: if we came from a program/playlist/
+                    // parody, go back there. Previously always went to
+                    // 'library' which felt broken when reading through
+                    // a parody's mukhda-tap → full lyrics flow.
+                    if (programContext) {
+                      setSelectedProgram(programContext);
+                      setCurrentView('program-detail');
+                      return;
+                    }
+                    if (guestMode && !user) {
+                      setGuestMode(false);
+                    } else {
+                      setCurrentView('library');
+                    }
+                  }}
                   className="text-[#0B5A70] hover:text-[#0B5A70]/80 flex items-center gap-1 text-sm"
                 >
-                  ← Back
+                  ← {programContext
+                    ? `Back to ${(() => {
+                        const t = getProgramType(programContext);
+                        return t === 'parody' ? 'Parody' : t === 'playlist' ? 'Playlist' : 'Program';
+                      })()}`
+                    : 'Back'}
                 </button>
                 <div className="flex gap-1.5 flex-wrap">
                   <button
@@ -6464,6 +6738,19 @@ const App = () => {
                   >
                     ↗ Share
                   </button>
+                  {/* SESSION 38: Add-to picker — surface the bhajan
+                      into any playlist/program/parody without
+                      leaving the reading view. Only shown for
+                      logged-in users (guests have no programs). */}
+                  {user && (
+                    <button
+                      onClick={() => setAddToProgramFor(selectedBhajan)}
+                      className={`px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 transition-colors ${darkMode ? 'bg-[#1e2e33] text-gray-300 hover:bg-[#0B5A70]/20' : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15'}`}
+                      title="Add to a playlist, program, or parody"
+                    >
+                      📋 Add to
+                    </button>
+                  )}
                   <button
                     onClick={() => setShowReadingSettings(true)}
                     className={`px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 transition-colors ${darkMode ? 'bg-[#1e2e33] text-gray-300 hover:bg-[#0B5A70]/20' : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15'}`}
