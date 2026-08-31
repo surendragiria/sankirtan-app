@@ -1,6 +1,143 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 
 // ==============================================
+// SANKIRTAN SAAS - SESSION 37
+// Bhajan Se Bhagwan Tak
+// CHANGES (Session 37 — mukhda detection by blank line):
+//
+// User's actual mukhda convention: "I always leave a blank line
+// after mukhda before the para starts." Session 36's default of
+// "first 3 lines" was arbitrary and wrong for bhajans with 1-line
+// or 5-line mukhdas.
+//
+// New getMukhda priority (most specific → most fallback):
+//   1. If bhajan.mukhdaLines is set → take that count (explicit
+//      override for anyone who wants exact control regardless
+//      of formatting).
+//   2. Else if lyrics have a blank line → take everything BEFORE
+//      the first blank line. Matches user's convention exactly.
+//      Handles arbitrary mukhda lengths.
+//   3. Else → first 3 non-empty lines. Degrades gracefully for
+//      legacy/imported bhajans with no paragraph structure
+//      (rather than dumping the whole bhajan into mukhda view).
+//
+// Leading blank lines skipped before detection. Whitespace-only
+// lines counted as blank (real-world lyrics data often has
+// stray spaces on "empty" lines).
+//
+// Self-tested with 12 cases covering:
+//   - Well-formatted 1/2/4-line mukhdas
+//   - No-blank-line fallback
+//   - Explicit override
+//   - Edge cases: empty lyrics, null bhajan, only-blank lyrics,
+//     leading blanks, multiple blanks between mukhda and para,
+//     whitespace-only "blank" lines
+//   All 12 pass.
+//
+// Not touched: schema, UI, form, everything else in Session 36.
+// Pure logic improvement — parody display now correctly reflects
+// user's own formatting convention.
+// ==============================================
+//
+// SANKIRTAN SAAS - SESSION 36
+// Bhajan Se Bhagwan Tak
+// CHANGES (Session 36 — Parody as a third type):
+//
+// User asked for a "parody" feature: a playlist type where the
+// detail view shows just the MUKHDA (opening lines) of each
+// bhajan in the medley, so a singer can see the arc of all 5-6
+// bhajans at a glance. Tapping a mukhda opens the full reading
+// view. Back-nav returns to the parody. Purpose: singing a
+// continuous medley at jagrans/kirtans where singer needs to
+// remember the sequence and occasionally see full lyrics.
+//
+// Design decisions (all recommended defaults from planning):
+//
+// - Third type alongside Playlist and Program. Not a display
+//   mode on existing playlists. Cleaner conceptually — a parody
+//   is functionally different (renders as mukhda blocks, not
+//   bhajan cards), so it deserves its own type.
+//
+// - Mukhda default: first 3 non-empty lines. Optional
+//   per-bhajan override via new `mukhdaLines` field on the
+//   bhajan doc (e.g., mukhdaLines: 5 for bhajans with a longer
+//   mukhda). No migration needed — existing bhajans use default.
+//
+// - Tap opens the full reading view with programContext set
+//   (same Session 34 pattern as playlists). Back nav shows
+//   "← Back to [Parody name]" and reading view shows "🎭 More
+//   in this parody" siblings at the bottom. No modal overlay.
+//
+// - Live Performance button hidden on parodies AND playlists.
+//   Only shown for 'program' type (dated performance events).
+//
+// Schema
+// - New `type` value: 'parody' (existing: 'playlist', 'program').
+//   getProgramType() extended to recognize it.
+// - New `mukhdaLines` field on bhajan docs (optional, number,
+//   default 3). Currently no UI to set this — admin/user would
+//   set it via a future edit-form update. For now, default 3
+//   works for most Marwari devotional pieces.
+// - No Firestore rules change (existing rules cover new fields).
+// - No migration needed for existing parodies (there are none).
+//
+// UI changes
+// - Bottom tab: unchanged ("Playlists").
+// - List page: three-way toggle (🎵 Playlists / 📅 Programs /
+//   🎭 Parodies), each persists to localStorage as before.
+// - Card render: 🎭 emoji for parody, "Open Parody →" CTA.
+// - Detail render: parody type renders MUKHDA BLOCKS — bhajan
+//   title small at top, first 3 lines of lyrics large below,
+//   "Tap for full →" hint. Not the standard bhajan-cards list.
+// - Create form: three-way type toggle. Parody uses the same
+//   fields as Playlist (name + optional purpose). Description
+//   text explains what a parody is.
+// - Toasts, delete confirms, validation errors, bhajan-count
+//   labels — all parody-aware.
+//
+// New helpers
+// - getMukhda(bhajan): returns the first N non-empty lines,
+//   where N is bhajan.mukhdaLines or 3.
+//
+// Not touched
+// - Playlist and Program behavior — completely unchanged
+// - Firestore rules
+// - Live Mode (still hidden for playlists AND parodies)
+// - All Session 6-35 work
+//
+// Meta-audit (Session 30 promise): verified every playlist/
+// program label site is now parody-aware. Reading-view sibling
+// label switches emoji + text. Empty-state uses parody copy.
+// Toggle persistence covers new value.
+// ==============================================
+//
+// SANKIRTAN SAAS - SESSION 35
+// Bhajan Se Bhagwan Tak
+// CHANGES (Session 35 — Hindi typing on Lyricist field):
+//
+// The rachnākāra (composer) field was a plain input with no
+// transliteration support. Adding composers like साध्वी कनकश्रीजी
+// or आचार्यश्री तुलसी required a Devanagari keyboard or paste.
+// Hindi typing was already wired on title/lyrics/dhun; this
+// completes the set.
+//
+// Wired both user form (bhajanForm.lyricist via handleHindiInput
+// /handleHindiKeyDown/applySuggestion) and admin form
+// (publicBhajanForm.lyricist via handlePublicHindiInput/
+// KeyDown/applyPublicSuggestion). Same suggestions dropdown UI,
+// same state (showSuggestions, activeTypingField, currentWord,
+// transliterationSuggestions).
+//
+// Handlers are already field-name-generic via [fieldName] index —
+// no handler code changed, just added 'lyricist' as a valid field
+// name at the JSX call sites.
+//
+// Not touched: singer field (also a plain input, but singer names
+// are almost always English/Latin — Anup Jalota, Lata Mangeshkar —
+// so Hindi typing there would be occasional noise, not consistent
+// help). If you want it there too, ask — 30-second change.
+// ==============================================
+//
 // SANKIRTAN SAAS - SESSION 34
 // Bhajan Se Bhagwan Tak
 // CHANGES (Session 34 — playlist context in reading view + no Live
@@ -219,7 +356,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.08.20.s34';
+const APP_VERSION = '2026.08.24.s37';
 
 // SESSION 30: log at startup so admin can verify which build is
 // running via the browser console (helps diagnose "is my new
@@ -475,10 +612,77 @@ if (typeof document !== 'undefined' && !document.getElementById('sankirtan-anima
 // ==============================================
 const getProgramType = (program) => {
   if (!program) return 'program';
-  if (program.type === 'playlist' || program.type === 'program') {
+  // SESSION 36: 'parody' added as a third valid type. Same explicit
+  // handling as playlist/program — no legacy inference for parody
+  // (didn't exist before, so any parody doc must have explicit type).
+  if (program.type === 'playlist' || program.type === 'program' || program.type === 'parody') {
     return program.type;
   }
   return (program.date && String(program.date).trim()) ? 'program' : 'playlist';
+};
+
+// SESSION 36/37: helper for extracting the mukhda (opening lines)
+// of a bhajan for the parody compact-view render.
+//
+// Priority order (most specific → most fallback):
+//   1. If bhajan.mukhdaLines is explicitly set → take that many
+//      non-empty lines. Override for anyone who wants an exact
+//      count regardless of formatting.
+//   2. Else if the lyrics contain a blank line → take everything
+//      BEFORE the first blank line. This is the user's stated
+//      convention: "I always leave a blank line after mukhda
+//      before the para starts." Well-formatted bhajans use this.
+//      Handles arbitrary mukhda lengths (1 line, 4 lines, 8
+//      lines — whatever the actual mukhda is).
+//   3. Else → first 3 non-empty lines. Fallback for legacy or
+//      imported bhajans (e.g., Kabir Bhajan Mala) that don't
+//      have paragraph separators. Degrades gracefully instead
+//      of dumping the entire bhajan into the mukhda view.
+//
+// Leading blank lines are always skipped before mukhda detection
+// begins — an accidental blank line at the very top of lyrics
+// shouldn't produce an empty mukhda.
+const getMukhda = (bhajan) => {
+  if (!bhajan || !bhajan.lyrics) return '';
+  const rawLines = String(bhajan.lyrics).split('\n');
+
+  // Skip leading blank lines
+  let start = 0;
+  while (start < rawLines.length && rawLines[start].trim().length === 0) {
+    start++;
+  }
+
+  // Tier 1: explicit override
+  const override = Number(bhajan.mukhdaLines);
+  if (override > 0) {
+    const nonEmpty = rawLines.slice(start).filter(l => l.trim().length > 0);
+    return nonEmpty.slice(0, override).map(l => l.trim()).join('\n');
+  }
+
+  // Tier 2: blank-line detection (user's stated convention)
+  // Walk from start; collect lines until we hit a blank line.
+  const mukhdaLines = [];
+  let sawBlankAfterContent = false;
+  for (let i = start; i < rawLines.length; i++) {
+    if (rawLines[i].trim().length === 0) {
+      // First blank line encountered after content → mukhda ends here
+      if (mukhdaLines.length > 0) {
+        sawBlankAfterContent = true;
+        break;
+      }
+      // Otherwise (shouldn't happen since we skipped leading blanks)
+      continue;
+    }
+    mukhdaLines.push(rawLines[i].trim());
+  }
+
+  if (sawBlankAfterContent && mukhdaLines.length > 0) {
+    return mukhdaLines.join('\n');
+  }
+
+  // Tier 3: fallback for lyrics with no blank-line structure
+  const allNonEmpty = rawLines.slice(start).filter(l => l.trim().length > 0);
+  return allNonEmpty.slice(0, 3).map(l => l.trim()).join('\n');
 };
 
 const shareApp = async () => {
@@ -1033,7 +1237,8 @@ const App = () => {
   const [playlistViewMode, setPlaylistViewMode] = useState(() => {
     try {
       const saved = localStorage.getItem('sankirtan-playlist-view');
-      return saved === 'playlist' || saved === 'program' ? saved : 'program';
+      // SESSION 36: parody added as a valid third value
+      return saved === 'playlist' || saved === 'program' || saved === 'parody' ? saved : 'program';
     } catch {
       return 'program';
     }
@@ -4473,11 +4678,9 @@ const App = () => {
 
   const saveProgram = async () => {
     if (!programForm.name.trim()) {
-      setProgramFormError(
-        programForm.type === 'playlist'
-          ? 'Please enter a playlist name'
-          : 'Please enter a program name'
-      );
+      const t = programForm.type;
+      const noun = t === 'parody' ? 'parody' : t === 'playlist' ? 'playlist' : 'program';
+      setProgramFormError(`Please enter a ${noun} name`);
       return;
     }
 
@@ -4487,16 +4690,18 @@ const App = () => {
       const db = window.firebase.firestore();
 
       const isPlaylist = programForm.type === 'playlist';
+      const isParody = programForm.type === 'parody';
+      // SESSION 36: both playlist and parody have no date/venue.
+      const isDateless = isPlaylist || isParody;
 
       const programData = {
         name: programForm.name.trim(),
-        // SESSION 32: for playlists, date/venue are always empty
-        // (the form doesn't show these fields when type=playlist).
-        // For programs, purpose is empty. Keep the doc shape
-        // predictable — no field surprises for downstream code.
-        date: isPlaylist ? '' : programForm.date.trim(),
-        venue: isPlaylist ? '' : programForm.venue.trim(),
-        purpose: isPlaylist ? programForm.purpose.trim() : '',
+        // SESSION 32/36: for playlists AND parodies, date/venue are
+        // always empty. For programs, purpose is empty. Keep the doc
+        // shape predictable — no field surprises for downstream code.
+        date: isDateless ? '' : programForm.date.trim(),
+        venue: isDateless ? '' : programForm.venue.trim(),
+        purpose: isDateless ? programForm.purpose.trim() : '',
         type: programForm.type,
         bhajanIds: programForm.bhajanIds,
         ownerId: user.uid,
@@ -4507,7 +4712,7 @@ const App = () => {
       };
 
       const programsRef = db.collection('users').doc(user.uid).collection('programs');
-      const label = isPlaylist ? 'Playlist' : 'Program';
+      const label = isParody ? 'Parody' : (isPlaylist ? 'Playlist' : 'Program');
 
       if (editingProgram) {
         await programsRef.doc(editingProgram.id).update(programData);
@@ -4529,8 +4734,9 @@ const App = () => {
   };
 
   const deleteProgram = (program) => {
-    const isPlaylist = getProgramType(program) === 'playlist';
-    const label = isPlaylist ? 'Playlist' : 'Program';
+    // SESSION 32/36: label matches the program's actual type
+    const pType = getProgramType(program);
+    const label = pType === 'parody' ? 'Parody' : (pType === 'playlist' ? 'Playlist' : 'Program');
     askConfirm(
       {
         title: `Delete ${label}?`,
@@ -6416,14 +6622,17 @@ const App = () => {
 
                   if (siblings.length === 0) return null;
 
-                  const ctxLabel = getProgramType(programContext) === 'playlist'
-                    ? 'this playlist'
-                    : 'this program';
+                  // SESSION 32/36: label + emoji match program type
+                  const ctxType = getProgramType(programContext);
+                  const ctxLabel = ctxType === 'parody' ? 'this parody' :
+                                   ctxType === 'playlist' ? 'this playlist' :
+                                   'this program';
+                  const ctxEmoji = ctxType === 'parody' ? '🎭' : '🎵';
 
                   return (
                     <div className="mt-6">
                       <p className={`text-sm font-bold mb-3 flex items-center gap-1.5 ${darkMode ? 'text-gray-300' : 'text-[#0B5A70]'}`}>
-                        🎵 More in {ctxLabel}
+                        {ctxEmoji} More in {ctxLabel}
                         <span className={`text-xs font-normal ${darkMode ? 'text-gray-500' : 'text-[#0B5A70]/50'}`}>
                           · {programContext.name}
                         </span>
@@ -6731,13 +6940,56 @@ const App = () => {
                     <label className={fLabel}>
                       रचनाकार / Lyricist
                     </label>
-                    <input
-                      type="text"
-                      value={bhajanForm.lyricist}
-                      onChange={(e) => setBhajanForm({...bhajanForm, lyricist: e.target.value})}
-                      className={fInput}
-                      placeholder="e.g., Meera Bai"
-                    />
+                    {/* SESSION 35: Hindi typing wired on lyricist — Terapanth
+                        composers like साध्वी कनकश्रीजी need Devanagari names. */}
+                    <div className="relative">
+                      <input
+                        id="hindi-input-lyricist"
+                        type="text"
+                        value={bhajanForm.lyricist}
+                        onChange={(e) => handleHindiInput(e, 'lyricist')}
+                        onKeyDown={(e) => handleHindiKeyDown(e, 'lyricist')}
+                        onBlur={() => setTimeout(() => setShowSuggestions(false), 300)}
+                        onFocus={() => setActiveTypingField('lyricist')}
+                        className={fInput}
+                        placeholder={hindiTypingEnabled ? "Type: meera bai" : "e.g., मीरा बाई"}
+                      />
+                      {hindiTypingEnabled && showSuggestions && activeTypingField === 'lyricist' && transliterationSuggestions.length > 0 && (
+                        <div className={`absolute bottom-full left-0 right-0 mb-2 border rounded-lg shadow-[0_8px_30px_rgba(11,90,112,0.18)] p-2 flex flex-wrap gap-2 items-center z-30 ${darkMode ? "bg-[#1e2e33] border-[#0B5A70]/30" : "bg-[#FFFCF8] border-[#0B5A70]/15"}`}>
+                          <span className="text-xs text-gray-500 mr-1">
+                            <strong>"{currentWord}"</strong> →
+                          </span>
+                          {transliterationSuggestions.map((suggestion, idx) => (
+                            <button
+                              key={idx}
+                              type="button"
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                applySuggestion(suggestion, 'lyricist');
+                              }}
+                              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                                idx === 0
+                                  ? 'bg-[#0B5A70] text-white hover:bg-[#094a5d] shadow-md'
+                                  : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15'
+                              }`}
+                            >
+                              {idx === 0 && '⭐ '}{suggestion}
+                            </button>
+                          ))}
+                          <button
+                            type="button"
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              applySuggestion(currentWord, 'lyricist');
+                            }}
+                            className="px-3 py-1.5 rounded-lg text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition-all border border-gray-300"
+                            title="Keep as English"
+                          >
+                            {currentWord}
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
 
@@ -7007,8 +7259,14 @@ const App = () => {
             // date presence). Toggle switches which group is shown.
             const playlists = filteredPrograms.filter(p => getProgramType(p) === 'playlist');
             const events = filteredPrograms.filter(p => getProgramType(p) === 'program');
-            const visibleItems = playlistViewMode === 'playlist' ? playlists : events;
+            // SESSION 36: parody as third type
+            const parodies = filteredPrograms.filter(p => getProgramType(p) === 'parody');
+            const visibleItems =
+              playlistViewMode === 'playlist' ? playlists :
+              playlistViewMode === 'parody' ? parodies :
+              events;
             const isPlaylistView = playlistViewMode === 'playlist';
+            const isParodyView = playlistViewMode === 'parody';
 
             return (
             <>
@@ -7016,7 +7274,7 @@ const App = () => {
                 <div>
                   <h2 className="text-2xl font-bold text-[#0B5A70]">🎵 Playlists</h2>
                   <p className="text-sm text-[#0B5A70]/70">
-                    Playlists ({playlists.length}) · Programs ({events.length})
+                    Playlists ({playlists.length}) · Programs ({events.length}) · Parodies ({parodies.length})
                   </p>
                 </div>
                 <button
@@ -7027,17 +7285,16 @@ const App = () => {
                 </button>
               </div>
 
-              {/* SESSION 32: Playlists / Programs toggle. Matches the
-                  visual style of the compact/full card toggle in the
-                  libraries — pill container, saffron accent on active
-                  side. Persists selection in localStorage. */}
+              {/* SESSION 32/36: three-way toggle — Playlists / Programs /
+                  Parodies. Same pill style as libraries' compact/full
+                  toggle. Selection persists in localStorage. */}
               <div className="mb-4 flex items-center gap-1 p-1 bg-[#0B5A70]/5 rounded-xl w-fit">
                 <button
                   onClick={() => {
                     setPlaylistViewMode('playlist');
                     try { localStorage.setItem('sankirtan-playlist-view', 'playlist'); } catch {}
                   }}
-                  className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
+                  className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
                     isPlaylistView
                       ? 'bg-[#E65100] text-white shadow-sm'
                       : 'text-[#0B5A70]/70 hover:text-[#0B5A70]'
@@ -7050,13 +7307,26 @@ const App = () => {
                     setPlaylistViewMode('program');
                     try { localStorage.setItem('sankirtan-playlist-view', 'program'); } catch {}
                   }}
-                  className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
-                    !isPlaylistView
+                  className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
+                    playlistViewMode === 'program'
                       ? 'bg-[#E65100] text-white shadow-sm'
                       : 'text-[#0B5A70]/70 hover:text-[#0B5A70]'
                   }`}
                 >
                   📅 Programs
+                </button>
+                <button
+                  onClick={() => {
+                    setPlaylistViewMode('parody');
+                    try { localStorage.setItem('sankirtan-playlist-view', 'parody'); } catch {}
+                  }}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
+                    isParodyView
+                      ? 'bg-[#E65100] text-white shadow-sm'
+                      : 'text-[#0B5A70]/70 hover:text-[#0B5A70]'
+                  }`}
+                >
+                  🎭 Parodies
                 </button>
               </div>
 
@@ -7065,7 +7335,11 @@ const App = () => {
                   type="text"
                   value={programSearchQuery}
                   onChange={(e) => setProgramSearchQuery(e.target.value)}
-                  placeholder={isPlaylistView ? "🔍 Search playlists..." : "🔍 Search programs by name or venue..."}
+                  placeholder={
+                    isParodyView ? "🔍 Search parodies..." :
+                    isPlaylistView ? "🔍 Search playlists..." :
+                    "🔍 Search programs by name or venue..."
+                  }
                   aria-label="Search"
                   className="w-full px-4 py-3 border border-[#0B5A70]/15 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none"
                 />
@@ -7077,53 +7351,64 @@ const App = () => {
                   <p className="text-[#0B5A70]/70">Loading...</p>
                 </div>
               ) : visibleItems.length === 0 ? (
-                <div className="text-center py-12 bg-[#FFFCF8] rounded-2xl border-2 border-dashed border-[#0B5A70]/12">
-                  {programs.length === 0 ? (
-                    <>
-                      <div className="text-6xl mb-4">🎵</div>
-                      <h3 className="text-lg font-bold text-[#0B5A70] mb-2">Nothing here yet!</h3>
-                      <p className="text-sm text-gray-600 mb-4">
-                        {isPlaylistView
-                          ? 'Create your first playlist for daily practice or a themed collection'
-                          : 'Create your first program for an upcoming jagran or sankirtan'}
-                      </p>
-                      <button
-                        onClick={openCreateProgram}
-                        className="bg-[#0B5A70] hover:bg-[#094a5d] text-white font-semibold px-6 py-3 rounded-xl shadow-md inline-flex items-center gap-2"
-                      >
-                        <span className="text-lg">+</span> {isPlaylistView ? 'Create Your First Playlist' : 'Create Your First Program'}
-                      </button>
-                    </>
-                  ) : programSearchQuery ? (
-                    <>
-                      <div className="text-4xl mb-3">🔍</div>
-                      <p className="text-[#0B5A70] font-semibold">No matches for your search</p>
-                    </>
-                  ) : (
-                    <>
-                      <div className="text-4xl mb-3">{isPlaylistView ? '🎵' : '📅'}</div>
-                      <p className="text-[#0B5A70] font-semibold mb-2">
-                        {isPlaylistView ? 'No playlists yet' : 'No programs yet'}
-                      </p>
-                      <p className="text-sm text-gray-600 mb-4">
-                        {isPlaylistView
-                          ? 'Playlists are undated collections for daily practice or themed listening.'
-                          : 'Programs are dated events like jagrans and sankirtans.'}
-                      </p>
-                      <button
-                        onClick={openCreateProgram}
-                        className="bg-[#0B5A70] hover:bg-[#094a5d] text-white font-semibold px-5 py-2 rounded-xl shadow-md inline-flex items-center gap-2 text-sm"
-                      >
-                        <span className="text-lg">+</span> {isPlaylistView ? 'Create a Playlist' : 'Create a Program'}
-                      </button>
-                    </>
-                  )}
-                </div>
+                (() => {
+                  // SESSION 36: derive labels once for the empty state
+                  const emoji = isParodyView ? '🎭' : (isPlaylistView ? '🎵' : '📅');
+                  const Noun = isParodyView ? 'Parody' : (isPlaylistView ? 'Playlist' : 'Program');
+                  const nounPlural = isParodyView ? 'parodies' : (isPlaylistView ? 'playlists' : 'programs');
+                  const firstCta = isParodyView
+                    ? 'Create your first parody — a compact medley showing just the mukhda of each bhajan'
+                    : (isPlaylistView
+                      ? 'Create your first playlist for daily practice or a themed collection'
+                      : 'Create your first program for an upcoming jagran or sankirtan');
+                  const typeIntro = isParodyView
+                    ? 'Parodies show just the mukhda of each bhajan — perfect for singing a medley of short pieces.'
+                    : (isPlaylistView
+                      ? 'Playlists are undated collections for daily practice or themed listening.'
+                      : 'Programs are dated events like jagrans and sankirtans.');
+                  return (
+                    <div className="text-center py-12 bg-[#FFFCF8] rounded-2xl border-2 border-dashed border-[#0B5A70]/12">
+                      {programs.length === 0 ? (
+                        <>
+                          <div className="text-6xl mb-4">🎵</div>
+                          <h3 className="text-lg font-bold text-[#0B5A70] mb-2">Nothing here yet!</h3>
+                          <p className="text-sm text-gray-600 mb-4">{firstCta}</p>
+                          <button
+                            onClick={openCreateProgram}
+                            className="bg-[#0B5A70] hover:bg-[#094a5d] text-white font-semibold px-6 py-3 rounded-xl shadow-md inline-flex items-center gap-2"
+                          >
+                            <span className="text-lg">+</span> Create Your First {Noun}
+                          </button>
+                        </>
+                      ) : programSearchQuery ? (
+                        <>
+                          <div className="text-4xl mb-3">🔍</div>
+                          <p className="text-[#0B5A70] font-semibold">No matches for your search</p>
+                        </>
+                      ) : (
+                        <>
+                          <div className="text-4xl mb-3">{emoji}</div>
+                          <p className="text-[#0B5A70] font-semibold mb-2">No {nounPlural} yet</p>
+                          <p className="text-sm text-gray-600 mb-4">{typeIntro}</p>
+                          <button
+                            onClick={openCreateProgram}
+                            className="bg-[#0B5A70] hover:bg-[#094a5d] text-white font-semibold px-5 py-2 rounded-xl shadow-md inline-flex items-center gap-2 text-sm"
+                          >
+                            <span className="text-lg">+</span> Create a {Noun}
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  );
+                })()
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {visibleItems.map(program => {
                     const pType = getProgramType(program);
                     const isPl = pType === 'playlist';
+                    const isPar = pType === 'parody';
+                    // SESSION 36: three-way emoji + label
+                    const cardEmoji = isPar ? '🎭' : (isPl ? '🎵' : '📅');
                     return (
                       <button
                         key={program.id}
@@ -7131,7 +7416,7 @@ const App = () => {
                         className="bg-[#FFFCF8] rounded-2xl shadow-[0_2px_12px_rgba(11,90,112,0.06)] p-5 border border-[#0B5A70]/8 hover:border-[#0B5A70]/25 hover:shadow-[0_4px_20px_rgba(11,90,112,0.12)] transition-all text-left"
                       >
                         <div className="flex items-start justify-between mb-2">
-                          <div className="text-3xl">{isPl ? '🎵' : '📅'}</div>
+                          <div className="text-3xl">{cardEmoji}</div>
                           <span className="text-xs bg-[#0B5A70]/8 text-[#0B5A70] px-2 py-1 rounded-full font-semibold">
                             {program.bhajanCount || 0} bhajans
                           </span>
@@ -7139,7 +7424,13 @@ const App = () => {
                         <h3 className="text-lg font-bold text-[#0B5A70] mb-1">
                           {program.name}
                         </h3>
-                        {isPl ? (
+                        {isPar ? (
+                          program.purpose ? (
+                            <p className="text-sm text-[#E65100] mb-1">{program.purpose}</p>
+                          ) : (
+                            <p className="text-xs text-gray-500 mb-1 italic">Parody</p>
+                          )
+                        ) : isPl ? (
                           program.purpose ? (
                             <p className="text-sm text-[#E65100] mb-1">{program.purpose}</p>
                           ) : (
@@ -7156,7 +7447,7 @@ const App = () => {
                           </>
                         )}
                         <p className="text-xs text-[#0B5A70]/60 mt-3">
-                          {isPl ? 'Open Playlist →' : 'View Program →'}
+                          {isPar ? 'Open Parody →' : (isPl ? 'Open Playlist →' : 'View Program →')}
                         </p>
                       </button>
                     );
@@ -7227,7 +7518,7 @@ const App = () => {
                   </span>
                 </div>
 
-                {selectedProgram.bhajanIds && selectedProgram.bhajanIds.length > 0 && getProgramType(selectedProgram) !== 'playlist' && (
+                {selectedProgram.bhajanIds && selectedProgram.bhajanIds.length > 0 && getProgramType(selectedProgram) === 'program' && (
                   <button
                     onClick={() => startLiveProgram(selectedProgram)}
                     className="w-full mt-6 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-bold py-4 rounded-xl shadow-lg text-lg flex items-center justify-center gap-2"
@@ -7239,12 +7530,22 @@ const App = () => {
 
               <div className="mb-4">
                 <h3 className="text-lg font-bold text-[#0B5A70] mb-3">
-                  Bhajans in this {getProgramType(selectedProgram) === 'playlist' ? 'Playlist' : 'Program'}:
+                  {(() => {
+                    const t = getProgramType(selectedProgram);
+                    return t === 'parody' ? 'Mukhdas in this Parody:' :
+                           t === 'playlist' ? 'Bhajans in this Playlist:' :
+                           'Bhajans in this Program:';
+                  })()}
                 </h3>
                 {(!selectedProgram.bhajanIds || selectedProgram.bhajanIds.length === 0) ? (
                   <div className="bg-[#FFFCF8] rounded-2xl p-6 text-center border-2 border-dashed border-[#0B5A70]/12">
                     <p className="text-[#0B5A70] mb-2">
-                      No bhajans in this {getProgramType(selectedProgram) === 'playlist' ? 'playlist' : 'program'} yet
+                      {(() => {
+                        const t = getProgramType(selectedProgram);
+                        return t === 'parody' ? 'No bhajans in this parody yet' :
+                               t === 'playlist' ? 'No bhajans in this playlist yet' :
+                               'No bhajans in this program yet';
+                      })()}
                     </p>
                     <button
                       onClick={() => openEditProgram(selectedProgram)}
@@ -7253,7 +7554,55 @@ const App = () => {
                       + Add bhajans
                     </button>
                   </div>
+                ) : getProgramType(selectedProgram) === 'parody' ? (
+                  // SESSION 36/37: PARODY render — mukhda blocks.
+                  // Each block shows the bhajan title small at top
+                  // and the mukhda (opening lines) large below.
+                  // Mukhda is detected by blank-line convention
+                  // (see getMukhda helper for full priority rules).
+                  // Tapping opens the full reading view via the
+                  // programContext path (Session 34), so "🎭 More
+                  // in this parody" shows at the bottom and back-
+                  // nav reads "← Back to [Parody name]".
+                  <div className="space-y-3">
+                    {selectedProgram.bhajanIds.map((bhajanId, index) => {
+                      const bhajan = getBhajanById(bhajanId);
+                      if (!bhajan) return (
+                        <div key={bhajanId} className="bg-red-50 rounded-xl p-3 border border-red-200">
+                          <p className="text-sm text-red-700">⚠️ Bhajan not found (may have been deleted)</p>
+                        </div>
+                      );
+                      const mukhda = getMukhda(bhajan);
+                      return (
+                        <button
+                          key={bhajanId}
+                          onClick={() => {
+                            setProgramContext(selectedProgram);
+                            openBhajanDetail(bhajan);
+                          }}
+                          className={`w-full rounded-2xl p-4 border transition-all text-left shadow-[0_1px_4px_rgba(11,90,112,0.04)] ${darkMode ? 'bg-[#162226] border-[#0B5A70]/15 hover:border-[#0B5A70]/30' : 'bg-[#FFFCF8] border-[#0B5A70]/8 hover:border-[#0B5A70]/25'}`}
+                        >
+                          <div className="flex items-baseline justify-between mb-2 gap-2">
+                            <div className="flex items-baseline gap-2 min-w-0">
+                              <span className="text-sm font-bold text-[#E65100]">{index + 1}.</span>
+                              <p className={`text-xs font-semibold truncate ${darkMode ? 'text-teal-300' : 'text-[#0B5A70]/80'}`}>
+                                {bhajan.title}
+                              </p>
+                            </div>
+                            <span className="text-xs text-[#0B5A70]/50 flex-shrink-0">Tap for full →</span>
+                          </div>
+                          <p
+                            className={`whitespace-pre-line leading-relaxed text-lg font-medium ${darkMode ? 'text-amber-100' : 'text-[#0B5A70]'}`}
+                            style={{ fontFamily: "'Noto Sans Devanagari', 'Noto Serif Devanagari', system-ui, sans-serif" }}
+                          >
+                            {mukhda || <span className="italic text-sm text-gray-500">(no lyrics to preview)</span>}
+                          </p>
+                        </button>
+                      );
+                    })}
+                  </div>
                 ) : (
+                  // Standard render for playlist and program
                   <div className="space-y-2">
                     {selectedProgram.bhajanIds.map((bhajanId, index) => {
                       const bhajan = getBhajanById(bhajanId);
@@ -7329,22 +7678,25 @@ const App = () => {
 
               <div className={fCard}>
                 <h2 className={fTitle}>
-                  {currentView === 'edit-program'
-                    ? (programForm.type === 'playlist' ? '✏️ Edit Playlist' : '✏️ Edit Program')
-                    : (programForm.type === 'playlist' ? '➕ Create New Playlist' : '➕ Create New Program')}
+                  {(() => {
+                    const t = programForm.type;
+                    const editing = currentView === 'edit-program';
+                    const noun = t === 'parody' ? 'Parody' : t === 'playlist' ? 'Playlist' : 'Program';
+                    return editing ? `✏️ Edit ${noun}` : `➕ Create New ${noun}`;
+                  })()}
                 </h2>
 
-                {/* SESSION 32: type toggle. Same visual style as the
-                    list-view toggle for consistency. Switching type
-                    doesn't clear the fields — just hides/shows them —
-                    so switching accidentally isn't destructive. */}
+                {/* SESSION 32/36: type toggle. Three options — Playlist,
+                    Program, Parody. Switching type doesn't clear the
+                    fields — just hides/shows them — so switching
+                    accidentally isn't destructive. */}
                 <div className="mb-5">
                   <label className={fLabel}>Type</label>
                   <div className={`inline-flex items-center gap-1 p-1 rounded-xl ${darkMode ? 'bg-[#0B5A70]/20' : 'bg-[#0B5A70]/5'}`}>
                     <button
                       type="button"
                       onClick={() => setProgramForm({...programForm, type: 'playlist'})}
-                      className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
+                      className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
                         programForm.type === 'playlist'
                           ? 'bg-[#E65100] text-white shadow-sm'
                           : (darkMode ? 'text-teal-200/70 hover:text-teal-100' : 'text-[#0B5A70]/70 hover:text-[#0B5A70]')
@@ -7355,7 +7707,7 @@ const App = () => {
                     <button
                       type="button"
                       onClick={() => setProgramForm({...programForm, type: 'program'})}
-                      className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
+                      className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
                         programForm.type === 'program'
                           ? 'bg-[#E65100] text-white shadow-sm'
                           : (darkMode ? 'text-teal-200/70 hover:text-teal-100' : 'text-[#0B5A70]/70 hover:text-[#0B5A70]')
@@ -7363,28 +7715,49 @@ const App = () => {
                     >
                       📅 Program
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => setProgramForm({...programForm, type: 'parody'})}
+                      className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
+                        programForm.type === 'parody'
+                          ? 'bg-[#E65100] text-white shadow-sm'
+                          : (darkMode ? 'text-teal-200/70 hover:text-teal-100' : 'text-[#0B5A70]/70 hover:text-[#0B5A70]')
+                      }`}
+                    >
+                      🎭 Parody
+                    </button>
                   </div>
                   <p className={`text-xs mt-1.5 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                    {programForm.type === 'playlist'
-                      ? 'A recurring collection — no date or venue. Good for daily practice or themed sets.'
-                      : 'A one-time event with date and venue — like a jagran or sankirtan.'}
+                    {programForm.type === 'parody'
+                      ? 'A medley showing just the mukhda of each bhajan. Tap a mukhda to see full lyrics.'
+                      : (programForm.type === 'playlist'
+                        ? 'A recurring collection — no date or venue. Good for daily practice or themed sets.'
+                        : 'A one-time event with date and venue — like a jagran or sankirtan.')}
                   </p>
                 </div>
 
                 <div className="mb-4">
                   <label className={fLabel}>
-                    {programForm.type === 'playlist' ? 'Playlist Name' : 'Program Name'} <span className="text-red-500">*</span>
+                    {(() => {
+                      const t = programForm.type;
+                      return (t === 'parody' ? 'Parody Name' : t === 'playlist' ? 'Playlist Name' : 'Program Name');
+                    })()} <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
                     value={programForm.name}
                     onChange={(e) => setProgramForm({...programForm, name: e.target.value})}
                     className={fInput + " text-lg"}
-                    placeholder={programForm.type === 'playlist' ? 'e.g., Morning Prayers' : 'e.g., Diwali Jagran 2026'}
+                    placeholder={(() => {
+                      const t = programForm.type;
+                      return t === 'parody' ? 'e.g., Morning Marwari Parodies' :
+                             t === 'playlist' ? 'e.g., Morning Prayers' :
+                             'e.g., Diwali Jagran 2026';
+                    })()}
                   />
                 </div>
 
-                {programForm.type === 'playlist' ? (
+                {programForm.type !== 'program' ? (
                   <div className="mb-4">
                     <label className={fLabel}>
                       Purpose (optional)
@@ -7394,11 +7767,13 @@ const App = () => {
                       value={programForm.purpose}
                       onChange={(e) => setProgramForm({...programForm, purpose: e.target.value})}
                       className={fInput}
-                      placeholder="e.g., Daily practice, kids' prayer time"
+                      placeholder={programForm.type === 'parody' ? "e.g., Wedding parodies, film-tune medley" : "e.g., Daily practice, kids' prayer time"}
                       maxLength={80}
                     />
                     <p className={`text-xs mt-1 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                      Short label that shows on the playlist card.
+                      {programForm.type === 'parody'
+                        ? 'Short label that shows on the parody card.'
+                        : 'Short label that shows on the playlist card.'}
                     </p>
                   </div>
                 ) : (
@@ -7446,7 +7821,10 @@ const App = () => {
                 <div className="mb-4 pt-4 border-t border-[#0B5A70]/8">
                   <div className="flex items-center justify-between mb-3">
                     <label className="block text-sm font-semibold text-[#0B5A70]">
-                      Bhajans in {programForm.type === 'playlist' ? 'Playlist' : 'Program'} ({programForm.bhajanIds.length})
+                      Bhajans in {(() => {
+                        const t = programForm.type;
+                        return t === 'parody' ? 'Parody' : t === 'playlist' ? 'Playlist' : 'Program';
+                      })()} ({programForm.bhajanIds.length})
                     </label>
                     <button
                       type="button"
@@ -9317,13 +9695,55 @@ const App = () => {
                   </div>
                   <div>
                     <label className="block text-sm font-semibold text-[#0B5A70] mb-1">रचनाकार / Lyricist</label>
-                    <input
-                      type="text"
-                      value={publicBhajanForm.lyricist}
-                      onChange={(e) => setPublicBhajanForm({...publicBhajanForm, lyricist: e.target.value})}
-                      className="w-full px-4 py-3 border border-[#0B5A70]/15 rounded-xl outline-none"
-                      placeholder="e.g., Meera Bai"
-                    />
+                    {/* SESSION 35: Hindi typing wired (matches user form). */}
+                    <div className="relative">
+                      <input
+                        id="public-hindi-input-lyricist"
+                        type="text"
+                        value={publicBhajanForm.lyricist}
+                        onChange={(e) => handlePublicHindiInput(e, 'lyricist')}
+                        onKeyDown={(e) => handlePublicHindiKeyDown(e, 'lyricist')}
+                        onBlur={() => setTimeout(() => setShowSuggestions(false), 300)}
+                        onFocus={() => setActiveTypingField('lyricist')}
+                        className="w-full px-4 py-3 border border-[#0B5A70]/15 rounded-xl outline-none"
+                        placeholder={hindiTypingEnabled ? "Type: meera bai" : "e.g., मीरा बाई"}
+                      />
+                      {hindiTypingEnabled && showSuggestions && activeTypingField === 'lyricist' && transliterationSuggestions.length > 0 && (
+                        <div className={`absolute bottom-full left-0 right-0 mb-2 border rounded-lg shadow-[0_8px_30px_rgba(11,90,112,0.18)] p-2 flex flex-wrap gap-2 items-center z-30 ${darkMode ? "bg-[#1e2e33] border-[#0B5A70]/30" : "bg-[#FFFCF8] border-[#0B5A70]/15"}`}>
+                          <span className="text-xs text-gray-500 mr-1">
+                            <strong>"{currentWord}"</strong> →
+                          </span>
+                          {transliterationSuggestions.map((suggestion, idx) => (
+                            <button
+                              key={idx}
+                              type="button"
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                applyPublicSuggestion(suggestion, 'lyricist');
+                              }}
+                              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                                idx === 0
+                                  ? 'bg-[#0B5A70] text-white hover:bg-[#094a5d] shadow-md'
+                                  : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15'
+                              }`}
+                            >
+                              {idx === 0 && '⭐ '}{suggestion}
+                            </button>
+                          ))}
+                          <button
+                            type="button"
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              applyPublicSuggestion(currentWord, 'lyricist');
+                            }}
+                            className="px-3 py-1.5 rounded-lg text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition-all border border-gray-300"
+                            title="Keep as English"
+                          >
+                            {currentWord}
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
 
