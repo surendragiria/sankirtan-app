@@ -1,6 +1,72 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 
 // ==============================================
+// SANKIRTAN SAAS - SESSION 41
+// Bhajan Se Bhagwan Tak
+// CHANGES (Session 41 — Source button on cards + discovery pills):
+//
+// Two additions in one session.
+//
+// 1. SOURCE BUTTON ON CARDS
+// Previously "🔗 View Source" existed only on the reading view.
+// Now shown on the FULL card view of both PublicBhajanCard and
+// MyBhajanCard, as a small saffron text link ("🔗 Source")
+// below the tap area. Opens source URL in new tab.
+//
+// Placement: outside the card's tap-button so it doesn't nest
+// interactive elements (accessibility) and doesn't compete with
+// "open reading view" as the primary click. stopPropagation on
+// click prevents card open triggering when user wants source.
+//
+// Only rendered when bhajan.source is set — hidden for bhajans
+// without a source (no empty label, no layout inconsistency
+// signal to users that some bhajans "have less").
+//
+// Compact card view (both libraries): source NOT added.
+// Compact means compact. Users wanting source from a compact
+// card can tap in (one extra tap) — same trade compact users
+// signed up for. Preserving the compact card's whole point.
+//
+// 2. COLLAPSIBLE DISCOVERY PILLS
+// Home page had Popular Bhajans always-visible (Session 11).
+// User asked to make it (and a new "Recently Added") into pills
+// that expand on tap.
+//
+// New pattern:
+//   [ 🔥 Popular Bhajans ▼ ] [ ✨ Recently Added ▼ ]
+// Both collapsed by default (keeps home page compact — the
+// whole point). Tapping expands 8 bhajans inline in the same
+// compact-card layout Popular has used since Session 11. Only
+// one open at a time — tapping the other collapses the first.
+// Same tap-same-pill toggles it closed.
+//
+// Section entirely hidden when any filter/search is active
+// (same rule as always for Popular).
+//
+// New memo: recentPublicBhajans (top 8 by createdAt descending,
+// filtering out docs with no createdAt as a safety guard).
+//
+// State: expandedDiscoverySection = null | 'popular' | 'recent'.
+//
+// Design notes
+// - Pills use saffron-active/cream-inactive visual, matching the
+//   compact/full toggle style established earlier.
+// - No localStorage persistence yet. If the "always collapsed"
+//   default annoys users who liked Popular open, we add
+//   remember-last-state in a follow-up. See first.
+// - No dedup between Popular and Recently Added — same bhajan may
+//   show in both sections. Signal of curation quality, minor
+//   visual duplication. Skip until it's a real problem.
+//
+// Not touched: reading view Source link (kept), Firestore rules,
+// schema, all Session 6-40 work.
+//
+// Meta-audit (per Session 30 promise): verified stopPropagation
+// on source links prevents card-open on source-click; pill state
+// tap-same-collapses works; hidden-when-filter guard preserved;
+// no orphaned imports or dead code.
+// ==============================================
+//
 // SANKIRTAN SAAS - SESSION 40
 // Bhajan Se Bhagwan Tak
 // CHANGES (Session 40 — three focused improvements):
@@ -484,7 +550,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.08.24.s40';
+const APP_VERSION = '2026.08.24.s41';
 
 // SESSION 30: log at startup so admin can verify which build is
 // running via the browser console (helps diagnose "is my new
@@ -1068,6 +1134,24 @@ const MyBhajanCard = React.memo(function MyBhajanCard({
           )}
         </div>
       )}
+
+      {/* SESSION 41: source link on the card. Only rendered when
+          bhajan.source is set. stopPropagation prevents the
+          card's role="button" onClick from firing (which would
+          open the reading view instead of the source URL). */}
+      {bhajan.source && (
+        <div className="mt-3 text-center">
+          <a
+            href={bhajan.source}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className={`text-xs inline-flex items-center gap-1 ${darkMode ? 'text-orange-300 hover:text-orange-200' : 'text-[#E65100] hover:text-[#d64800]'} hover:underline`}
+          >
+            🔗 Source
+          </a>
+        </div>
+      )}
     </div>
   );
 });
@@ -1176,6 +1260,25 @@ const PublicBhajanCard = React.memo(function PublicBhajanCard({
           </button>
         )}
       </div>
+
+      {/* SESSION 41: source link on the card. Only rendered when
+          bhajan.source is set — many bhajans have no source and
+          shouldn't show an empty label. Sits outside the tap-
+          button so click doesn't compete with "open reading
+          view", and doesn't nest an anchor inside a button. */}
+      {bhajan.source && (
+        <div className="mt-2 text-center">
+          <a
+            href={bhajan.source}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className={`text-xs inline-flex items-center gap-1 ${darkMode ? 'text-orange-300 hover:text-orange-200' : 'text-[#E65100] hover:text-[#d64800]'} hover:underline`}
+          >
+            🔗 Source
+          </a>
+        </div>
+      )}
 
       {(bhajan.saveCount > 0) && (
         <p className={`text-xs mt-2 text-center ${darkMode ? 'text-gray-500' : 'text-[#0B5A70]/50'}`}>
@@ -1344,6 +1447,12 @@ const App = () => {
   // until the next detected update).
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [updateBannerDismissed, setUpdateBannerDismissed] = useState(false);
+  // SESSION 41: which discovery pill is currently expanded on the
+  // Public Library home. null | 'popular' | 'recent'. Only one
+  // open at a time (tapping the other collapses the first). Both
+  // collapsed by default to keep the home page compact — the whole
+  // point of the pill pattern.
+  const [expandedDiscoverySection, setExpandedDiscoverySection] = useState(null);
   // SESSION 38: state for the "Add to Program/Playlist/Parody"
   // picker that opens from the bhajan-detail reading view.
   // Stores the bhajan being added so the picker can target it,
@@ -4275,6 +4384,22 @@ const App = () => {
         if (sb !== sa) return sb - sa;
         return (a.title || '').localeCompare(b.title || '');
       })
+      .slice(0, 8);
+  }, [publicBhajans]);
+
+  // SESSION 41: Recently Added — newest 8 public bhajans by createdAt.
+  // Freshness signal complementing Popular's aggregate signal. Both
+  // shown as collapsible pills on the Public Library home.
+  //
+  // createdAt is a Firestore server timestamp on every publicBhajans
+  // doc (set by admin's addPublicBhajan). Docs without createdAt
+  // (from very early admin flows, if any) fall to the bottom via
+  // the 0 fallback.
+  const recentPublicBhajans = useMemo(() => {
+    const timeOf = (b) => (b.createdAt && b.createdAt.seconds) || 0;
+    return [...publicBhajans]
+      .filter(b => timeOf(b) > 0)
+      .sort((a, b) => timeOf(b) - timeOf(a))
       .slice(0, 8);
   }, [publicBhajans]);
 
@@ -8959,47 +9084,126 @@ const App = () => {
                     </div>
                   )}
 
-                  {/* SESSION 11: Popular Bhajans — pinned top-8 by saveCount.
-                      Hidden when the user has an active search/filter
-                      (a top-N of a filtered set is confusing UX).
-                      Gives newcomers a clear starting point instead of a
-                      wall of unfamiliar titles. Zero infrastructure cost
-                      — saveCount is already tracked on every save. */}
-                  {!hasActivePublicFilters && topPublicBhajans.length > 0 && (
+                  {/* SESSION 41: DISCOVERY PILLS
+                      Two chips — Popular Bhajans + Recently Added.
+                      Both collapsed by default (keeps home page
+                      compact). Tapping expands 8 bhajans inline.
+                      Only one open at a time — tapping the other
+                      collapses the first.
+                      Hidden when the user has an active search or
+                      filter (same rule as before for Popular).
+                      Session 11 (Popular) + Session 41 addition
+                      (Recently Added) live under the same UX pattern. */}
+                  {!hasActivePublicFilters && (topPublicBhajans.length > 0 || recentPublicBhajans.length > 0) && (
                     <div className="mb-5">
-                      <div className="flex items-center justify-between mb-3">
-                        <p className={`text-sm font-bold flex items-center gap-1.5 ${darkMode ? 'text-amber-100' : 'text-[#0B5A70]'}`}>
-                          🔥 Popular Bhajans
-                        </p>
-                        <span className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>
-                          Most read
-                        </span>
-                      </div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                        {topPublicBhajans.map((b, idx) => (
+                      <div className="flex flex-wrap gap-2 mb-3">
+                        {topPublicBhajans.length > 0 && (
                           <button
-                            key={b.id}
-                            onClick={() => openPublicBhajanDetail(b)}
-                            className={`w-full text-left rounded-xl p-3 border transition-all flex items-center gap-3 ${darkMode ? 'bg-[#162226] border-[#0B5A70]/15 hover:border-[#0B5A70]/30' : 'bg-[#FFFCF8] border-[#0B5A70]/8 shadow-[0_1px_4px_rgba(11,90,112,0.04)] hover:border-[#0B5A70]/25 hover:shadow-[0_2px_8px_rgba(11,90,112,0.10)]'}`}
+                            onClick={() => setExpandedDiscoverySection(prev => prev === 'popular' ? null : 'popular')}
+                            aria-expanded={expandedDiscoverySection === 'popular'}
+                            className={`px-3 py-1.5 rounded-full text-sm font-semibold flex items-center gap-1.5 transition-colors ${
+                              expandedDiscoverySection === 'popular'
+                                ? 'bg-[#E65100] text-white shadow-sm'
+                                : (darkMode ? 'bg-[#162226] border border-[#0B5A70]/25 text-teal-200 hover:border-[#0B5A70]/50' : 'bg-[#FFFCF8] border border-[#0B5A70]/15 text-[#0B5A70] hover:border-[#0B5A70]/40')
+                            }`}
                           >
-                            <div className={`text-base font-bold min-w-[24px] text-center flex-shrink-0 ${darkMode ? 'text-orange-300' : 'text-[#E65100]'}`}>
-                              {idx + 1}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className={`text-sm font-bold truncate ${darkMode ? 'text-amber-100' : 'text-[#0B5A70]'}`}>
-                                {b.title}
-                              </p>
-                              <p className={`text-xs truncate ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                                {b.deity} · {b.category}
-                              </p>
-                            </div>
-                            <span className={`text-xs flex-shrink-0 ${darkMode ? 'text-gray-500' : 'text-[#0B5A70]/50'}`}>
-                              📖 {b.readCount || b.saveCount || 0}
+                            🔥 Popular Bhajans
+                            <span className="text-xs opacity-70">
+                              {expandedDiscoverySection === 'popular' ? '▲' : '▼'}
                             </span>
                           </button>
-                        ))}
+                        )}
+                        {recentPublicBhajans.length > 0 && (
+                          <button
+                            onClick={() => setExpandedDiscoverySection(prev => prev === 'recent' ? null : 'recent')}
+                            aria-expanded={expandedDiscoverySection === 'recent'}
+                            className={`px-3 py-1.5 rounded-full text-sm font-semibold flex items-center gap-1.5 transition-colors ${
+                              expandedDiscoverySection === 'recent'
+                                ? 'bg-[#E65100] text-white shadow-sm'
+                                : (darkMode ? 'bg-[#162226] border border-[#0B5A70]/25 text-teal-200 hover:border-[#0B5A70]/50' : 'bg-[#FFFCF8] border border-[#0B5A70]/15 text-[#0B5A70] hover:border-[#0B5A70]/40')
+                            }`}
+                          >
+                            ✨ Recently Added
+                            <span className="text-xs opacity-70">
+                              {expandedDiscoverySection === 'recent' ? '▲' : '▼'}
+                            </span>
+                          </button>
+                        )}
                       </div>
-                      <div className={`mt-4 border-t ${darkMode ? 'border-[#0B5A70]/15' : 'border-[#0B5A70]/8'}`} />
+
+                      {/* Expanded content — one of the two sections
+                          renders here when its pill is active. Uses
+                          the same compact-card layout used for
+                          Popular in Session 11, so both sections
+                          feel visually consistent. */}
+                      {expandedDiscoverySection === 'popular' && (
+                        <div>
+                          <div className="flex items-center justify-between mb-2">
+                            <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-[#0B5A70]/60'}`}>
+                              Top {topPublicBhajans.length} · Most read
+                            </p>
+                          </div>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                            {topPublicBhajans.map((b, idx) => (
+                              <button
+                                key={b.id}
+                                onClick={() => openPublicBhajanDetail(b)}
+                                className={`w-full text-left rounded-xl p-3 border transition-all flex items-center gap-3 ${darkMode ? 'bg-[#162226] border-[#0B5A70]/15 hover:border-[#0B5A70]/30' : 'bg-[#FFFCF8] border-[#0B5A70]/8 shadow-[0_1px_4px_rgba(11,90,112,0.04)] hover:border-[#0B5A70]/25 hover:shadow-[0_2px_8px_rgba(11,90,112,0.10)]'}`}
+                              >
+                                <div className={`text-base font-bold min-w-[24px] text-center flex-shrink-0 ${darkMode ? 'text-orange-300' : 'text-[#E65100]'}`}>
+                                  {idx + 1}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className={`text-sm font-bold truncate ${darkMode ? 'text-amber-100' : 'text-[#0B5A70]'}`}>
+                                    {b.title}
+                                  </p>
+                                  <p className={`text-xs truncate ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                                    {b.deity} · {b.category}
+                                  </p>
+                                </div>
+                                <span className={`text-xs flex-shrink-0 ${darkMode ? 'text-gray-500' : 'text-[#0B5A70]/50'}`}>
+                                  📖 {b.readCount || b.saveCount || 0}
+                                </span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {expandedDiscoverySection === 'recent' && (
+                        <div>
+                          <div className="flex items-center justify-between mb-2">
+                            <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-[#0B5A70]/60'}`}>
+                              Latest {recentPublicBhajans.length} · Newest first
+                            </p>
+                          </div>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                            {recentPublicBhajans.map((b) => (
+                              <button
+                                key={b.id}
+                                onClick={() => openPublicBhajanDetail(b)}
+                                className={`w-full text-left rounded-xl p-3 border transition-all flex items-center gap-3 ${darkMode ? 'bg-[#162226] border-[#0B5A70]/15 hover:border-[#0B5A70]/30' : 'bg-[#FFFCF8] border-[#0B5A70]/8 shadow-[0_1px_4px_rgba(11,90,112,0.04)] hover:border-[#0B5A70]/25 hover:shadow-[0_2px_8px_rgba(11,90,112,0.10)]'}`}
+                              >
+                                <div className={`text-base flex-shrink-0 ${darkMode ? 'text-orange-300' : 'text-[#E65100]'}`}>
+                                  ✨
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className={`text-sm font-bold truncate ${darkMode ? 'text-amber-100' : 'text-[#0B5A70]'}`}>
+                                    {b.title}
+                                  </p>
+                                  <p className={`text-xs truncate ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                                    {b.deity} · {b.category}
+                                  </p>
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {expandedDiscoverySection && (
+                        <div className={`mt-4 border-t ${darkMode ? 'border-[#0B5A70]/15' : 'border-[#0B5A70]/8'}`} />
+                      )}
                     </div>
                   )}
 
