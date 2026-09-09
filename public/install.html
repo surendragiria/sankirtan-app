@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="theme-color" content="#E65100" />
+<title>Install Sankirtan — भजन से भगवान तक</title>
+<link rel="manifest" href="/manifest.json" />
+<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    background: #FDF8E4;
+    color: #0B5A70;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", "Noto Sans Devanagari", "Noto Serif Devanagari", system-ui, sans-serif;
+    line-height: 1.5;
+    min-height: 100vh;
+  }
+  .wrap {
+    max-width: 560px;
+    margin: 0 auto;
+    padding: 40px 20px 60px;
+  }
+
+  /* --- Header --- */
+  .brand {
+    text-align: center;
+    margin-bottom: 40px;
+  }
+  .brand-mark {
+    font-family: "Noto Serif Devanagari", "Kohinoor Devanagari", serif;
+    font-size: 72px;
+    font-weight: 700;
+    line-height: 1;
+    margin-bottom: 6px;
+  }
+  .brand-mark .sam { color: #0B5A70; }
+  .brand-mark .kir { color: #E65100; }
+  .tagline {
+    font-family: "Noto Serif Devanagari", "Kohinoor Devanagari", serif;
+    font-size: 18px;
+    color: #7a5b3a;
+    margin-bottom: 10px;
+  }
+  .url {
+    font-weight: 700;
+    color: #E65100;
+    font-size: 15px;
+  }
+
+  /* --- Panel --- */
+  .panel {
+    background: #FFFCF8;
+    border: 1px solid rgba(11, 90, 112, 0.15);
+    border-radius: 20px;
+    padding: 28px 24px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 12px rgba(11, 90, 112, 0.05);
+  }
+  .panel h2 {
+    font-size: 20px;
+    margin-bottom: 6px;
+    color: #0B5A70;
+  }
+  .panel .device-chip {
+    display: inline-block;
+    background: rgba(11, 90, 112, 0.08);
+    color: #0B5A70;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 999px;
+    margin-bottom: 20px;
+    letter-spacing: 0.3px;
+  }
+
+  /* --- Big install button (Android Chrome) --- */
+  .install-btn {
+    display: block;
+    width: 100%;
+    background: #E65100;
+    color: white;
+    border: none;
+    border-radius: 14px;
+    padding: 18px 20px;
+    font-size: 18px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.15s;
+    margin-bottom: 12px;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .install-btn:hover:not(:disabled),
+  .install-btn:active:not(:disabled) { background: #cc4700; }
+  .install-btn:disabled {
+    background: rgba(230, 81, 0, 0.35);
+    cursor: not-allowed;
+  }
+  .install-btn-note {
+    text-align: center;
+    font-size: 13px;
+    color: #7a5b3a;
+    margin-bottom: 20px;
+  }
+
+  /* --- Step list --- */
+  .steps {
+    list-style: none;
+    counter-reset: step;
+    margin-top: 8px;
+  }
+  .steps li {
+    counter-increment: step;
+    position: relative;
+    padding: 14px 0 14px 48px;
+    border-bottom: 1px solid rgba(11, 90, 112, 0.08);
+    font-size: 15px;
+  }
+  .steps li:last-child { border-bottom: none; }
+  .steps li::before {
+    content: counter(step);
+    position: absolute;
+    left: 0;
+    top: 12px;
+    width: 32px;
+    height: 32px;
+    background: #E65100;
+    color: white;
+    border-radius: 50%;
+    text-align: center;
+    line-height: 32px;
+    font-weight: 700;
+    font-size: 14px;
+  }
+  .steps li strong { color: #0B5A70; }
+  .steps li .glyph {
+    display: inline-block;
+    background: rgba(11, 90, 112, 0.08);
+    padding: 2px 8px;
+    border-radius: 6px;
+    font-weight: 700;
+    color: #0B5A70;
+    font-size: 14px;
+  }
+
+  /* --- Fallback panel (smaller, secondary) --- */
+  .fallback-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: #0B5A70;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin: 24px 0 8px;
+  }
+
+  /* --- Divider --- */
+  .divider {
+    height: 1px;
+    background: rgba(11, 90, 112, 0.12);
+    margin: 24px 0;
+  }
+
+  /* --- Success state after install --- */
+  .success {
+    background: #ecfdf5;
+    border: 1px solid #10b981;
+    color: #065f46;
+    padding: 18px;
+    border-radius: 12px;
+    text-align: center;
+    font-weight: 600;
+    margin-bottom: 20px;
+    display: none;
+  }
+  .success.show { display: block; }
+
+  /* --- Open-in-browser hint (for in-app browsers) --- */
+  .open-in-browser {
+    background: #fef3c7;
+    border: 1px solid #f59e0b;
+    color: #78350f;
+    padding: 16px;
+    border-radius: 12px;
+    font-size: 14px;
+    margin-bottom: 20px;
+    display: none;
+  }
+  .open-in-browser.show { display: block; }
+  .open-in-browser strong { display: block; margin-bottom: 4px; }
+
+  /* --- Alternative link (bottom) --- */
+  .footer-link {
+    text-align: center;
+    margin-top: 24px;
+    font-size: 14px;
+  }
+  .footer-link a {
+    color: #E65100;
+    font-weight: 600;
+    text-decoration: none;
+  }
+  .footer-link a:hover { text-decoration: underline; }
+
+  /* --- Blessing footer --- */
+  .blessing {
+    text-align: center;
+    margin-top: 32px;
+    font-family: "Noto Serif Devanagari", serif;
+    color: #7a5b3a;
+    font-size: 14px;
+  }
+
+  /* --- Hidden by default; JS unhides the right one --- */
+  .device-view { display: none; }
+  .device-view.active { display: block; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- Brand header -->
+  <div class="brand">
+    <div class="brand-mark"><span class="sam">सं</span><span class="kir">कीर्तन.</span></div>
+    <div class="tagline">भजन से भगवान तक</div>
+    <div class="url">sankirtan.app</div>
+  </div>
+
+  <!-- In-app browser warning (WhatsApp, Instagram, etc.) -->
+  <div class="open-in-browser" id="inAppWarning">
+    <strong>⚠️ Open in your browser first</strong>
+    You seem to be viewing this inside an in-app browser (WhatsApp / Instagram / Facebook).
+    Installing to the home screen from here doesn't work. Please:
+    <br><br>
+    Tap the <strong>⋮ menu</strong> at the top-right → <strong>"Open in Chrome"</strong> (Android)
+    or <strong>"Open in Safari"</strong> (iPhone) — then come back to this page.
+  </div>
+
+  <!-- Success message after install -->
+  <div class="success" id="successMsg">
+    ✓ Sankirtan installed! Look for the icon on your home screen.
+  </div>
+
+  <!-- ===== Device-specific instructions ===== -->
+
+  <!-- ANDROID CHROME (or Chromium-based with beforeinstallprompt) -->
+  <div class="device-view" id="viewAndroid">
+    <div class="panel">
+      <h2>Install Sankirtan</h2>
+      <span class="device-chip" id="chipAndroid">Android</span>
+
+      <button class="install-btn" id="installBtn" disabled>
+        📱 Install Sankirtan
+      </button>
+      <div class="install-btn-note" id="installBtnNote">
+        Preparing install…
+      </div>
+
+      <div class="fallback-title">Or install manually</div>
+      <ol class="steps">
+        <li>Tap the <span class="glyph">⋮</span> menu at the top-right of Chrome</li>
+        <li>Tap <strong>"Install app"</strong> (or <strong>"Add to Home screen"</strong>)</li>
+        <li>Tap <strong>Install</strong> to confirm</li>
+      </ol>
+    </div>
+  </div>
+
+  <!-- iOS SAFARI -->
+  <div class="device-view" id="viewIOS">
+    <div class="panel">
+      <h2>Install on iPhone / iPad</h2>
+      <span class="device-chip">iPhone / iPad · Safari</span>
+
+      <p style="margin-bottom: 16px; font-size: 15px;">
+        Apple doesn't allow apps to install themselves — you'll do it in 3 quick taps:
+      </p>
+
+      <ol class="steps">
+        <li>Tap the <strong>Share button</strong> <span class="glyph">⬆</span> at the bottom of Safari (middle of the bar)</li>
+        <li>Scroll and tap <strong>"Add to Home Screen"</strong></li>
+        <li>Tap <strong>Add</strong> in the top-right</li>
+      </ol>
+
+      <div class="fallback-title">Not seeing the Share button?</div>
+      <p style="font-size: 14px; color: #7a5b3a;">
+        Make sure you opened this page in <strong>Safari</strong> (not Chrome or another browser). Apple only supports adding to home screen from Safari.
+      </p>
+    </div>
+  </div>
+
+  <!-- iOS CHROME (redirect to Safari) -->
+  <div class="device-view" id="viewIOSChrome">
+    <div class="panel">
+      <h2>Please open in Safari</h2>
+      <span class="device-chip">iPhone · Chrome</span>
+      <p style="margin-bottom: 16px; font-size: 15px;">
+        Apple only allows installing web apps through <strong>Safari</strong>. Please:
+      </p>
+      <ol class="steps">
+        <li>Copy this link: <strong style="color:#E65100">sankirtan.app/install</strong></li>
+        <li>Open <strong>Safari</strong> (the blue compass icon)</li>
+        <li>Paste and go — then follow the 3 steps to install</li>
+      </ol>
+    </div>
+  </div>
+
+  <!-- DESKTOP -->
+  <div class="device-view" id="viewDesktop">
+    <div class="panel">
+      <h2>Install on Desktop</h2>
+      <span class="device-chip" id="chipDesktop">Desktop</span>
+
+      <button class="install-btn" id="installBtnDesktop" disabled>
+        💻 Install Sankirtan
+      </button>
+      <div class="install-btn-note" id="installBtnDesktopNote">
+        Preparing install…
+      </div>
+
+      <div class="fallback-title">Or install manually</div>
+      <ol class="steps">
+        <li>Look for the <strong>install icon</strong> <span class="glyph">⊕</span> at the right end of the address bar</li>
+        <li>Click it and confirm</li>
+        <li>The app opens in its own window and appears in your apps list</li>
+      </ol>
+      <p style="font-size: 13px; color: #7a5b3a; margin-top: 12px;">
+        Works in Chrome, Edge, and other Chromium browsers. Safari on Mac doesn't currently support PWA install from the address bar — use "File → Add to Dock" instead.
+      </p>
+    </div>
+  </div>
+
+  <!-- FALLBACK (unrecognized) -->
+  <div class="device-view" id="viewFallback">
+    <div class="panel">
+      <h2>Add Sankirtan to your device</h2>
+      <p style="margin-bottom: 16px;">
+        Open <strong style="color:#E65100">sankirtan.app</strong> in your device's default browser (Chrome on Android, Safari on iPhone), then use the browser menu to <strong>"Add to Home Screen"</strong> or <strong>"Install App"</strong>.
+      </p>
+      <p style="font-size: 14px; color: #7a5b3a;">
+        Sankirtan is a Progressive Web App (PWA) — no download required. It installs directly from the browser and works offline once loaded.
+      </p>
+    </div>
+  </div>
+
+  <!-- Open the app link (already installed?) -->
+  <div class="footer-link">
+    Already installed? <a href="/">Open Sankirtan →</a>
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="blessing">
+    ॐ  बाबोसा भगवान की कृपा से  ॐ
+  </div>
+
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  // ============================================================
+  // Device detection
+  // ============================================================
+  var ua = navigator.userAgent || '';
+  var isIOS = /iPad|iPhone|iPod/.test(ua) && !window.MSStream;
+  var isAndroid = /Android/.test(ua);
+  var isMobile = isIOS || isAndroid;
+
+  // In-app browser detection (WhatsApp, FB, Instagram, etc. wrap
+  // their own webview which can't install PWAs). Signals:
+  //  - WhatsApp: no explicit UA marker on all versions; look for
+  //    absence of standard Chrome markers combined with mobile
+  //  - Instagram: 'Instagram' in UA
+  //  - Facebook: 'FBAN' or 'FBAV' in UA
+  //  - Line: 'Line/' in UA
+  var inAppBrowser =
+    /Instagram|FBAN|FBAV|FB_IAB|Line\//.test(ua) ||
+    // WhatsApp specifically doesn't identify itself, but its
+    // Android webview lacks the standard Chrome UA marker
+    (isAndroid && /wv\)/.test(ua) && !/Chrome\/\d+/.test(ua));
+
+  // Chrome on iOS is 'CriOS', on Android is 'Chrome' AND 'Mobile'
+  var isChromeIOS = /CriOS/.test(ua);
+  var isSafariIOS = isIOS && /Safari/.test(ua) && !isChromeIOS;
+  var isChromeAndroid = isAndroid && /Chrome/.test(ua);
+
+  // ============================================================
+  // Show the right view
+  // ============================================================
+  var viewId = 'viewFallback';
+  if (inAppBrowser) {
+    document.getElementById('inAppWarning').classList.add('show');
+    // Still show best-guess instructions
+    if (isIOS) viewId = 'viewIOS';
+    else if (isAndroid) viewId = 'viewAndroid';
+  } else if (isSafariIOS || (isIOS && !isChromeIOS)) {
+    viewId = 'viewIOS';
+  } else if (isChromeIOS) {
+    viewId = 'viewIOSChrome';
+  } else if (isAndroid) {
+    viewId = 'viewAndroid';
+  } else if (!isMobile) {
+    viewId = 'viewDesktop';
+  }
+  var view = document.getElementById(viewId);
+  if (view) view.classList.add('active');
+
+  // Refine chip label with browser name
+  var chipAndroid = document.getElementById('chipAndroid');
+  if (chipAndroid && isAndroid) {
+    if (/Edg/.test(ua)) chipAndroid.textContent = 'Android · Edge';
+    else if (/OPR|Opera/.test(ua)) chipAndroid.textContent = 'Android · Opera';
+    else if (/SamsungBrowser/.test(ua)) chipAndroid.textContent = 'Android · Samsung Internet';
+    else chipAndroid.textContent = 'Android · Chrome';
+  }
+
+  // ============================================================
+  // beforeinstallprompt — the "one-tap install" mechanism
+  // Supported: Android Chrome, Desktop Chrome/Edge, some others.
+  // NOT supported: iOS Safari (Apple restriction), Firefox on
+  // some platforms. We capture the event and use it on button
+  // click. Also handle 'appinstalled' event for success feedback.
+  // ============================================================
+  var deferredPrompt = null;
+  var installBtn = document.getElementById('installBtn');
+  var installBtnNote = document.getElementById('installBtnNote');
+  var installBtnDesktop = document.getElementById('installBtnDesktop');
+  var installBtnDesktopNote = document.getElementById('installBtnDesktopNote');
+  var successMsg = document.getElementById('successMsg');
+
+  function enableInstallButtons() {
+    [installBtn, installBtnDesktop].forEach(function (btn) {
+      if (btn) btn.disabled = false;
+    });
+    if (installBtnNote) installBtnNote.textContent = 'Tap to install directly';
+    if (installBtnDesktopNote) installBtnDesktopNote.textContent = 'Click to install directly';
+  }
+
+  function disableInstallButtons(msg) {
+    [installBtn, installBtnDesktop].forEach(function (btn) {
+      if (btn) btn.disabled = true;
+    });
+    if (installBtnNote) installBtnNote.textContent = msg;
+    if (installBtnDesktopNote) installBtnDesktopNote.textContent = msg;
+  }
+
+  window.addEventListener('beforeinstallprompt', function (e) {
+    // Prevent Chrome from showing its own mini-infobar
+    e.preventDefault();
+    deferredPrompt = e;
+    enableInstallButtons();
+  });
+
+  function triggerInstall() {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    deferredPrompt.userChoice.then(function (choice) {
+      if (choice.outcome === 'accepted') {
+        // 'appinstalled' event will fire shortly — nothing more to do
+      } else {
+        // User dismissed — button stays enabled so they can retry
+      }
+      deferredPrompt = null;
+    });
+  }
+
+  if (installBtn) installBtn.addEventListener('click', triggerInstall);
+  if (installBtnDesktop) installBtnDesktop.addEventListener('click', triggerInstall);
+
+  window.addEventListener('appinstalled', function () {
+    if (successMsg) successMsg.classList.add('show');
+    disableInstallButtons('✓ Installed');
+    // Scroll to top so user sees the success banner
+    try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch (e) {}
+  });
+
+  // If beforeinstallprompt never fires within ~4 seconds, the
+  // browser probably can't do one-tap install. Update the note.
+  setTimeout(function () {
+    if (!deferredPrompt && (installBtn || installBtnDesktop)) {
+      // Detect the likely reason
+      if (isIOS) {
+        // Shouldn't reach here on iOS since we don't render Android view
+      } else if (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) {
+        disableInstallButtons('✓ Already installed');
+      } else {
+        disableInstallButtons('Use the manual steps below');
+      }
+    }
+  }, 4000);
+
+  // If page is opened when already installed as PWA, show "already
+  // installed" state
+  if (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) {
+    disableInstallButtons('✓ Already installed');
+  }
+})();
+</script>
+</body>
+</html>
