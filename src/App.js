@@ -6,7 +6,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 // CHANGES (Session 44 — splash credits):
 //
 // Credits line on the splash screen now reads:
-//   🙏 Made for Bhajan Community By Grace of Lord Babosa 🙏
+//   🙏 By Grace of Lord Babosa 🙏
 //   Inspired by Manju Baisa
 // (replaces "Made for the Bhajan Community / by Grace of Babosa
 // Bhagwan").
@@ -679,7 +679,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.09.16.s44';
+const APP_VERSION = '2026.09.16.s44b';
 
 // SESSION 30: log at startup so admin can verify which build is
 // running via the browser console (helps diagnose "is my new
@@ -7073,7 +7073,7 @@ const App = () => {
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="🔍 Search — try 'shyam' or 'श्याम'"
+                    placeholder="🔍 Search — try 'babosa' or 'बाबोसा'"
                     aria-label="Search my library"
                     className={`w-full px-4 py-3 pr-24 border rounded-xl focus:ring-4 outline-none ${
                       darkMode
@@ -9217,7 +9217,7 @@ const App = () => {
                     type="text"
                     value={publicSearchQuery}
                     onChange={(e) => setPublicSearchQuery(e.target.value)}
-                    placeholder="🔍 Search — try 'shyam' or 'श्याम'"
+                    placeholder="🔍 Search — try 'babosa' or 'बाबोसा'"
                     aria-label="Search public library"
                     className={`w-full px-4 py-3 pr-24 border rounded-xl focus:ring-4 outline-none ${
                       darkMode
