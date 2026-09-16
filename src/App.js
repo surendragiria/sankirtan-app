@@ -1,6 +1,38 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 
 // ==============================================
+// SANKIRTAN SAAS - SESSION 47
+// Bhajan Se Bhagwan Tak
+// CHANGES (Session 47 — explainer moved from per-playlist to tab):
+//
+// 1. Removed the disabled "Live Performance · Programs only" block
+//    from Playlist detail. It repeated on every playlist a user
+//    opened, which was noisy.
+// 2. Added a small always-visible one-liner right under the
+//    Playlists/Programs toggle at the top of the tab, teaching
+//    the distinction once:
+//      🎵 Playlist — undated collection for daily practice.
+//      📅 Program — dated event (jagran, sankirtan) with Live mode.
+//    Smaller footprint, taught in the right place.
+// ==============================================
+//
+// SANKIRTAN SAAS - SESSION 46
+// Bhajan Se Bhagwan Tak
+// CHANGES (Session 46 — medley detail polish + related sort):
+//
+// 1. Medley detail view: compact header (small 🎭, text-xl
+//    title, "N mukhdas · purpose" in a small line). Playlist and
+//    Program keep the existing big hero card unchanged.
+// 2. Live Performance block removed on medleys — never relevant
+//    (you don't do a medley live from a stage). Still shown on
+//    playlists as the "Programs only" explainer.
+// 3. Related bhajans: DEITY FIRST, then mood similarity within
+//    the same deity. Non-same-deity bhajans only fill remaining
+//    slots and only if they share at least one mood. Previous
+//    scoring could rank a mood-heavy other-deity bhajan above a
+//    same-deity one.
+// ==============================================
+//
 // SANKIRTAN SAAS - SESSION 45
 // Bhajan Se Bhagwan Tak
 // CHANGES (Session 45 — labels, related logic, chips, daily picker):
@@ -702,7 +734,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.09.16.s45';
+const APP_VERSION = '2026.09.16.s47';
 
 // SESSION 30: log at startup so admin can verify which build is
 // running via the browser console (helps diagnose "is my new
@@ -4678,23 +4710,28 @@ const App = () => {
   // Now they only recompute when the selected bhajan or the source
   // list actually changes.
   // ==============================================
-  // SESSION 45: Related bhajans now score on DEITY + MOODS (keywords),
-  // not moods alone. Same deity = 2 points, each shared mood = 1.
-  // A bhajan with no moods still gets relatives via its deity.
+  // SESSION 46: Related bhajans go by DEITY first, then by mood
+  // similarity within the same deity. Non-same-deity bhajans only
+  // appear if there aren't enough same-deity ones to fill the six
+  // slots — and even then, only if they share at least one mood.
   const computeRelated = (current, pool) => {
     if (!current) return [];
     const relKws = new Set(current.keywords || []);
     const deity = (current.deity || '').trim().toLowerCase();
-    return pool
+    const scored = pool
       .filter(b => b.id !== current.id)
       .map(b => {
         const matchedKws = (b.keywords || []).filter(kw => relKws.has(kw));
         const sameDeity = !!deity && (b.deity || '').trim().toLowerCase() === deity;
-        return { ...b, matchedKws, sameDeity, score: (sameDeity ? 2 : 0) + matchedKws.length };
-      })
-      .filter(b => b.score > 0)
-      .sort((a, b) => b.score - a.score || (a.title || '').localeCompare(b.title || ''))
-      .slice(0, 6);
+        return { ...b, matchedKws, sameDeity };
+      });
+    const sameDeity = scored
+      .filter(b => b.sameDeity)
+      .sort((a, b) => b.matchedKws.length - a.matchedKws.length || (a.title || '').localeCompare(b.title || ''));
+    const moodOnly = scored
+      .filter(b => !b.sameDeity && b.matchedKws.length > 0)
+      .sort((a, b) => b.matchedKws.length - a.matchedKws.length || (a.title || '').localeCompare(b.title || ''));
+    return [...sameDeity, ...moodOnly].slice(0, 6);
   };
 
   const relatedMyBhajans = useMemo(() => computeRelated(selectedBhajan, bhajans), [selectedBhajan, bhajans]);
@@ -8272,6 +8309,14 @@ const App = () => {
                     not collections). */}
               </div>
 
+              {/* SESSION 47: one-line explainer of the difference between
+                  Playlist and Program. Small, always visible, teaches the
+                  distinction so per-playlist explainers aren't needed. */}
+              <p className={`text-xs mb-4 ${darkMode ? 'text-gray-400' : 'text-[#0B5A70]/60'}`}>
+                <span className="font-semibold">🎵 Playlist</span> — an undated collection for daily practice.
+                {' '}<span className="font-semibold">📅 Program</span> — a dated event (jagran, sankirtan) with <strong>Live mode</strong> for performing.
+              </p>
+
               <div className="mb-6">
                 <input
                   type="text"
@@ -8444,52 +8489,63 @@ const App = () => {
                 </div>
               </div>
 
-              <div className="bg-[#FFFCF8] rounded-2xl shadow-[0_2px_12px_rgba(11,90,112,0.06)] p-6 md:p-8 border border-[#0B5A70]/8 mb-4">
-                <div className="text-4xl mb-2">🎵</div>
-                <h1 className="text-3xl md:text-4xl font-bold text-[#0B5A70] mb-3">
-                  {selectedProgram.name}
-                </h1>
-                {selectedProgram.date && (
-                  <p className="text-lg text-[#E65100] mb-1">📅 {selectedProgram.date}</p>
-                )}
-                {selectedProgram.venue && (
-                  <p className="text-lg text-gray-600 mb-3">📍 {selectedProgram.venue}</p>
-                )}
-                <div className="flex items-center gap-2 mt-4">
-                  <span className="bg-[#0B5A70]/8 text-[#0B5A70] px-3 py-1 rounded-full text-sm font-semibold">
-                    {selectedProgram.bhajanIds?.length || 0} bhajans
-                  </span>
-                </div>
+              {(() => {
+                const t = getProgramType(selectedProgram);
+                // SESSION 46: medleys get a compact header — smaller title,
+                // tighter padding, no Live Performance block (which was never
+                // relevant to a medley — you don't perform a medley "live"
+                // from a stage, you sing through its mukhdas).
+                if (t === 'parody') {
+                  return (
+                    <div className="bg-[#FFFCF8] rounded-xl shadow-[0_1px_6px_rgba(11,90,112,0.05)] p-4 md:p-5 border border-[#0B5A70]/8 mb-4">
+                      <div className="flex items-center gap-3">
+                        <div className="text-2xl flex-shrink-0" aria-hidden="true">🎭</div>
+                        <div className="flex-1 min-w-0">
+                          <h1 className="text-lg md:text-xl font-bold text-[#0B5A70] truncate">
+                            {selectedProgram.name}
+                          </h1>
+                          <p className="text-xs text-gray-500 mt-0.5">
+                            {selectedProgram.bhajanIds?.length || 0} mukhda{(selectedProgram.bhajanIds?.length || 0) === 1 ? '' : 's'}
+                            {selectedProgram.purpose ? ` · ${selectedProgram.purpose}` : ''}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+                // Playlists and Programs keep the full-size hero card.
+                return (
+                  <div className="bg-[#FFFCF8] rounded-2xl shadow-[0_2px_12px_rgba(11,90,112,0.06)] p-6 md:p-8 border border-[#0B5A70]/8 mb-4">
+                    <div className="text-4xl mb-2">🎵</div>
+                    <h1 className="text-3xl md:text-4xl font-bold text-[#0B5A70] mb-3">
+                      {selectedProgram.name}
+                    </h1>
+                    {selectedProgram.date && (
+                      <p className="text-lg text-[#E65100] mb-1">📅 {selectedProgram.date}</p>
+                    )}
+                    {selectedProgram.venue && (
+                      <p className="text-lg text-gray-600 mb-3">📍 {selectedProgram.venue}</p>
+                    )}
+                    <div className="flex items-center gap-2 mt-4">
+                      <span className="bg-[#0B5A70]/8 text-[#0B5A70] px-3 py-1 rounded-full text-sm font-semibold">
+                        {selectedProgram.bhajanIds?.length || 0} bhajans
+                      </span>
+                    </div>
 
-                {selectedProgram.bhajanIds && selectedProgram.bhajanIds.length > 0 && (() => {
-                  const t = getProgramType(selectedProgram);
-                  if (t === 'program') {
-                    return (
+                    {/* SESSION 47: per-playlist Live explainer removed.
+                        The difference between Playlist and Program is now
+                        explained ONCE at the top of the Playlists tab. */}
+                    {selectedProgram.bhajanIds && selectedProgram.bhajanIds.length > 0 && t === 'program' && (
                       <button
                         onClick={() => startLiveProgram(selectedProgram)}
                         className="w-full mt-6 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-bold py-4 rounded-xl shadow-lg text-lg flex items-center justify-center gap-2"
                       >
                         🎤 START LIVE PERFORMANCE
                       </button>
-                    );
-                  }
-                  // SESSION 42: previously the button was simply hidden on
-                  // playlists and parodies, which read as "feature missing".
-                  // Now it's visible but disabled, with a one-line reason
-                  // and a path forward (convert to a program via Edit).
-                  return (
-                    <div className={`w-full mt-6 rounded-xl border p-4 ${darkMode ? 'bg-[#1e2e33] border-[#0B5A70]/20' : 'bg-[#0B5A70]/5 border-[#0B5A70]/12'}`}>
-                      <div className={`font-bold text-base flex items-center gap-2 ${darkMode ? 'text-gray-400' : 'text-[#0B5A70]/50'}`}>
-                        🎤 Live Performance
-                        <span className={`text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full ${darkMode ? 'bg-[#0B5A70]/25 text-teal-200' : 'bg-[#0B5A70]/10 text-[#0B5A70]'}`}>Programs only</span>
-                      </div>
-                      <p className={`text-xs mt-1.5 ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                        Live mode is for dated events. To perform this {t === 'parody' ? 'medley' : 'playlist'} live, tap <strong>Edit</strong> and switch its type to <strong>📅 Program</strong>.
-                      </p>
-                    </div>
-                  );
-                })()}
-              </div>
+                    )}
+                  </div>
+                );
+              })()}
 
               <div className="mb-4">
                 <h3 className="text-lg font-bold text-[#0B5A70] mb-3">
