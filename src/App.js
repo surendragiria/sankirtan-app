@@ -1,6 +1,54 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 
 // ==============================================
+// SANKIRTAN SAAS - SESSION 43
+// Bhajan Se Bhagwan Tak
+// CHANGES (Session 43 — parodies move to My Library; Save at top;
+//                     auto-save setlists):
+//
+// MENTAL-MODEL FIX: a parody is a performance unit (a medley of
+// mukhdas you sing at a jagran), not a kind of playlist. So it
+// now lives with bhajans, not with collections. Data is untouched
+// (still users/{uid}/programs with type:'parody'); only where it's
+// shown and created changes. Session 44 will make parodies
+// selectable INSIDE program/playlist setlists.
+//
+// MY LIBRARY
+// - Header count: "N bhajans · K parodies in your collection".
+// - "+ Add" is now two buttons: "+ Bhajan" (teal) and "+ 🎭 Parody"
+//   (saffron). openCreateParody() opens the existing form pre-typed
+//   as parody with the picker open.
+// - Collapsible "🎭 Parodies (K)" pill above the bhajan list; rows
+//   show name · N mukhdas · purpose; tap opens the mukhda view.
+//   Hidden while searching/filtering. Auto-opens after creating one.
+// - Parody detail back-nav → "← Back to My Library". Create-form
+//   Cancel, post-save, and delete for parodies also return to
+//   My Library.
+//
+// PLAYLISTS TAB
+// - Back to two toggles (🎵 Playlists / 📅 Programs). 'parody'
+//   retired as a persisted view-mode value. Create form no longer
+//   offers Parody as a type (shows a locked 🎭 Parody chip only
+//   when already creating/editing one).
+//
+// SAVE BUTTON AT TOP
+// - Create/edit form header now has Save on the right ("💾 Save"
+//   when creating, "💾 Save details" when editing). Bottom row
+//   keeps Save/Cancel in create mode.
+//
+// AUTO-SAVE SETLIST ON EXISTING LISTS
+// - In edit-program mode, any change to bhajanIds (add, remove,
+//   reorder) writes to Firestore after a 600ms debounce. No Save
+//   tap needed. Guarded so opening the editor doesn't write.
+//   Bottom row shows status ("⏳ Saving setlist…" / "✓ Setlist
+//   saved automatically" / "⚠️ Could not save") and a Done button
+//   that returns to the refreshed detail view. Save details still
+//   handles name/date/venue/purpose.
+//
+// Not touched: Firestore rules, schema, mukhda detection, S38
+// Add-to picker (parodies remain valid targets), public library.
+// ==============================================
+//
 // SANKIRTAN SAAS - SESSION 42
 // Bhajan Se Bhagwan Tak
 // CHANGES (Session 42 — intuitiveness pass, from the S41 UX review):
@@ -609,7 +657,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.09.16.s42';
+const APP_VERSION = '2026.09.16.s43';
 
 // SESSION 30: log at startup so admin can verify which build is
 // running via the browser console (helps diagnose "is my new
@@ -1518,6 +1566,10 @@ const App = () => {
   // and a "saving" set tracking which programs are mid-update
   // (for spinner + disable on rapid taps).
   const [addToProgramFor, setAddToProgramFor] = useState(null);
+  // SESSION 43: setlist auto-save status in edit-program mode
+  const [setlistAutoSave, setSetlistAutoSave] = useState('idle');
+  // SESSION 43: My Library parodies section open/closed (collapsed by default)
+  const [libraryParodiesOpen, setLibraryParodiesOpen] = useState(false);
   const [addToProgramSaving, setAddToProgramSaving] = useState(new Set());
   const [bhajanPickerSearch, setBhajanPickerSearch] = useState('');
   const [pickerDeityFilter, setPickerDeityFilter] = useState('');
@@ -1548,7 +1600,7 @@ const App = () => {
     try {
       const saved = localStorage.getItem('sankirtan-playlist-view');
       // SESSION 36: parody added as a valid third value
-      return saved === 'playlist' || saved === 'program' || saved === 'parody' ? saved : 'program';
+      return saved === 'playlist' || saved === 'program' ? saved : 'program';  // SESSION 43: 'parody' retired from this toggle
     } catch {
       return 'program';
     }
@@ -5093,6 +5145,22 @@ const App = () => {
     setPickerKeywordFilter('');
   };
 
+  // SESSION 43: create a parody from My Library. Same form as
+  // programs/playlists, pre-typed as 'parody'. The form's type
+  // toggle only shows Parody when type is already parody, so the
+  // user can't accidentally turn it into a playlist here.
+  const openCreateParody = () => {
+    setProgramForm({ name: '', date: '', venue: '', bhajanIds: [], type: 'parody', purpose: '' });
+    setProgramFormError('');
+    setEditingProgram(null);
+    setSetlistAutoSave('idle');
+    setCurrentView('create-program');
+    setShowBhajanPicker(true);
+    setBhajanPickerSearch('');
+    setPickerDeityFilter('');
+    setPickerKeywordFilter('');
+  };
+
   const openEditProgram = (program) => {
     // SESSION 32: derive type from doc or infer for legacy docs.
     // Purpose field is new; defaults to empty for legacy.
@@ -5106,6 +5174,7 @@ const App = () => {
     });
     setProgramFormError('');
     setEditingProgram(program);
+    setSetlistAutoSave('idle');
     setCurrentView('edit-program');
   };
 
@@ -5222,7 +5291,14 @@ const App = () => {
       } else {
         programData.createdAt = window.firebase.firestore.FieldValue.serverTimestamp();
         await programsRef.add(programData);
-        setCurrentView('programs');
+        // SESSION 43: parodies return to My Library (with the section
+        // open so the new one is visible); playlists/programs to the tab.
+        if (isParody) {
+          setLibraryParodiesOpen(true);
+          setCurrentView('library');
+        } else {
+          setCurrentView('programs');
+        }
         showToast(`✅ ${label} "${programData.name}" created`);
       }
     } catch (error) {
@@ -5247,7 +5323,7 @@ const App = () => {
         try {
           const db = window.firebase.firestore();
           await db.collection('users').doc(user.uid).collection('programs').doc(program.id).delete();
-          setCurrentView('programs');
+          setCurrentView(pType === 'parody' ? 'library' : 'programs');  // SESSION 43
           setSelectedProgram(null);
           showToast(`${label} deleted`);
         } catch (error) {
@@ -5276,6 +5352,39 @@ const App = () => {
       bhajanIds: prev.bhajanIds.filter(id => id !== bhajanId)
     }));
   };
+
+  // SESSION 43: AUTO-SAVE THE SETLIST WHEN EDITING AN EXISTING LIST.
+  // Any change to programForm.bhajanIds (add, remove, reorder) while
+  // in edit-program mode writes to Firestore after a 600ms debounce.
+  // The Save button is only needed for name/date/venue/purpose.
+  // Guarded against writing when the ids already match the stored
+  // doc, so opening the editor doesn't trigger a write.
+  useEffect(() => {
+    if (currentView !== 'edit-program' || !editingProgram || !user) return;
+    const ids = programForm.bhajanIds || [];
+    const stored = editingProgram.bhajanIds || [];
+    if (ids.length === stored.length && ids.every((id, i) => id === stored[i])) return;
+    setSetlistAutoSave('saving');
+    const t = setTimeout(async () => {
+      try {
+        const db = window.firebase.firestore();
+        await db.collection('users').doc(user.uid).collection('programs').doc(editingProgram.id).update({
+          bhajanIds: ids,
+          bhajanCount: ids.length,
+          updatedAt: window.firebase.firestore.FieldValue.serverTimestamp(),
+          lastActive: window.firebase.firestore.FieldValue.serverTimestamp()
+        });
+        setEditingProgram(prev => prev ? { ...prev, bhajanIds: ids, bhajanCount: ids.length } : prev);
+        setPrograms(prev => prev.map(p => p.id === editingProgram.id ? { ...p, bhajanIds: ids, bhajanCount: ids.length } : p));
+        setSetlistAutoSave('saved');
+      } catch (e) {
+        console.error('Setlist auto-save failed:', e);
+        setSetlistAutoSave('error');
+      }
+    }, 600);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [programForm.bhajanIds, editingProgram, currentView, user]);
 
   // Central close-and-reset helper for the picker.
   // Used by the Done button, X button, and backdrop click so all three
@@ -6828,17 +6937,80 @@ const App = () => {
               ============================================== */}
           {currentView === 'library' && (
             <>
-              <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-                <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-[#0B5A70]/70'}`}>
-                  {bhajans.length} bhajan{bhajans.length === 1 ? '' : 's'} in your collection
-                </p>
-                <button
-                  onClick={openAddBhajan}
-                  className="bg-[#0B5A70] hover:bg-[#094a5d] text-white font-semibold px-4 py-2 rounded-xl shadow-md flex items-center gap-2 text-sm"
-                >
-                  <span className="text-lg">+</span> Add
-                </button>
-              </div>
+              {(() => {
+                const myParodies = programs
+                  .filter(p => getProgramType(p) === 'parody')
+                  .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+                return (
+                  <>
+                    <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+                      <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-[#0B5A70]/70'}`}>
+                        {bhajans.length} bhajan{bhajans.length === 1 ? '' : 's'}
+                        {myParodies.length > 0 ? ` · ${myParodies.length} parod${myParodies.length === 1 ? 'y' : 'ies'}` : ''} in your collection
+                      </p>
+                      {/* SESSION 43: "+ Add" is now a two-way choice — Bhajan
+                          or Parody. Parodies are performance units (a medley
+                          of mukhdas) so they're created here, next to
+                          bhajans, not in the Playlists tab. */}
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={openAddBhajan}
+                          className="bg-[#0B5A70] hover:bg-[#094a5d] text-white font-semibold px-4 py-2 rounded-xl shadow-md flex items-center gap-1.5 text-sm"
+                        >
+                          <span className="text-lg leading-none">+</span> Bhajan
+                        </button>
+                        <button
+                          onClick={openCreateParody}
+                          className="bg-[#E65100] hover:bg-[#cc4700] text-white font-semibold px-4 py-2 rounded-xl shadow-md flex items-center gap-1.5 text-sm"
+                          title="A parody is a medley — only the mukhda of each bhajan is shown"
+                        >
+                          <span className="text-lg leading-none">+</span> 🎭 Parody
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* SESSION 43: PARODIES SECTION — collapsible, sits above the
+                        bhajan list. Hidden while searching/filtering. */}
+                    {myParodies.length > 0 && !searchQuery && !filterDeity && !filterCategory && !libraryFilterKeyword && (
+                      <div className="mb-4">
+                        <button
+                          onClick={() => setLibraryParodiesOpen(v => !v)}
+                          aria-expanded={libraryParodiesOpen}
+                          className={`px-3 py-1.5 rounded-full text-sm font-semibold flex items-center gap-1.5 transition-colors ${
+                            libraryParodiesOpen
+                              ? 'bg-[#E65100] text-white shadow-sm'
+                              : (darkMode ? 'bg-[#162226] border border-[#0B5A70]/25 text-teal-200 hover:border-[#0B5A70]/50' : 'bg-[#FFFCF8] border border-[#0B5A70]/15 text-[#0B5A70] hover:border-[#0B5A70]/40')
+                          }`}
+                        >
+                          🎭 Parodies ({myParodies.length})
+                          <span className="text-xs opacity-70">{libraryParodiesOpen ? '▲' : '▼'}</span>
+                        </button>
+                        {libraryParodiesOpen && (
+                          <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2">
+                            {myParodies.map(p => (
+                              <button
+                                key={p.id}
+                                onClick={() => openProgramDetail(p)}
+                                className={`w-full text-left rounded-xl p-3 border transition-all flex items-center gap-3 ${darkMode ? 'bg-[#162226] border-[#E65100]/20 hover:border-[#E65100]/40' : 'bg-[#FFFCF8] border-[#E65100]/20 shadow-[0_1px_4px_rgba(11,90,112,0.04)] hover:border-[#E65100]/45 hover:shadow-[0_2px_8px_rgba(11,90,112,0.10)]'}`}
+                              >
+                                <div className="text-xl flex-shrink-0" aria-hidden="true">🎭</div>
+                                <div className="flex-1 min-w-0">
+                                  <p className={`text-sm font-bold truncate ${darkMode ? 'text-amber-100' : 'text-[#0B5A70]'}`}>{p.name}</p>
+                                  <p className={`text-xs truncate ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                                    {p.bhajanCount || (p.bhajanIds || []).length} mukhda{(p.bhajanCount || (p.bhajanIds || []).length) === 1 ? '' : 's'}
+                                    {p.purpose ? ` · ${p.purpose}` : ''}
+                                  </p>
+                                </div>
+                                <span className={`text-xs flex-shrink-0 ${darkMode ? 'text-gray-500' : 'text-[#0B5A70]/50'}`}>Open →</span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
 
               {/* Recently Read */}
               {recentlyRead.length > 0 && !searchQuery && !filterDeity && !filterCategory && !libraryFilterKeyword && (
@@ -7999,11 +8171,7 @@ const App = () => {
             const playlists = filteredPrograms.filter(p => getProgramType(p) === 'playlist');
             const events = filteredPrograms.filter(p => getProgramType(p) === 'program');
             // SESSION 36: parody as third type
-            const parodies = filteredPrograms.filter(p => getProgramType(p) === 'parody');
-            const visibleItems =
-              playlistViewMode === 'playlist' ? playlists :
-              playlistViewMode === 'parody' ? parodies :
-              events;
+            const visibleItems = playlistViewMode === 'playlist' ? playlists : events;
             const isPlaylistView = playlistViewMode === 'playlist';
             const isParodyView = playlistViewMode === 'parody';
 
@@ -8013,7 +8181,7 @@ const App = () => {
                 <div>
                   <h2 className="text-2xl font-bold text-[#0B5A70]">🎵 Playlists</h2>
                   <p className="text-sm text-[#0B5A70]/70">
-                    Playlists ({playlists.length}) · Programs ({events.length}) · Parodies ({parodies.length})
+                    Playlists ({playlists.length}) · Programs ({events.length})
                   </p>
                 </div>
                 <button
@@ -8054,19 +8222,9 @@ const App = () => {
                 >
                   📅 Programs
                 </button>
-                <button
-                  onClick={() => {
-                    setPlaylistViewMode('parody');
-                    try { localStorage.setItem('sankirtan-playlist-view', 'parody'); } catch {}
-                  }}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
-                    isParodyView
-                      ? 'bg-[#E65100] text-white shadow-sm'
-                      : 'text-[#0B5A70]/70 hover:text-[#0B5A70]'
-                  }`}
-                >
-                  🎭 Parodies
-                </button>
+                {/* SESSION 43: Parodies pill removed — parodies now live in
+                    My Library alongside bhajans (they're performance units,
+                    not collections). */}
               </div>
 
               <div className="mb-6">
@@ -8204,10 +8362,11 @@ const App = () => {
             <>
               <div className="flex items-center justify-between mb-4">
                 <button
-                  onClick={() => setCurrentView('programs')}
+                  onClick={() => setCurrentView(getProgramType(selectedProgram) === 'parody' ? 'library' : 'programs')}
                   className="text-[#0B5A70] hover:text-[#0B5A70]/80 flex items-center gap-1 text-sm"
                 >
-                  ← Back to Playlists
+                  {/* SESSION 43: parodies live in My Library now */}
+                  {getProgramType(selectedProgram) === 'parody' ? '← Back to My Library' : '← Back to Playlists'}
                 </button>
                 <div className="flex gap-2 flex-wrap">
                   <button
@@ -8436,12 +8595,22 @@ const App = () => {
                     if (currentView === 'edit-program' && selectedProgram) {
                       setCurrentView('program-detail');
                     } else {
-                      setCurrentView('programs');
+                      setCurrentView(programForm.type === 'parody' ? 'library' : 'programs');
                     }
                   }}
                   className={darkMode ? 'text-teal-200 hover:text-teal-100 flex items-center gap-1 text-sm' : 'text-[#0B5A70] hover:text-[#0B5A70]/80 flex items-center gap-1 text-sm'}
                 >
                   ← Cancel
+                </button>
+                {/* SESSION 43: Save moved to the top so it's reachable
+                    without scrolling past the setlist. In edit mode the
+                    setlist auto-saves; this button saves name/date/venue. */}
+                <button
+                  onClick={saveProgram}
+                  disabled={programFormSaving || !programForm.name.trim()}
+                  className="bg-[#0B5A70] hover:bg-[#094a5d] text-white font-bold px-5 py-2 rounded-xl shadow-md text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {programFormSaving ? 'Saving…' : (currentView === 'edit-program' ? '💾 Save details' : '💾 Save')}
                 </button>
               </div>
 
@@ -8484,17 +8653,17 @@ const App = () => {
                     >
                       📅 Program
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => setProgramForm({...programForm, type: 'parody'})}
-                      className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
-                        programForm.type === 'parody'
-                          ? 'bg-[#E65100] text-white shadow-sm'
-                          : (darkMode ? 'text-teal-200/70 hover:text-teal-100' : 'text-[#0B5A70]/70 hover:text-[#0B5A70]')
-                      }`}
-                    >
-                      🎭 Parody
-                    </button>
+                    {/* SESSION 43: Parody option only shows when already
+                        editing/creating a parody (entered from My Library).
+                        Playlist/Program forms don't offer it. */}
+                    {programForm.type === 'parody' && (
+                      <button
+                        type="button"
+                        className="px-3 py-1.5 rounded-lg text-sm font-semibold bg-[#E65100] text-white shadow-sm"
+                      >
+                        🎭 Parody
+                      </button>
+                    )}
                   </div>
                   <p className={`text-xs mt-1.5 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                     {programForm.type === 'parody'
@@ -8684,27 +8853,49 @@ const App = () => {
                   </div>
                 )}
 
-                <div className="flex gap-3">
-                  <button
-                    onClick={saveProgram}
-                    disabled={programFormSaving || !programForm.name.trim()}
-                    className="flex-1 bg-[#0B5A70] hover:bg-[#094a5d] text-white font-bold py-3 rounded-xl shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {programFormSaving ? 'Saving...' : '💾 Save'}
-                  </button>
-                  <button
-                    onClick={() => {
-                      if (currentView === 'edit-program' && selectedProgram) {
-                        setCurrentView('program-detail');
-                      } else {
-                        setCurrentView('programs');
-                      }
-                    }}
-                    className="px-6 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 font-semibold"
-                  >
-                    Cancel
-                  </button>
-                </div>
+                {currentView === 'edit-program' ? (
+                  // SESSION 43: in edit mode the setlist auto-saves on
+                  // every add/remove/reorder, so the bottom row is just
+                  // a status line and a Done button.
+                  <div className="flex items-center justify-between gap-3">
+                    <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                      {setlistAutoSave === 'saving' ? '⏳ Saving setlist…'
+                        : setlistAutoSave === 'saved' ? '✓ Setlist saved automatically'
+                        : setlistAutoSave === 'error' ? '⚠️ Could not save setlist — check connection'
+                        : 'Changes to the setlist save automatically'}
+                    </p>
+                    <button
+                      onClick={() => {
+                        if (selectedProgram) {
+                          const fresh = programs.find(p => p.id === selectedProgram.id);
+                          if (fresh) setSelectedProgram(fresh);
+                          setCurrentView('program-detail');
+                        } else {
+                          setCurrentView('programs');
+                        }
+                      }}
+                      className="px-6 py-3 bg-[#0B5A70] text-white rounded-xl hover:bg-[#094a5d] font-semibold"
+                    >
+                      Done
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex gap-3">
+                    <button
+                      onClick={saveProgram}
+                      disabled={programFormSaving || !programForm.name.trim()}
+                      className="flex-1 bg-[#0B5A70] hover:bg-[#094a5d] text-white font-bold py-3 rounded-xl shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {programFormSaving ? 'Saving...' : '💾 Save'}
+                    </button>
+                    <button
+                      onClick={() => setCurrentView(programForm.type === 'parody' ? 'library' : 'programs')}
+                      className="px-6 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 font-semibold"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Bhajan Picker Modal */}
