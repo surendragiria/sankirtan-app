@@ -1,6 +1,65 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 
 // ==============================================
+// SANKIRTAN SAAS - SESSION 42
+// Bhajan Se Bhagwan Tak
+// CHANGES (Session 42 — intuitiveness pass, from the S41 UX review):
+//
+// Kept as-is at user's request: "Playlists" tab name and all
+// Playlist / Program / Parody labels.
+//
+// DEFAULT EXPERIENCE
+// - Unregistered visitors land directly on the Public Library as
+//   guests. No sign-in wall. onAuthStateChanged(null) → guestMode
+//   true. Sign-in is one tap away (header button, locked tabs,
+//   Save, "Add to"). Sign-out also lands on Public Library as guest.
+// - Guest banner on Public Library: "You're browsing as a guest —
+//   sign in (free) to save, build playlists, edit lyrics." One-tap
+//   Sign in, dismissible per device (localStorage).
+// - Compact card view is now the DEFAULT for users with no saved
+//   preference (was full). Existing users keep their choice.
+//
+// REVIEW POINT 3 — "Add to" from Public reading view
+// - New "📋 Add to" button on public-bhajan-detail. If the bhajan
+//   isn't in My Library, it's saved first (reuses saveToMyLibrary,
+//   which now RETURNS the new personal bhajan) then the S38 picker
+//   opens. If already saved, the local copy is found via
+//   savedFromPublicId. Guests are routed to sign-in.
+// - First-ever Save shows a one-time hint toast about what saving
+//   unlocks (playlists, editing).
+//
+// REVIEW POINT 4 — Live Mode on playlists/parodies
+// - Was hidden; now visible-but-disabled with "Programs only" chip
+//   and a one-line path forward (Edit → switch type to Program).
+//
+// REVIEW POINT 5 — voice-language chip
+// - "HI"/"EN" → "🎤 हिं"/"🎤 EN" with a clearer tooltip. (The Hindi
+//   TYPING toggle already read "🇮🇳 हिंदी ON" — left as is.) Plus a
+//   one-line how-it-works hint under Lyrics while typing is ON:
+//   "Type shyam → श्याम. Press space or tap a suggestion."
+//
+// REVIEW POINT 6 — mukhda rule made visible
+// - Helper text under Lyrics: "Leave a blank line after the mukhda
+//   so Parody view shows it correctly." Plus a LIVE chip: "Mukhda:
+//   N lines" (teal) or "No blank line yet — first 3 lines will be
+//   used" (saffron). Reuses getMukhda().
+//
+// REVIEW POINT 7 — dhun field
+// - Sub-label: "The song or bhajan whose tune this is sung to".
+//   Placeholder now a concrete example (both forms).
+//
+// REVIEW POINT 9 — taxonomy hints
+// - Deity: "Who the bhajan is about". Category: "Type: bhajan,
+//   aarti, chalisa…". Keywords: "Moods and occasions — #diwali
+//   #morning #parody". Both user and admin forms.
+//
+// REVIEW POINT 10 — search placeholder
+// - Both libraries: "🔍 Search — try 'shyam' or 'श्याम'".
+//
+// Not touched: Firestore rules, schema, S41 pills, cards, reading
+// view layout, playlist/program/parody logic.
+// ==============================================
+//
 // SANKIRTAN SAAS - SESSION 41
 // Bhajan Se Bhagwan Tak
 // CHANGES (Session 41 — Source button on cards + discovery pills):
@@ -550,7 +609,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.08.24.s41';
+const APP_VERSION = '2026.09.16.s42';
 
 // SESSION 30: log at startup so admin can verify which build is
 // running via the browser console (helps diagnose "is my new
@@ -1672,17 +1731,27 @@ const App = () => {
   // Swipe animation direction
   const [slideDir, setSlideDir] = useState(null);
 
-  // Compact card view
+  // Compact card view — SESSION 42: defaults to COMPACT for new
+  // users (was full). Compact shows more bhajans per screen, which
+  // is what first-time visitors browsing the library want. Anyone
+  // who has already chosen a view keeps their choice via localStorage.
   const [compactView, setCompactView] = useState(() => {
     try {
-      return localStorage.getItem('sankirtan-compact-view') === 'true';
+      const saved = localStorage.getItem('sankirtan-compact-view');
+      if (saved === null) return true;   // no prior choice → compact
+      return saved === 'true';
     } catch {
-      return false;
+      return true;
     }
   });
   useEffect(() => {
     try { localStorage.setItem('sankirtan-compact-view', compactView.toString()); } catch (e) {}
   }, [compactView]);
+
+  // SESSION 42: guest banner dismissal (per device)
+  const [guestBannerDismissed, setGuestBannerDismissed] = useState(() => {
+    try { return localStorage.getItem('sankirtan-guest-banner-dismissed') === '1'; } catch { return false; }
+  });
 
   // ==============================================
   // SPLASH SCREEN (SESSION 5: full 2.8s animation once per day,
@@ -2745,6 +2814,13 @@ const App = () => {
             setUser(null);
             setUserProfile(null);
             setBhajans([]);
+            // SESSION 42: unregistered visitors land directly on the
+            // Public Library as guests instead of a sign-in wall.
+            // The sign-in screen is still one tap away (header
+            // "Sign In" button, locked tabs, Save button) and a
+            // guest banner explains what registering unlocks.
+            setGuestMode(true);
+            setCurrentView('public-library');
           }
           setLoading(false);
         });
@@ -4299,7 +4375,9 @@ const App = () => {
         lastActive: window.firebase.firestore.FieldValue.serverTimestamp()
       };
 
-      await db.collection('users').doc(user.uid).collection('bhajans').add(bhajanData);
+      // SESSION 42: keep the ref so callers (public reading view's
+      // "Add to playlist") can chain save → add-to-program.
+      const newRef = await db.collection('users').doc(user.uid).collection('bhajans').add(bhajanData);
 
       await db.collection('users').doc(user.uid).update({
         'stats.bhajanCount': window.firebase.firestore.FieldValue.increment(1)
@@ -4318,7 +4396,17 @@ const App = () => {
         });
       } catch (e) { /* not admin — expected */ }
 
-      showToast(`✅ "${publicBhajan.title}" added to your library!`);
+      // SESSION 42: first-ever save gets a one-time hint about what
+      // saving unlocks. Later saves get the short toast.
+      let firstSave = false;
+      try {
+        firstSave = !localStorage.getItem('sankirtan-first-save-done');
+        if (firstSave) localStorage.setItem('sankirtan-first-save-done', '1');
+      } catch {}
+      showToast(firstSave
+        ? `✅ Saved! You can now add "${publicBhajan.title}" to playlists and edit its lyrics from My Library.`
+        : `✅ "${publicBhajan.title}" added to your library!`);
+      return { id: newRef.id, ...bhajanData };
     } catch (error) {
       console.error('Error saving bhajan:', error);
       showToast('Could not save: ' + error.message, 'error');
@@ -5453,6 +5541,10 @@ const App = () => {
       setUser(null);
       setUserProfile(null);
       setBhajans([]);
+      // SESSION 42: land on the Public Library as a guest (matches the
+      // new default for unregistered visitors) — avoids a flash of the
+      // sign-in screen between signOut() and onAuthStateChanged.
+      setGuestMode(true);
       setCurrentView('public-library');
       setShowPhoneLogin(false);
       setOtpSent(false);
@@ -6784,7 +6876,7 @@ const App = () => {
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="🔍 Search..."
+                    placeholder="🔍 Search — try 'shyam' or 'श्याम'"
                     aria-label="Search my library"
                     className={`w-full px-4 py-3 pr-24 border rounded-xl focus:ring-4 outline-none ${
                       darkMode
@@ -6799,10 +6891,10 @@ const App = () => {
                         ? 'bg-[#0B5A70] text-white border-[#0B5A70]'
                         : 'bg-white text-gray-600 border-gray-300 hover:border-[#0B5A70]/20'
                     }`}
-                    title={`Voice input: ${speechLang === 'hi-IN' ? 'Hindi' : 'English'}`}
+                    title={`Voice search language: ${speechLang === 'hi-IN' ? 'Hindi' : 'English'} — tap to switch`}
                     aria-label={`Voice input language: ${speechLang === 'hi-IN' ? 'Hindi' : 'English'}. Tap to switch.`}
                   >
-                    {speechLang === 'hi-IN' ? 'HI' : 'EN'}
+                    {speechLang === 'hi-IN' ? '🎤 हिं' : '🎤 EN'}
                   </button>
                   <button
                     onClick={() => startVoiceSearch('library')}
@@ -7444,6 +7536,7 @@ const App = () => {
                   <div>
                     <label className={fLabel}>
                       Deity
+                      <span className={`block text-xs font-normal mt-0.5 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Who the bhajan is about</span>
                     </label>
                     <select
                       value={bhajanForm.deity}
@@ -7459,6 +7552,7 @@ const App = () => {
                   <div>
                     <label className={fLabel}>
                       Category
+                      <span className={`block text-xs font-normal mt-0.5 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Type: bhajan, aarti, chalisa…</span>
                     </label>
                     <select
                       value={bhajanForm.category}
@@ -7476,6 +7570,7 @@ const App = () => {
                 <div className="mb-4">
                   <label className={fLabel}>
                     तर्ज़ / धुन (Tune)
+                    <span className={`block text-xs font-normal mt-0.5 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>The song or bhajan whose tune this is sung to</span>
                   </label>
                   <div className="relative">
                     <input
@@ -7487,7 +7582,7 @@ const App = () => {
                       onBlur={() => setTimeout(() => setShowSuggestions(false), 300)}
                       onFocus={() => setActiveTypingField('dhun')}
                       className={fInput}
-                      placeholder={hindiTypingEnabled ? "Type in English, press space" : "e.g., तर्ज़: तुझे देखा तो..."}
+                      placeholder={hindiTypingEnabled ? "Type: tujhe dekha to" : "e.g., तुझे देखा तो..."}
                     />
                     {hindiTypingEnabled && showSuggestions && activeTypingField === 'dhun' && transliterationSuggestions.length > 0 && (
                       <div className={`absolute bottom-full left-0 right-0 mb-2 border rounded-lg shadow-[0_8px_30px_rgba(11,90,112,0.18)] p-2 flex flex-wrap gap-2 items-center z-30 ${darkMode ? "bg-[#1e2e33] border-[#0B5A70]/30" : "bg-[#FFFCF8] border-[#0B5A70]/15"}`}>
@@ -7792,12 +7887,37 @@ const App = () => {
                       </div>
                     )}
                   </div>
+
+                  {/* SESSION 42: two hints under Lyrics.
+                      (a) How Hindi typing works — shown only while ON.
+                      (b) The mukhda blank-line rule that Parody view
+                          depends on, plus a live chip showing how many
+                          lines are currently being read as the mukhda. */}
+                  <div className={`mt-2 space-y-1 text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                    {hindiTypingEnabled && (
+                      <p>⌨️ Type in English letters — e.g. <strong>shyam</strong> → <strong>श्याम</strong>. Press space or tap a suggestion.</p>
+                    )}
+                    <p className="flex flex-wrap items-center gap-2">
+                      <span>🎭 Leave a <strong>blank line after the mukhda</strong> so Parody view shows it correctly.</span>
+                      {bhajanForm.lyrics && bhajanForm.lyrics.trim() && (() => {
+                        const m = getMukhda({ lyrics: bhajanForm.lyrics });
+                        const n = m ? m.split('\n').length : 0;
+                        const hasBlank = /\n\s*\n/.test(bhajanForm.lyrics.replace(/^\s+/, ''));
+                        return (
+                          <span className={`px-2 py-0.5 rounded-full font-semibold ${hasBlank ? (darkMode ? 'bg-[#0B5A70]/20 text-teal-200' : 'bg-[#0B5A70]/8 text-[#0B5A70]') : (darkMode ? 'bg-[#E65100]/20 text-orange-200' : 'bg-[#E65100]/10 text-[#E65100]')}`}>
+                            {hasBlank ? `Mukhda: ${n} line${n === 1 ? '' : 's'}` : 'No blank line yet — first 3 lines will be used'}
+                          </span>
+                        );
+                      })()}
+                    </p>
+                  </div>
                 </div>
 
                 {/* Keywords */}
                 <div className="mb-4">
                   <label className={fLabel + " mb-2"}>
                     Keywords (tap to select)
+                    <span className={`block text-xs font-normal mt-0.5 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Moods and occasions — helps others find it by #diwali, #morning, #parody…</span>
                   </label>
                   <div className="flex flex-wrap gap-2">
                     {allKeywordOptions.map(kw => (
@@ -8137,14 +8257,34 @@ const App = () => {
                   </span>
                 </div>
 
-                {selectedProgram.bhajanIds && selectedProgram.bhajanIds.length > 0 && getProgramType(selectedProgram) === 'program' && (
-                  <button
-                    onClick={() => startLiveProgram(selectedProgram)}
-                    className="w-full mt-6 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-bold py-4 rounded-xl shadow-lg text-lg flex items-center justify-center gap-2"
-                  >
-                    🎤 START LIVE PERFORMANCE
-                  </button>
-                )}
+                {selectedProgram.bhajanIds && selectedProgram.bhajanIds.length > 0 && (() => {
+                  const t = getProgramType(selectedProgram);
+                  if (t === 'program') {
+                    return (
+                      <button
+                        onClick={() => startLiveProgram(selectedProgram)}
+                        className="w-full mt-6 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-bold py-4 rounded-xl shadow-lg text-lg flex items-center justify-center gap-2"
+                      >
+                        🎤 START LIVE PERFORMANCE
+                      </button>
+                    );
+                  }
+                  // SESSION 42: previously the button was simply hidden on
+                  // playlists and parodies, which read as "feature missing".
+                  // Now it's visible but disabled, with a one-line reason
+                  // and a path forward (convert to a program via Edit).
+                  return (
+                    <div className={`w-full mt-6 rounded-xl border p-4 ${darkMode ? 'bg-[#1e2e33] border-[#0B5A70]/20' : 'bg-[#0B5A70]/5 border-[#0B5A70]/12'}`}>
+                      <div className={`font-bold text-base flex items-center gap-2 ${darkMode ? 'text-gray-400' : 'text-[#0B5A70]/50'}`}>
+                        🎤 Live Performance
+                        <span className={`text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full ${darkMode ? 'bg-[#0B5A70]/25 text-teal-200' : 'bg-[#0B5A70]/10 text-[#0B5A70]'}`}>Programs only</span>
+                      </div>
+                      <p className={`text-xs mt-1.5 ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                        Live mode is for dated events. To perform this {t === 'parody' ? 'parody' : 'playlist'} live, tap <strong>Edit</strong> and switch its type to <strong>📅 Program</strong>.
+                      </p>
+                    </div>
+                  );
+                })()}
               </div>
 
               <div className="mb-4">
@@ -8811,6 +8951,39 @@ const App = () => {
               ============================================== */}
           {currentView === 'public-library' && (
             <>
+              {/* SESSION 42: guest banner. Unregistered visitors now land
+                  here directly (no sign-in wall), so this is where they
+                  learn what registering unlocks. Dismissible per device. */}
+              {guestMode && !user && !guestBannerDismissed && (
+                <div className={`mb-4 rounded-2xl border p-4 flex items-start gap-3 ${darkMode ? 'bg-[#1e2e33] border-[#E65100]/30' : 'bg-[#FFF3E5] border-[#E65100]/30'}`}>
+                  <div className="text-2xl flex-shrink-0" aria-hidden="true">🙏</div>
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm font-bold ${darkMode ? 'text-amber-100' : 'text-[#0B5A70]'}`}>
+                      You're browsing as a guest
+                    </p>
+                    <p className={`text-xs mt-0.5 ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                      Sign in (free) to save bhajans, build playlists for jagrans, and edit lyrics your way.
+                    </p>
+                    <button
+                      onClick={() => { setGuestMode(false); setLoading(false); }}
+                      className="mt-2 bg-[#0B5A70] hover:bg-[#094a5d] text-white text-xs font-bold px-3 py-1.5 rounded-lg"
+                    >
+                      Sign in with Google →
+                    </button>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setGuestBannerDismissed(true);
+                      try { localStorage.setItem('sankirtan-guest-banner-dismissed', '1'); } catch {}
+                    }}
+                    className={`text-xl leading-none px-1 flex-shrink-0 ${darkMode ? 'text-gray-500 hover:text-gray-300' : 'text-gray-400 hover:text-gray-600'}`}
+                    aria-label="Dismiss"
+                  >
+                    ×
+                  </button>
+                </div>
+              )}
+
               {isAdmin && (
                 <div className="flex justify-end mb-4">
                   <button
@@ -8828,7 +9001,7 @@ const App = () => {
                     type="text"
                     value={publicSearchQuery}
                     onChange={(e) => setPublicSearchQuery(e.target.value)}
-                    placeholder="🔍 Search..."
+                    placeholder="🔍 Search — try 'shyam' or 'श्याम'"
                     aria-label="Search public library"
                     className={`w-full px-4 py-3 pr-24 border rounded-xl focus:ring-4 outline-none ${
                       darkMode
@@ -8843,10 +9016,10 @@ const App = () => {
                         ? 'bg-[#0B5A70] text-white border-[#0B5A70]'
                         : 'bg-white text-gray-600 border-gray-300 hover:border-[#0B5A70]/20'
                     }`}
-                    title={`Voice input: ${speechLang === 'hi-IN' ? 'Hindi' : 'English'}`}
+                    title={`Voice search language: ${speechLang === 'hi-IN' ? 'Hindi' : 'English'} — tap to switch`}
                     aria-label={`Voice input language: ${speechLang === 'hi-IN' ? 'Hindi' : 'English'}. Tap to switch.`}
                   >
-                    {speechLang === 'hi-IN' ? 'HI' : 'EN'}
+                    {speechLang === 'hi-IN' ? '🎤 हिं' : '🎤 EN'}
                   </button>
                   <button
                     onClick={() => startVoiceSearch('public')}
@@ -9338,6 +9511,32 @@ const App = () => {
                       {savingToLibrary ? '...' : '💾 Save'}
                     </button>
                   )}
+
+                  {/* SESSION 42: "Add to" directly from the public reading
+                      view. If the bhajan isn't in the user's library yet,
+                      we save it first (silently reusing saveToMyLibrary),
+                      then open the same picker My Library uses. Removes
+                      the hidden two-step "save, go to My Library, add". */}
+                  <button
+                    onClick={async () => {
+                      if (!user) { setGuestMode(false); setLoading(false); return; }
+                      const existing = bhajans.find(b => b.savedFromPublicId === selectedPublicBhajan.id);
+                      if (existing) { setAddToProgramFor(existing); return; }
+                      if (savedBhajanIds.has(selectedPublicBhajan.id)) {
+                        // Saved earlier (possibly before savedFromPublicId existed) —
+                        // point them to My Library rather than failing silently.
+                        showToast('This bhajan is already in My Library — open it there to add to a playlist.', 'error');
+                        return;
+                      }
+                      const saved = await saveToMyLibrary(selectedPublicBhajan);
+                      if (saved && saved.id) setAddToProgramFor(saved);
+                    }}
+                    disabled={savingToLibrary}
+                    className={`px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 transition-colors disabled:opacity-50 ${darkMode ? 'bg-[#1e2e33] text-gray-300 hover:bg-[#0B5A70]/20' : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15'}`}
+                    title="Add to a playlist, program, or parody (saves to your library first)"
+                  >
+                    📋 Add to
+                  </button>
 
                   <button
                     onClick={() => handleShareBhajan(selectedPublicBhajan, true)}
@@ -10287,7 +10486,7 @@ const App = () => {
                 {/* Deity and Category */}
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-sm font-semibold text-[#0B5A70] mb-1">Deity</label>
+                    <label className="block text-sm font-semibold text-[#0B5A70] mb-1">Deity <span className="block text-xs font-normal text-gray-500">Who the bhajan is about</span></label>
                     <select
                       value={publicBhajanForm.deity}
                       onChange={(e) => setPublicBhajanForm({...publicBhajanForm, deity: e.target.value})}
@@ -10299,7 +10498,7 @@ const App = () => {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-semibold text-[#0B5A70] mb-1">Category</label>
+                    <label className="block text-sm font-semibold text-[#0B5A70] mb-1">Category <span className="block text-xs font-normal text-gray-500">Type: bhajan, aarti, chalisa…</span></label>
                     <select
                       value={publicBhajanForm.category}
                       onChange={(e) => setPublicBhajanForm({...publicBhajanForm, category: e.target.value})}
@@ -10316,6 +10515,7 @@ const App = () => {
                 <div>
                   <label className="block text-sm font-semibold text-[#0B5A70] mb-1">
                     तर्ज़ / धुन (Tune)
+                    <span className={`block text-xs font-normal mt-0.5 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>The song or bhajan whose tune this is sung to</span>
                   </label>
                   <div className="relative">
                     <input
@@ -10327,7 +10527,7 @@ const App = () => {
                       onBlur={() => setTimeout(() => setShowSuggestions(false), 300)}
                       onFocus={() => setActiveTypingField('dhun')}
                       className="w-full px-4 py-3 border border-[#0B5A70]/15 rounded-xl outline-none"
-                      placeholder={hindiTypingEnabled ? "Type in English, press space" : "e.g., तर्ज़: तुझे देखा तो..."}
+                      placeholder={hindiTypingEnabled ? "Type: tujhe dekha to" : "e.g., तुझे देखा तो..."}
                     />
                     {hindiTypingEnabled && showSuggestions && activeTypingField === 'dhun' && transliterationSuggestions.length > 0 && (
                       <div className="absolute bottom-full left-0 right-0 mb-2 bg-[#FFFCF8] border border-[#0B5A70]/15 rounded-lg shadow-[0_8px_30px_rgba(11,90,112,0.18)] p-2 flex flex-wrap gap-2 items-center z-30">
@@ -10626,7 +10826,7 @@ const App = () => {
 
                 {/* Keywords */}
                 <div>
-                  <label className="block text-sm font-semibold text-[#0B5A70] mb-2">Keywords</label>
+                  <label className="block text-sm font-semibold text-[#0B5A70] mb-2">Keywords <span className="block text-xs font-normal text-gray-500">Moods and occasions — e.g. #diwali #morning #parody</span></label>
                   <div className="flex flex-wrap gap-2">
                     {allKeywordOptions.map(kw => (
                       <button
