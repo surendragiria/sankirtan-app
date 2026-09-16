@@ -6,7 +6,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 // CHANGES (Session 44 — splash credits):
 //
 // Credits line on the splash screen now reads:
-//   🙏 By Grace of Lord Babosa 🙏
+//   🙏 Made for Bhajan Community By Grace of Lord Babosa 🙏
 //   Inspired by Manju Baisa
 // (replaces "Made for the Bhajan Community / by Grace of Babosa
 // Bhagwan").
