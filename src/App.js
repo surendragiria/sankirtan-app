@@ -1,6 +1,29 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 
 // ==============================================
+// SANKIRTAN SAAS - SESSION 45
+// Bhajan Se Bhagwan Tak
+// CHANGES (Session 45 — labels, related logic, chips, daily picker):
+//
+// 1. "Tag" → "Mood" on all three filter dropdowns. Reading-view
+//    "Keywords:" → "Moods:"; form labels "Keywords" → "Moods".
+//    Data field is still `keywords` — labels only.
+// 2. "Parody/Parodies" → "Medley/Medleys" in every user-facing
+//    string. Data value stays type:'parody' (no migration).
+// 3. ॐ removed: two placeholders and the transliteration map
+//    ('om'/'aum' now → ओम). Splash never had it; posters are
+//    static images (regenerate on request).
+// 4. Related bhajans (both reading views) now score on deity +
+//    moods: same deity = 2, each shared mood = 1. Previously
+//    moods only, so a bhajan with no moods had no relatives.
+// 5. Mood chips on the reading view were near-invisible
+//    (5% bg / 70% text). Now teal 10% bg, full teal text, border,
+//    semibold; dark-mode variant.
+// 7. Admin daily-bhajan picker: Deity + Mood filter selects above
+//    the search, match count, cap raised 20 → 60.
+// 6. (User manual) shipped as public/guide.html — see outputs.
+// ==============================================
+//
 // SANKIRTAN SAAS - SESSION 44
 // Bhajan Se Bhagwan Tak
 // CHANGES (Session 44 — splash credits):
@@ -37,10 +60,10 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 //
 // MY LIBRARY
 // - Header count: "N bhajans · K parodies in your collection".
-// - "+ Add" is now two buttons: "+ Bhajan" (teal) and "+ 🎭 Parody"
+// - "+ Add" is now two buttons: "+ Bhajan" (teal) and "+ 🎭 Medley"
 //   (saffron). openCreateParody() opens the existing form pre-typed
 //   as parody with the picker open.
-// - Collapsible "🎭 Parodies (K)" pill above the bhajan list; rows
+// - Collapsible "🎭 Medleys (K)" pill above the bhajan list; rows
 //   show name · N mukhdas · purpose; tap opens the mukhda view.
 //   Hidden while searching/filtering. Auto-opens after creating one.
 // - Parody detail back-nav → "← Back to My Library". Create-form
@@ -50,7 +73,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 // PLAYLISTS TAB
 // - Back to two toggles (🎵 Playlists / 📅 Programs). 'parody'
 //   retired as a persisted view-mode value. Create form no longer
-//   offers Parody as a type (shows a locked 🎭 Parody chip only
+//   offers Parody as a type (shows a locked 🎭 Medley chip only
 //   when already creating/editing one).
 //
 // SAVE BUTTON AT TOP
@@ -110,7 +133,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 //
 // REVIEW POINT 6 — mukhda rule made visible
 // - Helper text under Lyrics: "Leave a blank line after the mukhda
-//   so Parody view shows it correctly." Plus a LIVE chip: "Mukhda:
+//   so Medley view shows it correctly." Plus a LIVE chip: "Mukhda:
 //   N lines" (teal) or "No blank line yet — first 3 lines will be
 //   used" (saffron). Reuses getMukhda().
 //
@@ -407,7 +430,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 // UI changes
 // - Bottom tab: unchanged ("Playlists").
 // - List page: three-way toggle (🎵 Playlists / 📅 Programs /
-//   🎭 Parodies), each persists to localStorage as before.
+//   🎭 Medleys), each persists to localStorage as before.
 // - Card render: 🎭 emoji for parody, "Open Parody →" CTA.
 // - Detail render: parody type renders MUKHDA BLOCKS — bhajan
 //   title small at top, first 3 lines of lyrics large below,
@@ -679,7 +702,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.09.16.s44b';
+const APP_VERSION = '2026.09.16.s45';
 
 // SESSION 30: log at startup so admin can verify which build is
 // running via the browser console (helps diagnose "is my new
@@ -807,7 +830,7 @@ const ONBOARDING_STEPS = [
 
 // Fallback Hindi transliteration map (used when API fails)
 const HINDI_FALLBACK_MAP = {
-  'jai': 'जय', 'shri': 'श्री', 'shree': 'श्री', 'om': 'ॐ', 'aum': 'ॐ',
+  'jai': 'जय', 'shri': 'श्री', 'shree': 'श्री', 'om': 'ओम', 'aum': 'ओम',
   'ram': 'राम', 'rama': 'राम', 'krishna': 'कृष्ण', 'krsna': 'कृष्ण',
   'hari': 'हरि', 'hare': 'हरे', 'radha': 'राधा', 'radhe': 'राधे',
   'shiv': 'शिव', 'shiva': 'शिव', 'ganesh': 'गणेश', 'ganesha': 'गणेश',
@@ -1681,6 +1704,9 @@ const App = () => {
   // SESSION 31: search query for admin's bhajan picker + dropdown open state.
   // With 250+ public bhajans, the old dropdown was impractical.
   const [dailyEditSearch, setDailyEditSearch] = useState('');
+  // SESSION 45: deity / mood filters for the daily-bhajan picker
+  const [dailyEditDeity, setDailyEditDeity] = useState('');
+  const [dailyEditMood, setDailyEditMood] = useState('');
   const [dailyEditSearchOpen, setDailyEditSearchOpen] = useState(false);
 
   // Manual Add/Edit Public Bhajan states (admin)
@@ -4652,33 +4678,27 @@ const App = () => {
   // Now they only recompute when the selected bhajan or the source
   // list actually changes.
   // ==============================================
-  const relatedMyBhajans = useMemo(() => {
-    if (!selectedBhajan || !selectedBhajan.keywords || selectedBhajan.keywords.length === 0) return [];
-    const relKws = new Set(selectedBhajan.keywords);
-    return bhajans
-      .filter(b => b.id !== selectedBhajan.id && b.keywords && b.keywords.some(kw => relKws.has(kw)))
-      .map(b => ({
-        ...b,
-        matchCount: b.keywords.filter(kw => relKws.has(kw)).length,
-        matchedKws: b.keywords.filter(kw => relKws.has(kw))
-      }))
-      .sort((a, b) => b.matchCount - a.matchCount)
+  // SESSION 45: Related bhajans now score on DEITY + MOODS (keywords),
+  // not moods alone. Same deity = 2 points, each shared mood = 1.
+  // A bhajan with no moods still gets relatives via its deity.
+  const computeRelated = (current, pool) => {
+    if (!current) return [];
+    const relKws = new Set(current.keywords || []);
+    const deity = (current.deity || '').trim().toLowerCase();
+    return pool
+      .filter(b => b.id !== current.id)
+      .map(b => {
+        const matchedKws = (b.keywords || []).filter(kw => relKws.has(kw));
+        const sameDeity = !!deity && (b.deity || '').trim().toLowerCase() === deity;
+        return { ...b, matchedKws, sameDeity, score: (sameDeity ? 2 : 0) + matchedKws.length };
+      })
+      .filter(b => b.score > 0)
+      .sort((a, b) => b.score - a.score || (a.title || '').localeCompare(b.title || ''))
       .slice(0, 6);
-  }, [selectedBhajan, bhajans]);
+  };
 
-  const relatedPublicBhajans = useMemo(() => {
-    if (!selectedPublicBhajan || !selectedPublicBhajan.keywords || selectedPublicBhajan.keywords.length === 0) return [];
-    const relKws = new Set(selectedPublicBhajan.keywords);
-    return publicBhajans
-      .filter(b => b.id !== selectedPublicBhajan.id && b.keywords && b.keywords.some(kw => relKws.has(kw)))
-      .map(b => ({
-        ...b,
-        matchCount: b.keywords.filter(kw => relKws.has(kw)).length,
-        matchedKws: b.keywords.filter(kw => relKws.has(kw))
-      }))
-      .sort((a, b) => b.matchCount - a.matchCount)
-      .slice(0, 6);
-  }, [selectedPublicBhajan, publicBhajans]);
+  const relatedMyBhajans = useMemo(() => computeRelated(selectedBhajan, bhajans), [selectedBhajan, bhajans]);
+  const relatedPublicBhajans = useMemo(() => computeRelated(selectedPublicBhajan, publicBhajans), [selectedPublicBhajan, publicBhajans]);
 
   const myPrevNext = useMemo(() => {
     if (!selectedBhajan || filteredBhajans.length <= 1) return null;
@@ -5252,7 +5272,7 @@ const App = () => {
         lastActive: window.firebase.firestore.FieldValue.serverTimestamp()
       });
       const t = getProgramType(program);
-      const label = t === 'parody' ? 'parody' : t === 'playlist' ? 'playlist' : 'program';
+      const label = t === 'parody' ? 'medley' : t === 'playlist' ? 'playlist' : 'program';
       showToast(`✓ Added to ${label} "${program.name}"`);
     } catch (error) {
       console.error('Add-to-program failed:', error);
@@ -5275,7 +5295,7 @@ const App = () => {
   const saveProgram = async () => {
     if (!programForm.name.trim()) {
       const t = programForm.type;
-      const noun = t === 'parody' ? 'parody' : t === 'playlist' ? 'playlist' : 'program';
+      const noun = t === 'parody' ? 'medley' : t === 'playlist' ? 'playlist' : 'program';
       setProgramFormError(`Please enter a ${noun} name`);
       return;
     }
@@ -5308,7 +5328,7 @@ const App = () => {
       };
 
       const programsRef = db.collection('users').doc(user.uid).collection('programs');
-      const label = isParody ? 'Parody' : (isPlaylist ? 'Playlist' : 'Program');
+      const label = isParody ? 'Medley' : (isPlaylist ? 'Playlist' : 'Program');
 
       if (editingProgram) {
         await programsRef.doc(editingProgram.id).update(programData);
@@ -5339,7 +5359,7 @@ const App = () => {
   const deleteProgram = (program) => {
     // SESSION 32/36: label matches the program's actual type
     const pType = getProgramType(program);
-    const label = pType === 'parody' ? 'Parody' : (pType === 'playlist' ? 'Playlist' : 'Program');
+    const label = pType === 'parody' ? 'Medley' : (pType === 'playlist' ? 'Playlist' : 'Program');
     askConfirm(
       {
         title: `Delete ${label}?`,
@@ -6608,7 +6628,7 @@ const App = () => {
                   <div className="text-center py-10">
                     <div className="text-5xl mb-3">🎵</div>
                     <p className={`text-sm font-semibold mb-1 ${darkMode ? 'text-amber-100' : 'text-[#0B5A70]'}`}>
-                      No playlists, programs, or parodies yet
+                      No playlists, programs, or medleys yet
                     </p>
                     <p className={`text-xs mb-4 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                       Create one first, then come back to add this bhajan.
@@ -6640,7 +6660,7 @@ const App = () => {
                         byType[key].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
                       }
                       const sections = [
-                        { key: 'parody', label: '🎭 Parodies', items: byType.parody },
+                        { key: 'parody', label: '🎭 Medleys', items: byType.parody },
                         { key: 'playlist', label: '🎵 Playlists', items: byType.playlist },
                         { key: 'program', label: '📅 Programs', items: byType.program },
                       ].filter(s => s.items.length > 0);
@@ -6971,7 +6991,7 @@ const App = () => {
                     <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
                       <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-[#0B5A70]/70'}`}>
                         {bhajans.length} bhajan{bhajans.length === 1 ? '' : 's'}
-                        {myParodies.length > 0 ? ` · ${myParodies.length} parod${myParodies.length === 1 ? 'y' : 'ies'}` : ''} in your collection
+                        {myParodies.length > 0 ? ` · ${myParodies.length} medley${myParodies.length === 1 ? '' : 's'}` : ''} in your collection
                       </p>
                       {/* SESSION 43: "+ Add" is now a two-way choice — Bhajan
                           or Parody. Parodies are performance units (a medley
@@ -6987,9 +7007,9 @@ const App = () => {
                         <button
                           onClick={openCreateParody}
                           className="bg-[#E65100] hover:bg-[#cc4700] text-white font-semibold px-4 py-2 rounded-xl shadow-md flex items-center gap-1.5 text-sm"
-                          title="A parody is a medley — only the mukhda of each bhajan is shown"
+                          title="A medley shows only the mukhda of each bhajan"
                         >
-                          <span className="text-lg leading-none">+</span> 🎭 Parody
+                          <span className="text-lg leading-none">+</span> 🎭 Medley
                         </button>
                       </div>
                     </div>
@@ -7007,7 +7027,7 @@ const App = () => {
                               : (darkMode ? 'bg-[#162226] border border-[#0B5A70]/25 text-teal-200 hover:border-[#0B5A70]/50' : 'bg-[#FFFCF8] border border-[#0B5A70]/15 text-[#0B5A70] hover:border-[#0B5A70]/40')
                           }`}
                         >
-                          🎭 Parodies ({myParodies.length})
+                          🎭 Medleys ({myParodies.length})
                           <span className="text-xs opacity-70">{libraryParodiesOpen ? '▲' : '▼'}</span>
                         </button>
                         {libraryParodiesOpen && (
@@ -7172,7 +7192,7 @@ const App = () => {
                       : `${darkMode ? 'border-[#0B5A70]/20' : 'border-[#0B5A70]/12'}`
                   }`}
                 >
-                  <option value="">Tag</option>
+                  <option value="">Mood</option>
                   {allKeywordOptions.map(kw => (
                     <option key={kw} value={kw}>#{kw}</option>
                   ))}
@@ -7347,7 +7367,7 @@ const App = () => {
                   ← {programContext
                     ? `Back to ${(() => {
                         const t = getProgramType(programContext);
-                        return t === 'parody' ? 'Parody' : t === 'playlist' ? 'Playlist' : 'Program';
+                        return t === 'parody' ? 'Medley' : t === 'playlist' ? 'Playlist' : 'Program';
                       })()}`
                     : 'Back'}
                 </button>
@@ -7485,10 +7505,10 @@ const App = () => {
 
                 {selectedBhajan.keywords && selectedBhajan.keywords.length > 0 && (
                   <div className="mt-6 pt-4 border-t border-[#0B5A70]/8">
-                    <p className="text-xs text-gray-500 mb-2">Keywords:</p>
+                    <p className={`text-xs mb-2 ${darkMode ? "text-gray-400" : "text-[#0B5A70]/70"}`}>Moods:</p>
                     <div className="flex flex-wrap gap-2">
                       {selectedBhajan.keywords.map(kw => (
-                        <span key={kw} className="bg-[#0B5A70]/5 text-[#0B5A70]/70 px-3 py-1 rounded-full text-sm">
+                        <span key={kw} className={`px-3 py-1 rounded-full text-sm font-semibold border ${darkMode ? "bg-[#0B5A70]/25 text-teal-200 border-[#0B5A70]/40" : "bg-[#0B5A70]/10 text-[#0B5A70] border-[#0B5A70]/25"}`}>
                           #{kw}
                         </span>
                       ))}
@@ -7532,7 +7552,7 @@ const App = () => {
 
                   // SESSION 32/36: label + emoji match program type
                   const ctxType = getProgramType(programContext);
-                  const ctxLabel = ctxType === 'parody' ? 'this parody' :
+                  const ctxLabel = ctxType === 'parody' ? 'this medley' :
                                    ctxType === 'playlist' ? 'this playlist' :
                                    'this program';
                   const ctxEmoji = ctxType === 'parody' ? '🎭' : '🎵';
@@ -7688,7 +7708,7 @@ const App = () => {
                       onBlur={() => setTimeout(() => setShowSuggestions(false), 300)}
                       onFocus={() => setActiveTypingField('title')}
                       className={fInput + " text-lg"}
-                      placeholder={hindiTypingEnabled ? "Type: om jai jagdish hare" : "e.g., ॐ जय जगदीश हरे"}
+                      placeholder={hindiTypingEnabled ? "Type: om jai jagdish hare" : "e.g., जय जगदीश हरे"}
                     />
                     {hindiTypingEnabled && showSuggestions && activeTypingField === 'title' && transliterationSuggestions.length > 0 && (
                       <div className={`absolute bottom-full left-0 right-0 mb-2 border rounded-lg shadow-[0_8px_30px_rgba(11,90,112,0.18)] p-2 flex flex-wrap gap-2 items-center z-30 ${darkMode ? "bg-[#1e2e33] border-[#0B5A70]/30" : "bg-[#FFFCF8] border-[#0B5A70]/15"}`}>
@@ -8095,7 +8115,7 @@ const App = () => {
                       <p>⌨️ Type in English letters — e.g. <strong>shyam</strong> → <strong>श्याम</strong>. Press space or tap a suggestion.</p>
                     )}
                     <p className="flex flex-wrap items-center gap-2">
-                      <span>🎭 Leave a <strong>blank line after the mukhda</strong> so Parody view shows it correctly.</span>
+                      <span>🎭 Leave a <strong>blank line after the mukhda</strong> so Medley view shows it correctly.</span>
                       {bhajanForm.lyrics && bhajanForm.lyrics.trim() && (() => {
                         const m = getMukhda({ lyrics: bhajanForm.lyrics });
                         const n = m ? m.split('\n').length : 0;
@@ -8113,7 +8133,7 @@ const App = () => {
                 {/* Keywords */}
                 <div className="mb-4">
                   <label className={fLabel + " mb-2"}>
-                    Keywords (tap to select)
+                    Moods (tap to select)
                     <span className={`block text-xs font-normal mt-0.5 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Moods and occasions — helps others find it by #diwali, #morning, #parody…</span>
                   </label>
                   <div className="flex flex-wrap gap-2">
@@ -8258,7 +8278,7 @@ const App = () => {
                   value={programSearchQuery}
                   onChange={(e) => setProgramSearchQuery(e.target.value)}
                   placeholder={
-                    isParodyView ? "🔍 Search parodies..." :
+                    isParodyView ? "🔍 Search medleys..." :
                     isPlaylistView ? "🔍 Search playlists..." :
                     "🔍 Search programs by name or venue..."
                   }
@@ -8276,15 +8296,15 @@ const App = () => {
                 (() => {
                   // SESSION 36: derive labels once for the empty state
                   const emoji = isParodyView ? '🎭' : (isPlaylistView ? '🎵' : '📅');
-                  const Noun = isParodyView ? 'Parody' : (isPlaylistView ? 'Playlist' : 'Program');
-                  const nounPlural = isParodyView ? 'parodies' : (isPlaylistView ? 'playlists' : 'programs');
+                  const Noun = isParodyView ? 'Medley' : (isPlaylistView ? 'Playlist' : 'Program');
+                  const nounPlural = isParodyView ? 'medleys' : (isPlaylistView ? 'playlists' : 'programs');
                   const firstCta = isParodyView
-                    ? 'Create your first parody — a compact medley showing just the mukhda of each bhajan'
+                    ? 'Create your first medley — shows just the mukhda of each bhajan'
                     : (isPlaylistView
                       ? 'Create your first playlist for daily practice or a themed collection'
                       : 'Create your first program for an upcoming jagran or sankirtan');
                   const typeIntro = isParodyView
-                    ? 'Parodies show just the mukhda of each bhajan — perfect for singing a medley of short pieces.'
+                    ? 'Medleys show just the mukhda of each bhajan — perfect for singing several short pieces back to back.'
                     : (isPlaylistView
                       ? 'Playlists are undated collections for daily practice or themed listening.'
                       : 'Programs are dated events like jagrans and sankirtans.');
@@ -8350,7 +8370,7 @@ const App = () => {
                           program.purpose ? (
                             <p className="text-sm text-[#E65100] mb-1">{program.purpose}</p>
                           ) : (
-                            <p className="text-xs text-gray-500 mb-1 italic">Parody</p>
+                            <p className="text-xs text-gray-500 mb-1 italic">Medley</p>
                           )
                         ) : isPl ? (
                           program.purpose ? (
@@ -8369,7 +8389,7 @@ const App = () => {
                           </>
                         )}
                         <p className="text-xs text-[#0B5A70]/60 mt-3">
-                          {isPar ? 'Open Parody →' : (isPl ? 'Open Playlist →' : 'View Program →')}
+                          {isPar ? 'Open Medley →' : (isPl ? 'Open Playlist →' : 'View Program →')}
                         </p>
                       </button>
                     );
@@ -8464,7 +8484,7 @@ const App = () => {
                         <span className={`text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full ${darkMode ? 'bg-[#0B5A70]/25 text-teal-200' : 'bg-[#0B5A70]/10 text-[#0B5A70]'}`}>Programs only</span>
                       </div>
                       <p className={`text-xs mt-1.5 ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                        Live mode is for dated events. To perform this {t === 'parody' ? 'parody' : 'playlist'} live, tap <strong>Edit</strong> and switch its type to <strong>📅 Program</strong>.
+                        Live mode is for dated events. To perform this {t === 'parody' ? 'medley' : 'playlist'} live, tap <strong>Edit</strong> and switch its type to <strong>📅 Program</strong>.
                       </p>
                     </div>
                   );
@@ -8475,7 +8495,7 @@ const App = () => {
                 <h3 className="text-lg font-bold text-[#0B5A70] mb-3">
                   {(() => {
                     const t = getProgramType(selectedProgram);
-                    return t === 'parody' ? 'Mukhdas in this Parody:' :
+                    return t === 'parody' ? 'Mukhdas in this Medley:' :
                            t === 'playlist' ? 'Bhajans in this Playlist:' :
                            'Bhajans in this Program:';
                   })()}
@@ -8485,7 +8505,7 @@ const App = () => {
                     <p className="text-[#0B5A70] mb-2">
                       {(() => {
                         const t = getProgramType(selectedProgram);
-                        return t === 'parody' ? 'No bhajans in this parody yet' :
+                        return t === 'parody' ? 'No bhajans in this medley yet' :
                                t === 'playlist' ? 'No bhajans in this playlist yet' :
                                'No bhajans in this program yet';
                       })()}
@@ -8644,7 +8664,7 @@ const App = () => {
                   {(() => {
                     const t = programForm.type;
                     const editing = currentView === 'edit-program';
-                    const noun = t === 'parody' ? 'Parody' : t === 'playlist' ? 'Playlist' : 'Program';
+                    const noun = t === 'parody' ? 'Medley' : t === 'playlist' ? 'Playlist' : 'Program';
                     return editing ? `✏️ Edit ${noun}` : `➕ Create New ${noun}`;
                   })()}
                 </h2>
@@ -8686,13 +8706,13 @@ const App = () => {
                         type="button"
                         className="px-3 py-1.5 rounded-lg text-sm font-semibold bg-[#E65100] text-white shadow-sm"
                       >
-                        🎭 Parody
+                        🎭 Medley
                       </button>
                     )}
                   </div>
                   <p className={`text-xs mt-1.5 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                     {programForm.type === 'parody'
-                      ? 'A medley showing just the mukhda of each bhajan. Tap a mukhda to see full lyrics.'
+                      ? 'A medley shows just the mukhda of each bhajan. Tap a mukhda to see full lyrics.'
                       : (programForm.type === 'playlist'
                         ? 'A recurring collection — no date or venue. Good for daily practice or themed sets.'
                         : 'A one-time event with date and venue — like a jagran or sankirtan.')}
@@ -8703,7 +8723,7 @@ const App = () => {
                   <label className={fLabel}>
                     {(() => {
                       const t = programForm.type;
-                      return (t === 'parody' ? 'Parody Name' : t === 'playlist' ? 'Playlist Name' : 'Program Name');
+                      return (t === 'parody' ? 'Medley Name' : t === 'playlist' ? 'Playlist Name' : 'Program Name');
                     })()} <span className="text-red-500">*</span>
                   </label>
                   <input
@@ -8713,7 +8733,7 @@ const App = () => {
                     className={fInput + " text-lg"}
                     placeholder={(() => {
                       const t = programForm.type;
-                      return t === 'parody' ? 'e.g., Morning Marwari Parodies' :
+                      return t === 'parody' ? 'e.g., Sunday Morning Medley' :
                              t === 'playlist' ? 'e.g., Morning Prayers' :
                              'e.g., Diwali Jagran 2026';
                     })()}
@@ -8730,12 +8750,12 @@ const App = () => {
                       value={programForm.purpose}
                       onChange={(e) => setProgramForm({...programForm, purpose: e.target.value})}
                       className={fInput}
-                      placeholder={programForm.type === 'parody' ? "e.g., Wedding parodies, film-tune medley" : "e.g., Daily practice, kids' prayer time"}
+                      placeholder={programForm.type === 'parody' ? "e.g., Wedding songs, fast bhajans" : "e.g., Daily practice, kids' prayer time"}
                       maxLength={80}
                     />
                     <p className={`text-xs mt-1 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                       {programForm.type === 'parody'
-                        ? 'Short label that shows on the parody card.'
+                        ? 'Short label that shows on the medley card.'
                         : 'Short label that shows on the playlist card.'}
                     </p>
                   </div>
@@ -8786,7 +8806,7 @@ const App = () => {
                     <label className="block text-sm font-semibold text-[#0B5A70]">
                       Bhajans in {(() => {
                         const t = programForm.type;
-                        return t === 'parody' ? 'Parody' : t === 'playlist' ? 'Playlist' : 'Program';
+                        return t === 'parody' ? 'Medley' : t === 'playlist' ? 'Playlist' : 'Program';
                       })()} ({programForm.bhajanIds.length})
                     </label>
                     <button
@@ -9010,7 +9030,7 @@ const App = () => {
                               : 'border-[#0B5A70]/15'
                           }`}
                         >
-                          <option value="">Tag</option>
+                          <option value="">Mood</option>
                           {allPickerKeywords.map(kw => <option key={kw} value={kw}>#{kw}</option>)}
                         </select>
                         {hasActiveFilters && (
@@ -9315,7 +9335,7 @@ const App = () => {
                       : `${darkMode ? 'border-[#0B5A70]/20' : 'border-[#0B5A70]/12'}`
                   }`}
                 >
-                  <option value="">Tag</option>
+                  <option value="">Mood</option>
                   {allKeywordOptions.map(kw => (
                     <option key={kw} value={kw}>#{kw}</option>
                   ))}
@@ -9859,10 +9879,10 @@ const App = () => {
 
                 {selectedPublicBhajan.keywords && selectedPublicBhajan.keywords.length > 0 && (
                   <div className="mt-6 pt-4 border-t border-[#0B5A70]/8">
-                    <p className="text-xs text-gray-500 mb-2">Keywords:</p>
+                    <p className={`text-xs mb-2 ${darkMode ? "text-gray-400" : "text-[#0B5A70]/70"}`}>Moods:</p>
                     <div className="flex flex-wrap gap-2">
                       {selectedPublicBhajan.keywords.map(kw => (
-                        <span key={kw} className="bg-[#0B5A70]/5 text-[#0B5A70]/70 px-3 py-1 rounded-full text-sm">
+                        <span key={kw} className={`px-3 py-1 rounded-full text-sm font-semibold border ${darkMode ? "bg-[#0B5A70]/25 text-teal-200 border-[#0B5A70]/40" : "bg-[#0B5A70]/10 text-[#0B5A70] border-[#0B5A70]/25"}`}>
                           #{kw}
                         </span>
                       ))}
@@ -10050,23 +10070,49 @@ const App = () => {
                         );
                       }
 
-                      // Unselected state: search input + dropdown of matches
+                      // Unselected state: filters + search input + dropdown.
+                      // SESSION 45: added Deity and Mood filters and raised
+                      // the visible cap from 20 to 60 — admins couldn't reach
+                      // most of the library from the search alone.
                       const q = dailyEditSearch.trim().toLowerCase();
-                      const matches = q
-                        ? publicBhajans
-                            .filter(b => {
-                              const title = (b.title || '').toLowerCase();
-                              const deity = (b.deity || '').toLowerCase();
-                              const dhun = (b.dhun || '').toLowerCase();
-                              return title.includes(q) || deity.includes(q) || dhun.includes(q);
-                            })
-                            .slice(0, 20)
-                        : [...publicBhajans]
-                            .sort((a, b) => (a.title || '').localeCompare(b.title || ''))
-                            .slice(0, 20);
+                      const pickerDeities = [...new Set(publicBhajans.map(b => b.deity).filter(Boolean))].sort();
+                      const pickerMoods = [...new Set(publicBhajans.flatMap(b => b.keywords || []))].sort();
+                      const filtered = publicBhajans.filter(b => {
+                        if (dailyEditDeity && b.deity !== dailyEditDeity) return false;
+                        if (dailyEditMood && !(b.keywords || []).includes(dailyEditMood)) return false;
+                        if (!q) return true;
+                        const title = (b.title || '').toLowerCase();
+                        const deity = (b.deity || '').toLowerCase();
+                        const dhun = (b.dhun || '').toLowerCase();
+                        return title.includes(q) || deity.includes(q) || dhun.includes(q);
+                      });
+                      const matches = [...filtered]
+                        .sort((a, b) => (a.title || '').localeCompare(b.title || ''))
+                        .slice(0, 60);
 
                       return (
                         <div className="relative">
+                          <div className="grid grid-cols-2 gap-2 mb-2">
+                            <select
+                              value={dailyEditDeity}
+                              onChange={(e) => { setDailyEditDeity(e.target.value); setDailyEditSearchOpen(true); }}
+                              className="px-3 py-2 border border-[#0B5A70]/15 rounded-xl outline-none bg-white text-sm"
+                            >
+                              <option value="">All deities</option>
+                              {pickerDeities.map(d => <option key={d} value={d}>{d}</option>)}
+                            </select>
+                            <select
+                              value={dailyEditMood}
+                              onChange={(e) => { setDailyEditMood(e.target.value); setDailyEditSearchOpen(true); }}
+                              className="px-3 py-2 border border-[#0B5A70]/15 rounded-xl outline-none bg-white text-sm"
+                            >
+                              <option value="">All moods</option>
+                              {pickerMoods.map(k => <option key={k} value={k}>#{k}</option>)}
+                            </select>
+                          </div>
+                          <p className="text-[11px] text-gray-500 mb-1">
+                            {filtered.length} bhajan{filtered.length === 1 ? '' : 's'} match{filtered.length > 60 ? ' — showing first 60, narrow with search' : ''}
+                          </p>
                           <input
                             type="text"
                             value={dailyEditSearch}
@@ -10659,7 +10705,7 @@ const App = () => {
                       onBlur={() => setTimeout(() => setShowSuggestions(false), 300)}
                       onFocus={() => setActiveTypingField('title')}
                       className="w-full px-4 py-3 border border-[#0B5A70]/15 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none text-lg"
-                      placeholder={hindiTypingEnabled ? "Type: om jai jagdish hare" : "e.g., ॐ जय जगदीश हरे"}
+                      placeholder={hindiTypingEnabled ? "Type: om jai jagdish hare" : "e.g., जय जगदीश हरे"}
                     />
                     {hindiTypingEnabled && showSuggestions && activeTypingField === 'title' && transliterationSuggestions.length > 0 && (
                       <div className="absolute bottom-full left-0 right-0 mb-2 bg-[#FFFCF8] border border-[#0B5A70]/15 rounded-lg shadow-[0_8px_30px_rgba(11,90,112,0.18)] p-2 flex flex-wrap gap-2 items-center z-30">
@@ -11042,7 +11088,7 @@ const App = () => {
 
                 {/* Keywords */}
                 <div>
-                  <label className="block text-sm font-semibold text-[#0B5A70] mb-2">Keywords <span className="block text-xs font-normal text-gray-500">Moods and occasions — e.g. #diwali #morning #parody</span></label>
+                  <label className="block text-sm font-semibold text-[#0B5A70] mb-2">Moods <span className="block text-xs font-normal text-gray-500">Moods and occasions — e.g. #diwali #morning #parody</span></label>
                   <div className="flex flex-wrap gap-2">
                     {allKeywordOptions.map(kw => (
                       <button
