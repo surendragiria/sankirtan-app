@@ -1,6 +1,28 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 
 // ==============================================
+// SANKIRTAN SAAS - SESSION 44
+// Bhajan Se Bhagwan Tak
+// CHANGES (Session 44 — splash credits):
+//
+// Credits line on the splash screen now reads:
+//   🙏 By Grace of Lord Babosa 🙏
+//   Inspired by Manju Baisa
+// (replaces "Made for the Bhajan Community / by Grace of Babosa
+// Bhagwan").
+//
+// Also fixed: the credit block only ever appeared on the once-a-day
+// FULL splash (2.8s). On the fast repeat-open splash (0.8s) its
+// 1.6s animation delay meant it never rendered — the splash was
+// gone first. New `splashFull` state lets the JSX pick short
+// delays (tagline 0.1s, divider 0.25s, credit 0.35s, spinner 0.5s)
+// on the fast splash, which is lengthened slightly to 1.1s so the
+// line is legible. Full-splash timings unchanged.
+//
+// Not touched: everything else. (Parodies-in-setlists work,
+// originally planned as S44, moves to S45.)
+// ==============================================
+//
 // SANKIRTAN SAAS - SESSION 43
 // Bhajan Se Bhagwan Tak
 // CHANGES (Session 43 — parodies move to My Library; Save at top;
@@ -657,7 +679,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.09.16.s43';
+const APP_VERSION = '2026.09.16.s44';
 
 // SESSION 30: log at startup so admin can verify which build is
 // running via the browser console (helps diagnose "is my new
@@ -1810,6 +1832,10 @@ const App = () => {
   // fast 0.8s splash on subsequent opens — big perceived-speed win)
   // ==============================================
   const [splashFadeOut, setSplashFadeOut] = useState(false);
+  // SESSION 44: expose full-vs-fast to the JSX so the credits line can
+  // use short delays on the fast splash (previously its 1.6s delay
+  // meant it never appeared on repeat opens).
+  const [splashFull, setSplashFull] = useState(true);
   useEffect(() => {
     let showFull = true;
     try {
@@ -1818,8 +1844,9 @@ const App = () => {
       showFull = lastFullSplash !== today;
       if (showFull) localStorage.setItem('sankirtan-splash-shown', today);
     } catch (e) { /* private browsing — default to full */ }
+    setSplashFull(showFull);
 
-    const SPLASH_MS = showFull ? 2800 : 800;
+    const SPLASH_MS = showFull ? 2800 : 1100;
     const timer = setTimeout(() => {
       setSplashFadeOut(true);
       setTimeout(() => setSplashVisible(false), 600);
@@ -5790,7 +5817,7 @@ const App = () => {
           <p
             style={{
               fontFamily: "'Noto Sans Devanagari', system-ui, sans-serif",
-              animation: 'splashTaglineIn 1s ease-out 0.6s forwards',
+              animation: splashFull ? 'splashTaglineIn 1s ease-out 0.6s forwards' : 'splashTaglineIn 0.5s ease-out 0.1s forwards',
               opacity: 0,
               letterSpacing: '0.08em',
             }}
@@ -5804,46 +5831,44 @@ const App = () => {
               style={{
                 height: '2px',
                 background: 'linear-gradient(90deg, transparent, #0B5A70, #E65100, #0B5A70, transparent)',
-                animation: 'splashDividerGrow 0.8s ease-out 1.2s forwards',
+                animation: splashFull ? 'splashDividerGrow 0.8s ease-out 1.2s forwards' : 'splashDividerGrow 0.5s ease-out 0.25s forwards',
                 width: 0,
                 opacity: 0,
               }}
             />
           </div>
 
+          {/* SESSION 44: credits — "By Grace of Lord Babosa · Inspired by
+              Manju Baisa". Shown on both the full and fast splash. */}
           <div
             style={{
-              animation: 'splashCreditIn 0.7s ease-out 1.6s forwards',
+              animation: splashFull ? 'splashCreditIn 0.7s ease-out 1.6s forwards' : 'splashCreditIn 0.5s ease-out 0.35s forwards',
               opacity: 0,
             }}
             className="mt-5"
           >
-            <p className="text-[#0B5A70]/60 text-xs sm:text-sm leading-relaxed">
-              Made for the Bhajan Community
-            </p>
-            <p className="text-[#0B5A70]/60 text-xs sm:text-sm mt-1 flex items-center justify-center gap-1.5">
-              <span
-                style={{ animation: 'splashPrayerPulse 2s ease-in-out 2s infinite' }}
-              >
-                🙏
-              </span>
-              <span>by Grace of</span>
+            <p className="text-[#0B5A70]/70 text-xs sm:text-sm flex items-center justify-center gap-1.5">
+              <span style={{ animation: 'splashPrayerPulse 2s ease-in-out 2s infinite' }}>🙏</span>
+              <span>By Grace of</span>
               <span
                 style={{
                   animation: 'splashBabosaGlow 2.5s ease-in-out 2s infinite',
                   fontWeight: 700,
                 }}
               >
-                Babosa Bhagwan
+                Lord Babosa
               </span>
               <span>🙏</span>
+            </p>
+            <p className="text-[#0B5A70]/60 text-xs sm:text-sm mt-1">
+              Inspired by <span className="font-semibold text-[#E65100]/80">Manju Baisa</span>
             </p>
           </div>
 
           <div
             className="mt-8"
             style={{
-              animation: 'splashSpinnerIn 0.5s ease-out 2s forwards',
+              animation: splashFull ? 'splashSpinnerIn 0.5s ease-out 2s forwards' : 'splashSpinnerIn 0.4s ease-out 0.5s forwards',
               opacity: 0,
             }}
           >
