@@ -1,6 +1,37 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 
 // ==============================================
+// SANKIRTAN SAAS - SESSION 49
+// Bhajan Se Bhagwan Tak
+// CHANGES (Session 49 — header + filters polish):
+//
+// 1. Avatar menu. The header right side had 5 controls (avatar +
+//    name, dark-mode, guide, sign-out; plus a duplicated “Admin”
+//    label). Now: one avatar button that opens a dropdown menu
+//    containing the user's name, Admin badge if applicable, Dark
+//    mode toggle, Singer's Guide, Sign out. Sign-out routes through
+//    a confirm dialog — one stray tap no longer signs the user out.
+//    The 🔧 Admin button (mode toggle) stays outside the menu.
+//
+// 2. Filter sheet. The three Deity/Type/Mood <select>s on each
+//    library are replaced by a single "Filter" button that opens
+//    a modal sheet. Count badge shows how many are active
+//    ("Filter · 2"). Active filters appear as removable chips
+//    beside the button. Clear-all + Done in the sheet footer.
+//
+// 3. Keyword pill styling. Mood pills below the search were near-
+//    invisible in light mode. Now white bg + teal border + saffron
+//    hover — clearly clickable outlined pills.
+//
+// 4. Delete moved to overflow menu (⋯). On both reading views
+//    (My Library and admin Public Library), the red Delete button
+//    that shared the row with Edit and View is now a small ⋯
+//    button that opens a small menu with one destructive option.
+//    Removes visual weight; keeps the action discoverable.
+//
+// Not touched: data schema, Firestore rules, all Session 6-48 work.
+// ==============================================
+//
 // SANKIRTAN SAAS - SESSION 48
 // Bhajan Se Bhagwan Tak
 // CHANGES (Session 48 — polish quick wins):
@@ -774,7 +805,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.09.16.s48';
+const APP_VERSION = '2026.09.16.s49';
 
 // SESSION 30: log at startup so admin can verify which build is
 // running via the browser console (helps diagnose "is my new
@@ -1924,6 +1955,17 @@ const App = () => {
 
   // Swipe animation direction
   const [slideDir, setSlideDir] = useState(null);
+
+  // SESSION 49: account dropdown menu (avatar button in the header)
+  const [showAccountMenu, setShowAccountMenu] = useState(false);
+  // SESSION 49: filter sheet — collapses the 3 Deity/Type/Mood
+  // selects into a single button + modal. Value is null | 'public' |
+  // 'library'; only one sheet is ever open at once and it targets
+  // whichever library the user is currently in.
+  const [filterSheetView, setFilterSheetView] = useState(null);
+  // SESSION 49: delete overflow menu — a small dropdown that opens
+  // above the Delete action. Value is null | 'library' | 'public'.
+  const [showDeleteMenu, setShowDeleteMenu] = useState(null);
 
   // Compact card view — SESSION 42: defaults to COMPACT for new
   // users (was full). Compact shows more bhajans per screen, which
@@ -6870,6 +6912,83 @@ const App = () => {
           </div>
         )}
 
+
+        {/* SESSION 49: filter sheet modal. Renders outside every view so
+            it can overlay Public Library or My Library depending on
+            filterSheetView. */}
+        {filterSheetView && (
+          <>
+            <div
+              className="fixed inset-0 bg-black/40 z-40"
+              onClick={() => setFilterSheetView(null)}
+            />
+            <div className={`fixed left-1/2 -translate-x-1/2 bottom-4 md:top-1/2 md:bottom-auto md:-translate-y-1/2 w-[92%] max-w-md rounded-2xl shadow-2xl z-50 p-6 ${darkMode ? 'bg-[#162226] border border-[#0B5A70]/25' : 'bg-[#FFFCF8] border border-[#0B5A70]/15'}`}>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className={`text-lg font-bold ${darkMode ? 'text-amber-100' : 'text-[#0B5A70]'}`}>Filter bhajans</h3>
+                <button
+                  onClick={() => setFilterSheetView(null)}
+                  className={`p-1 rounded-lg ${darkMode ? 'text-gray-400 hover:bg-[#1e2e33]' : 'text-gray-500 hover:bg-[#0B5A70]/5'}`}
+                  aria-label="Close filters"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+              </div>
+              {(() => {
+                const isPublic = filterSheetView === 'public';
+                const dVal = isPublic ? publicFilterDeity : filterDeity;
+                const cVal = isPublic ? publicFilterCategory : filterCategory;
+                const kVal = isPublic ? publicFilterKeyword : libraryFilterKeyword;
+                const setD = isPublic ? setPublicFilterDeity : setFilterDeity;
+                const setC = isPublic ? setPublicFilterCategory : setFilterCategory;
+                const setK = isPublic ? setPublicFilterKeyword : setLibraryFilterKeyword;
+                const inputCls = `w-full px-3 py-2.5 border rounded-xl outline-none text-sm ${darkMode ? 'bg-[#1e2e33] border-[#0B5A70]/25 text-gray-100 focus:border-[#0B5A70]/50' : 'bg-white border-[#0B5A70]/20 focus:border-[#0B5A70]/50'}`;
+                const labelCls = `block text-xs font-semibold uppercase tracking-wider mb-1.5 ${darkMode ? 'text-teal-300' : 'text-[#0B5A70]/70'}`;
+                return (
+                  <>
+                    <div className="space-y-3">
+                      <div>
+                        <label className={labelCls}>Deity</label>
+                        <select value={dVal} onChange={(e) => setD(e.target.value)} className={inputCls}>
+                          <option value="">All deities</option>
+                          {allDeityOptions.map(d => <option key={d.value} value={d.value}>{d.value}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className={labelCls}>Type</label>
+                        <select value={cVal} onChange={(e) => setC(e.target.value)} className={inputCls}>
+                          <option value="">All types</option>
+                          {allCategoryOptions.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className={labelCls}>Mood</label>
+                        <select value={kVal} onChange={(e) => setK(e.target.value)} className={inputCls}>
+                          <option value="">All moods</option>
+                          {allKeywordOptions.map(k => <option key={k} value={k}>#{k}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between mt-6">
+                      <button
+                        onClick={() => { setD(''); setC(''); setK(''); }}
+                        className={`text-sm font-semibold ${darkMode ? 'text-gray-400 hover:text-gray-200' : 'text-[#0B5A70]/60 hover:text-[#0B5A70]'}`}
+                      >
+                        Clear all
+                      </button>
+                      <button
+                        onClick={() => setFilterSheetView(null)}
+                        className="bg-[#0B5A70] hover:bg-[#094a5d] text-white font-semibold px-5 py-2 rounded-xl text-sm"
+                      >
+                        Done
+                      </button>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+          </>
+        )}
+
         {/* PWA INSTALL PROMPT (Android/Desktop) */}
         {showInstallPrompt && deferredInstallPrompt && (
           <div className="fixed bottom-20 left-4 right-4 md:left-auto md:max-w-md z-50">
@@ -6997,79 +7116,98 @@ const App = () => {
                 </button>
               ) : (
               <>
-              {userProfile && userProfile.photoURL && (
-                <img
-                  src={userProfile.photoURL}
-                  alt={userProfile.displayName}
-                  className="w-9 h-9 rounded-full border-2 border-[#0B5A70]/30"
-                />
-              )}
-              {userProfile && (
-              /* SESSION 6: username was hardcoded teal on dark-teal bg — invisible.
-                 Now uses amber-100 in dark mode to match card titles. */
-              <div className="hidden sm:block">
-                <p className={`text-sm font-semibold ${darkMode ? 'text-amber-100' : 'text-[#0B5A70]'}`}>
-                  {userProfile.displayName}
-                </p>
-                {userProfile.verified && (
-                  <span className={`text-xs ${darkMode ? 'text-teal-300' : 'text-[#0B5A70]'}`}>
-                    ✓ Verified
-                  </span>
-                )}
-                {isAdmin && (
-                  <span className={`text-xs ml-1 ${darkMode ? 'text-purple-300' : 'text-purple-600'}`}>
-                    👑 Admin
-                  </span>
+              {/* SESSION 49: single avatar button collapses avatar, name,
+                  admin badge, dark-mode toggle, guide link and sign-out
+                  into one dropdown menu — header goes from 5 controls
+                  to 1. Sign-out now goes through a confirm dialog. */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowAccountMenu(v => !v)}
+                  className={`flex items-center gap-2 rounded-full pl-1 pr-2 py-1 transition-colors ${darkMode ? 'hover:bg-[#1e2e33]' : 'hover:bg-[#0B5A70]/5'}`}
+                  aria-label="Account menu"
+                  aria-expanded={showAccountMenu}
+                >
+                  {userProfile && userProfile.photoURL ? (
+                    <img
+                      src={userProfile.photoURL}
+                      alt={userProfile.displayName || 'You'}
+                      className="w-8 h-8 rounded-full border-2 border-[#0B5A70]/30"
+                    />
+                  ) : (
+                    <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center text-sm font-bold ${darkMode ? 'bg-[#1e2e33] border-[#0B5A70]/30 text-amber-100' : 'bg-[#0B5A70]/10 border-[#0B5A70]/30 text-[#0B5A70]'}`}>
+                      {(userProfile && (userProfile.displayName || '').charAt(0).toUpperCase()) || (user && user.email ? user.email.charAt(0).toUpperCase() : 'U')}
+                    </div>
+                  )}
+                  <svg className={`w-4 h-4 transition-transform ${showAccountMenu ? 'rotate-180' : ''} ${darkMode ? 'text-gray-400' : 'text-[#0B5A70]/60'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+
+                {showAccountMenu && (
+                  <>
+                    {/* click-outside catcher */}
+                    <div className="fixed inset-0 z-40" onClick={() => setShowAccountMenu(false)} />
+                    <div className={`absolute right-0 mt-2 w-64 rounded-xl shadow-lg border z-50 overflow-hidden ${darkMode ? 'bg-[#162226] border-[#0B5A70]/25' : 'bg-white border-[#0B5A70]/12'}`}>
+                      {userProfile && (
+                        <div className={`px-4 py-3 border-b ${darkMode ? 'border-[#0B5A70]/15' : 'border-[#0B5A70]/8'}`}>
+                          <p className={`text-sm font-bold truncate ${darkMode ? 'text-amber-100' : 'text-[#0B5A70]'}`}>
+                            {userProfile.displayName}
+                          </p>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            {isAdmin && (
+                              <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${darkMode ? 'bg-purple-900/40 text-purple-300' : 'bg-purple-100 text-purple-700'}`}>
+                                👑 Admin
+                              </span>
+                            )}
+                            {userProfile.verified && (
+                              <span className={`text-xs ${darkMode ? 'text-teal-300' : 'text-[#0B5A70]/60'}`}>✓ Verified</span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      <button
+                        onClick={() => { setDarkMode(!darkMode); setShowAccountMenu(false); }}
+                        className={`w-full text-left px-4 py-2.5 text-sm flex items-center gap-3 transition-colors ${darkMode ? 'hover:bg-[#1e2e33] text-gray-200' : 'hover:bg-[#0B5A70]/5 text-[#0B5A70]'}`}
+                      >
+                        {darkMode ? (
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
+                        ) : (
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" /></svg>
+                        )}
+                        <span>{darkMode ? 'Light mode' : 'Dark mode'}</span>
+                      </button>
+                      <a
+                        href="/guide"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={() => setShowAccountMenu(false)}
+                        className={`w-full text-left px-4 py-2.5 text-sm flex items-center gap-3 transition-colors ${darkMode ? 'hover:bg-[#1e2e33] text-gray-200' : 'hover:bg-[#0B5A70]/5 text-[#0B5A70]'}`}
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                        <span>Singer's Guide</span>
+                      </a>
+                      {user && (
+                        <button
+                          onClick={() => {
+                            setShowAccountMenu(false);
+                            askConfirm({
+                              title: 'Sign out?',
+                              message: 'You can sign back in anytime with the same Google account.',
+                              confirmLabel: 'Sign out',
+                              danger: false
+                            }, handleLogout);
+                          }}
+                          className={`w-full text-left px-4 py-2.5 text-sm flex items-center gap-3 border-t transition-colors ${darkMode ? 'border-[#0B5A70]/15 hover:bg-[#1e2e33] text-red-300' : 'border-[#0B5A70]/8 hover:bg-red-50 text-red-600'}`}
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
+                          <span>Sign out</span>
+                        </button>
+                      )}
+                    </div>
+                  </>
                 )}
               </div>
-              )}
               </>
-              )}
-              <button
-                onClick={() => setDarkMode(!darkMode)}
-                className={`p-2 rounded-lg transition-colors ${darkMode ? 'text-[#E65100] hover:bg-[#1e2e33]' : 'text-[#0B5A70]/60 hover:bg-[#0B5A70]/5'}`}
-                title={darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
-                aria-label={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
-              >
-                {darkMode ? (
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
-                  </svg>
-                ) : (
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
-                  </svg>
-                )}
-              </button>
-              {/* SESSION 48: ⓘ now opens the Singer's Guide (a
-                  reference doc that most people are more likely to want
-                  than the interactive tour). Guide opens in a new tab
-                  so the app state is preserved. */}
-              <a
-                href="/guide"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-[#0B5A70] hover:text-[#0B5A70]/80 p-2 rounded-lg hover:bg-[#0B5A70]/5"
-                title="Singer's Guide"
-                aria-label="Open singer's guide in a new tab"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
-                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              </a>
-              {user && (
-              <button
-                onClick={handleLogout}
-                className="text-[#0B5A70]/60 hover:text-red-600 p-2 rounded-lg hover:bg-red-50"
-                title="Logout"
-                aria-label="Logout"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
-                    d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                </svg>
-              </button>
               )}
             </div>
           </div>
@@ -7250,56 +7388,47 @@ const App = () => {
                 </div>
               )}
 
-              {/* Filters */}
-              <div className="flex flex-wrap gap-2 mb-3">
-                <select
-                  value={filterDeity}
-                  onChange={(e) => setFilterDeity(e.target.value)}
-                  aria-label="Filter by deity"
-                  className={`flex-1 min-w-[110px] px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none text-sm transition-all ${darkMode ? 'bg-[#162226] text-gray-200' : 'bg-[#FFFCF8]'} ${
-                    filterDeity
-                      ? `border-[#0B5A70]/50 ring-2 ring-[#0B5A70]/10 font-semibold ${darkMode ? 'text-white' : 'text-[#0B5A70]'}`
-                      : `${darkMode ? 'border-[#0B5A70]/20' : 'border-[#0B5A70]/12'}`
-                  }`}
-                >
-                  <option value="">Deity</option>
-                  {allDeityOptions.map(d => (
-                    <option key={d.value} value={d.value}>{d.value}</option>
-                  ))}
-                </select>
-
-                <select
-                  value={filterCategory}
-                  onChange={(e) => setFilterCategory(e.target.value)}
-                  aria-label="Filter by category"
-                  className={`flex-1 min-w-[110px] px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none text-sm transition-all ${darkMode ? 'bg-[#162226] text-gray-200' : 'bg-[#FFFCF8]'} ${
-                    filterCategory
-                      ? `border-[#0B5A70]/50 ring-2 ring-[#0B5A70]/10 font-semibold ${darkMode ? 'text-white' : 'text-[#0B5A70]'}`
-                      : `${darkMode ? 'border-[#0B5A70]/20' : 'border-[#0B5A70]/12'}`
-                  }`}
-                >
-                  <option value="">Type</option>
-                  {allCategoryOptions.map(c => (
-                    <option key={c} value={c}>{c}</option>
-                  ))}
-                </select>
-
-                <select
-                  value={libraryFilterKeyword}
-                  onChange={(e) => setLibraryFilterKeyword(e.target.value)}
-                  aria-label="Filter by keyword"
-                  className={`flex-1 min-w-[110px] px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none text-sm transition-all ${darkMode ? 'bg-[#162226] text-gray-200' : 'bg-[#FFFCF8]'} ${
-                    libraryFilterKeyword
-                      ? `border-[#0B5A70]/50 ring-2 ring-[#0B5A70]/10 font-semibold ${darkMode ? 'text-white' : 'text-[#0B5A70]'}`
-                      : `${darkMode ? 'border-[#0B5A70]/20' : 'border-[#0B5A70]/12'}`
-                  }`}
-                >
-                  <option value="">Mood</option>
-                  {allKeywordOptions.map(kw => (
-                    <option key={kw} value={kw}>#{kw}</option>
-                  ))}
-                </select>
-              </div>
+              {/* SESSION 49: three selects → Filter button + modal. */}
+              {(() => {
+                const active = [filterDeity, filterCategory, libraryFilterKeyword].filter(Boolean);
+                return (
+                  <div className="mb-3">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <button
+                        onClick={() => setFilterSheetView('library')}
+                        className={`inline-flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-semibold border transition-colors ${
+                          active.length > 0
+                            ? 'bg-[#0B5A70] text-white border-[#0B5A70] shadow-sm'
+                            : (darkMode ? 'bg-[#162226] border-[#0B5A70]/25 text-teal-200 hover:border-[#0B5A70]/50' : 'bg-white border-[#0B5A70]/20 text-[#0B5A70] hover:border-[#0B5A70]/40')
+                        }`}
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                        </svg>
+                        Filter{active.length > 0 ? ` · ${active.length}` : ''}
+                      </button>
+                      {filterDeity && (
+                        <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${darkMode ? 'bg-[#0B5A70]/25 text-teal-200' : 'bg-[#0B5A70]/10 text-[#0B5A70]'}`}>
+                          {filterDeity}
+                          <button onClick={() => setFilterDeity('')} aria-label="Clear deity filter" className="hover:text-red-500">×</button>
+                        </span>
+                      )}
+                      {filterCategory && (
+                        <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${darkMode ? 'bg-[#0B5A70]/25 text-teal-200' : 'bg-[#0B5A70]/10 text-[#0B5A70]'}`}>
+                          {filterCategory}
+                          <button onClick={() => setFilterCategory('')} aria-label="Clear type filter" className="hover:text-red-500">×</button>
+                        </span>
+                      )}
+                      {libraryFilterKeyword && (
+                        <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${darkMode ? 'bg-[#0B5A70]/25 text-teal-200' : 'bg-[#0B5A70]/10 text-[#0B5A70]'}`}>
+                          #{libraryFilterKeyword}
+                          <button onClick={() => setLibraryFilterKeyword('')} aria-label="Clear mood filter" className="hover:text-red-500">×</button>
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Quick Keywords */}
               <div className="mb-6 flex flex-wrap gap-2 items-center">
@@ -7307,10 +7436,10 @@ const App = () => {
                   <button
                     key={kw}
                     onClick={() => setLibraryFilterKeyword(libraryFilterKeyword === kw ? '' : kw)}
-                    className={`px-3 py-1 rounded-full text-xs font-semibold transition-all ${
+                    className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all border ${
                       libraryFilterKeyword === kw
-                        ? 'bg-[#0B5A70] text-white shadow-md'
-                        : `${darkMode ? 'bg-[#0B5A70]/15 text-teal-300 border border-[#0B5A70]/25 hover:bg-[#0B5A70]/25' : 'bg-[#0B5A70]/5 text-[#0B5A70] border border-[#0B5A70]/12 hover:bg-[#0B5A70]/10'}`
+                        ? 'bg-[#0B5A70] text-white border-[#0B5A70] shadow-md'
+                        : `${darkMode ? 'bg-transparent text-teal-200 border-[#0B5A70]/40 hover:border-[#0B5A70]/70 hover:bg-[#0B5A70]/15' : 'bg-white text-[#0B5A70] border-[#0B5A70]/25 hover:border-[#0B5A70]/45 hover:bg-[#0B5A70]/5'}`
                     }`}
                   >
                     {libraryFilterKeyword === kw ? '✓ ' : ''}#{kw}
@@ -7507,12 +7636,34 @@ const App = () => {
                   >
                     ✏️ Edit
                   </button>
-                  <button
-                    onClick={() => deleteBhajan(selectedBhajan)}
-                    className="bg-red-100 hover:bg-red-200 text-red-700 font-semibold px-2.5 py-1 rounded-full text-xs flex items-center gap-1"
-                  >
-                    {selectedBhajan.savedFromPublicId ? '✕ Remove' : '🗑️ Delete'}
-                  </button>
+                  {/* SESSION 49: Delete moved out of the primary action row
+                      into an overflow menu. Same behavior; less visual weight
+                      — destructive actions shouldn't share space with routine
+                      Edit/View/Add-to buttons. */}
+                  <div className="relative">
+                    <button
+                      onClick={() => setShowDeleteMenu(showDeleteMenu === 'library' ? null : 'library')}
+                      className={`px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 transition-colors ${darkMode ? 'bg-[#1e2e33] text-gray-400 hover:text-gray-200 hover:bg-[#0B5A70]/20' : 'bg-[#0B5A70]/8 text-[#0B5A70]/70 hover:text-[#0B5A70] hover:bg-[#0B5A70]/15'}`}
+                      aria-label="More options"
+                      title="More options"
+                    >
+                      ⋯
+                    </button>
+                    {showDeleteMenu === 'library' && (
+                      <>
+                        <div className="fixed inset-0 z-40" onClick={() => setShowDeleteMenu(null)} />
+                        <div className={`absolute right-0 mt-2 w-48 rounded-xl shadow-lg border z-50 overflow-hidden ${darkMode ? 'bg-[#162226] border-[#0B5A70]/25' : 'bg-white border-[#0B5A70]/12'}`}>
+                          <button
+                            onClick={() => { setShowDeleteMenu(null); deleteBhajan(selectedBhajan); }}
+                            className={`w-full text-left px-4 py-2.5 text-sm flex items-center gap-2 transition-colors ${darkMode ? 'hover:bg-red-900/20 text-red-300' : 'hover:bg-red-50 text-red-600'}`}
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 3h6a1 1 0 011 1v3H8V4a1 1 0 011-1z" /></svg>
+                            <span>{selectedBhajan.savedFromPublicId ? 'Remove from library' : 'Delete bhajan'}</span>
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -9409,65 +9560,61 @@ const App = () => {
                 </div>
               )}
 
-              <div className="flex flex-wrap gap-2 mb-3">
-                <select
-                  value={publicFilterDeity}
-                  onChange={(e) => setPublicFilterDeity(e.target.value)}
-                  aria-label="Filter public library by deity"
-                  className={`flex-1 min-w-[110px] px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none text-sm transition-all ${darkMode ? 'bg-[#162226] text-gray-200' : 'bg-[#FFFCF8]'} ${
-                    publicFilterDeity
-                      ? `border-[#0B5A70]/50 ring-2 ring-[#0B5A70]/10 font-semibold ${darkMode ? 'text-white' : 'text-[#0B5A70]'}`
-                      : `${darkMode ? 'border-[#0B5A70]/20' : 'border-[#0B5A70]/12'}`
-                  }`}
-                >
-                  <option value="">Deity</option>
-                  {allDeityOptions.map(d => (
-                    <option key={d.value} value={d.value}>{d.value}</option>
-                  ))}
-                </select>
-
-                <select
-                  value={publicFilterCategory}
-                  onChange={(e) => setPublicFilterCategory(e.target.value)}
-                  aria-label="Filter public library by category"
-                  className={`flex-1 min-w-[110px] px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none text-sm transition-all ${darkMode ? 'bg-[#162226] text-gray-200' : 'bg-[#FFFCF8]'} ${
-                    publicFilterCategory
-                      ? `border-[#0B5A70]/50 ring-2 ring-[#0B5A70]/10 font-semibold ${darkMode ? 'text-white' : 'text-[#0B5A70]'}`
-                      : `${darkMode ? 'border-[#0B5A70]/20' : 'border-[#0B5A70]/12'}`
-                  }`}
-                >
-                  <option value="">Type</option>
-                  {allCategoryOptions.map(c => (
-                    <option key={c} value={c}>{c}</option>
-                  ))}
-                </select>
-
-                <select
-                  value={publicFilterKeyword}
-                  onChange={(e) => setPublicFilterKeyword(e.target.value)}
-                  aria-label="Filter public library by keyword"
-                  className={`flex-1 min-w-[110px] px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none text-sm transition-all ${darkMode ? 'bg-[#162226] text-gray-200' : 'bg-[#FFFCF8]'} ${
-                    publicFilterKeyword
-                      ? `border-[#0B5A70]/50 ring-2 ring-[#0B5A70]/10 font-semibold ${darkMode ? 'text-white' : 'text-[#0B5A70]'}`
-                      : `${darkMode ? 'border-[#0B5A70]/20' : 'border-[#0B5A70]/12'}`
-                  }`}
-                >
-                  <option value="">Mood</option>
-                  {allKeywordOptions.map(kw => (
-                    <option key={kw} value={kw}>#{kw}</option>
-                  ))}
-                </select>
-              </div>
+              {/* SESSION 49: three selects collapsed into one Filter button
+                  + modal sheet. Active-count badge shows how many are set;
+                  the modal is rendered outside the view-conditional so it
+                  overlays the whole app. Chip summary sits below when
+                  filters are active. */}
+              {(() => {
+                const active = [publicFilterDeity, publicFilterCategory, publicFilterKeyword].filter(Boolean);
+                return (
+                  <div className="mb-3">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <button
+                        onClick={() => setFilterSheetView('public')}
+                        className={`inline-flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-semibold border transition-colors ${
+                          active.length > 0
+                            ? 'bg-[#0B5A70] text-white border-[#0B5A70] shadow-sm'
+                            : (darkMode ? 'bg-[#162226] border-[#0B5A70]/25 text-teal-200 hover:border-[#0B5A70]/50' : 'bg-white border-[#0B5A70]/20 text-[#0B5A70] hover:border-[#0B5A70]/40')
+                        }`}
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                        </svg>
+                        Filter{active.length > 0 ? ` · ${active.length}` : ''}
+                      </button>
+                      {publicFilterDeity && (
+                        <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${darkMode ? 'bg-[#0B5A70]/25 text-teal-200' : 'bg-[#0B5A70]/10 text-[#0B5A70]'}`}>
+                          {publicFilterDeity}
+                          <button onClick={() => setPublicFilterDeity('')} aria-label={`Clear deity filter`} className="hover:text-red-500">×</button>
+                        </span>
+                      )}
+                      {publicFilterCategory && (
+                        <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${darkMode ? 'bg-[#0B5A70]/25 text-teal-200' : 'bg-[#0B5A70]/10 text-[#0B5A70]'}`}>
+                          {publicFilterCategory}
+                          <button onClick={() => setPublicFilterCategory('')} aria-label={`Clear type filter`} className="hover:text-red-500">×</button>
+                        </span>
+                      )}
+                      {publicFilterKeyword && (
+                        <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${darkMode ? 'bg-[#0B5A70]/25 text-teal-200' : 'bg-[#0B5A70]/10 text-[#0B5A70]'}`}>
+                          #{publicFilterKeyword}
+                          <button onClick={() => setPublicFilterKeyword('')} aria-label={`Clear mood filter`} className="hover:text-red-500">×</button>
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
 
               <div className="mb-6 flex flex-wrap gap-2 items-center">
                 {allKeywordOptions.slice(0, 4).map(kw => (
                   <button
                     key={kw}
                     onClick={() => setPublicFilterKeyword(publicFilterKeyword === kw ? '' : kw)}
-                    className={`px-3 py-1 rounded-full text-xs font-semibold transition-all ${
+                    className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all border ${
                       publicFilterKeyword === kw
-                        ? 'bg-[#0B5A70] text-white shadow-md'
-                        : `${darkMode ? 'bg-[#0B5A70]/15 text-teal-300 border border-[#0B5A70]/25 hover:bg-[#0B5A70]/25' : 'bg-[#0B5A70]/5 text-[#0B5A70] border border-[#0B5A70]/12 hover:bg-[#0B5A70]/10'}`
+                        ? 'bg-[#0B5A70] text-white border-[#0B5A70] shadow-md'
+                        : `${darkMode ? 'bg-transparent text-teal-200 border-[#0B5A70]/40 hover:border-[#0B5A70]/70 hover:bg-[#0B5A70]/15' : 'bg-white text-[#0B5A70] border-[#0B5A70]/25 hover:border-[#0B5A70]/45 hover:bg-[#0B5A70]/5'}`
                     }`}
                   >
                     {publicFilterKeyword === kw ? '✓ ' : ''}#{kw}
@@ -9915,12 +10062,30 @@ const App = () => {
                       >
                         ✏️ Edit
                       </button>
-                      <button
-                        onClick={() => deletePublicBhajan(selectedPublicBhajan)}
-                        className="bg-red-100 hover:bg-red-200 text-red-700 font-semibold px-2.5 py-1 rounded-full text-xs flex items-center gap-1"
-                      >
-                        🗑️ Delete
-                      </button>
+                      <div className="relative">
+                        <button
+                          onClick={() => setShowDeleteMenu(showDeleteMenu === 'public' ? null : 'public')}
+                          className={`px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 transition-colors ${darkMode ? 'bg-[#1e2e33] text-gray-400 hover:text-gray-200 hover:bg-[#0B5A70]/20' : 'bg-[#0B5A70]/8 text-[#0B5A70]/70 hover:text-[#0B5A70] hover:bg-[#0B5A70]/15'}`}
+                          aria-label="More options"
+                          title="More options"
+                        >
+                          ⋯
+                        </button>
+                        {showDeleteMenu === 'public' && (
+                          <>
+                            <div className="fixed inset-0 z-40" onClick={() => setShowDeleteMenu(null)} />
+                            <div className={`absolute right-0 mt-2 w-48 rounded-xl shadow-lg border z-50 overflow-hidden ${darkMode ? 'bg-[#162226] border-[#0B5A70]/25' : 'bg-white border-[#0B5A70]/12'}`}>
+                              <button
+                                onClick={() => { setShowDeleteMenu(null); deletePublicBhajan(selectedPublicBhajan); }}
+                                className={`w-full text-left px-4 py-2.5 text-sm flex items-center gap-2 transition-colors ${darkMode ? 'hover:bg-red-900/20 text-red-300' : 'hover:bg-red-50 text-red-600'}`}
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 3h6a1 1 0 011 1v3H8V4a1 1 0 011-1z" /></svg>
+                                <span>Delete public bhajan</span>
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </div>
                     </>
                   )}
                 </div>
