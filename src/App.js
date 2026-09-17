@@ -1,6 +1,45 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 
 // ==============================================
+// SANKIRTAN SAAS - SESSION 50
+// Bhajan Se Bhagwan Tak
+// CHANGES (Session 50 — icon system for the app chrome):
+//
+// Replaced emoji-in-controls with a small set of single-stroke
+// line icons. Emoji render differently on every OS and read as
+// informal in controls; SVGs are consistent, currentColor-aware
+// (so dark mode works), and typographically settled.
+//
+// New icon components at the top of the file: Icon (base),
+// IconSearch, IconGlobe, IconBookOpen, IconMusic, IconLock,
+// IconFlame, IconSparkle, IconClipboardList, IconShare, IconEye,
+// IconPencil.
+//
+// Sites swapped:
+//   • Bottom nav tabs: 🌐 📚 🎵 🔒 → IconGlobe /
+//     IconBookOpen / IconMusic / IconLock
+//   • Both library search inputs: 🔍 moved out of placeholder
+//     to an absolute-positioned SVG icon on the left. Padding
+//     shifts to pl-10; icon stays visible while typing.
+//   • Discovery pills: 🔥 Popular / ✨ Recently Added →
+//     IconFlame / IconSparkle inline before the label.
+//   • Reading-view action buttons on both libraries: ↗ Share,
+//     📋 Add to, 👁️ View, ✏️ Edit → IconShare,
+//     IconClipboardList, IconEye, IconPencil.
+//
+// Intentionally NOT swapped (content vs. control distinction):
+//   • 🙏 guest banner, 🌟 daily bhajan chip, 🎭 medley
+//     badges, splash blessing, empty-state emoji — content.
+//   • Form page titles ("✏️ Edit Bhajan", "➕ Add..."),
+//     💾 Save buttons — labels, not chrome.
+//   • Playlist/Program type pills (🎵 / 📅) — emoji
+//     distinguishes types visually and carries meaning.
+//   • 🎤 START LIVE PERFORMANCE — big action label; mic reads
+//     appropriately at that size.
+//
+// Not touched: schema, Firestore rules, all Session 6-49 work.
+// ==============================================
+//
 // SANKIRTAN SAAS - SESSION 49
 // Bhajan Se Bhagwan Tak
 // CHANGES (Session 49 — header + filters polish):
@@ -805,7 +844,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.09.16.s49';
+const APP_VERSION = '2026.09.16.s50';
 
 // SESSION 30: log at startup so admin can verify which build is
 // running via the browser console (helps diagnose "is my new
@@ -1282,6 +1321,40 @@ const useSwipe = (onSwipeLeft, onSwipeRight, { threshold = 60, enabled = true } 
 // ==============================================
 const previewLyrics = (lyrics) =>
   (lyrics || '').trim().split('\n').slice(0, 4).join('\n');
+
+// SESSION 50: single-stroke line icons in the app chrome. Emoji
+// render differently on every OS and read as informal in controls;
+// these are consistent SVGs sized 16-20px and colored with
+// currentColor so dark mode works without extra props. Content
+// emoji (🙏, 🌟, 🎭-in-mukhda-badge, splash)
+// deliberately stay as emoji — they're content, not controls.
+const Icon = ({ path, size = 20, className = '', strokeWidth = 2 }) => (
+  <svg
+    className={className}
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth={strokeWidth}
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    {path}
+  </svg>
+);
+const IconSearch = (p) => <Icon {...p} path={<><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.35-4.35" /></>} />;
+const IconGlobe = (p) => <Icon {...p} path={<><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3a15 15 0 010 18M12 3a15 15 0 000 18" /></>} />;
+const IconBookOpen = (p) => <Icon {...p} path={<path d="M2 5.5A2.5 2.5 0 014.5 3H10v16H4.5A2.5 2.5 0 012 16.5v-11zM22 5.5A2.5 2.5 0 0019.5 3H14v16h5.5a2.5 2.5 0 002.5-2.5v-11z" />} />;
+const IconMusic = (p) => <Icon {...p} path={<><path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" /></>} />;
+const IconLock = (p) => <Icon {...p} path={<><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V7a4 4 0 018 0v4" /></>} />;
+const IconFlame = (p) => <Icon {...p} path={<path d="M12 3s3 4 3 8a3 3 0 01-6 0c0-1 .5-2 1-3-2 1-4 3-4 6a6 6 0 0012 0c0-4-3-7-6-11z" />} />;
+const IconSparkle = (p) => <Icon {...p} path={<><path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3z" /><path d="M19 15l.75 2.25L22 18l-2.25.75L19 21l-.75-2.25L16 18l2.25-.75L19 15z" /></>} />;
+const IconClipboardList = (p) => <Icon {...p} path={<><rect x="6" y="4" width="12" height="18" rx="2" /><path d="M9 4V3a1 1 0 011-1h4a1 1 0 011 1v1M9 10h6M9 14h6M9 18h4" /></>} />;
+const IconShare = (p) => <Icon {...p} path={<><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><path d="M8.6 10.5l6.8-3.9M8.6 13.5l6.8 3.9" /></>} />;
+const IconEye = (p) => <Icon {...p} path={<><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" /><circle cx="12" cy="12" r="3" /></>} />;
+const IconPencil = (p) => <Icon {...p} path={<path d="M4 20h4l10-10a2.83 2.83 0 00-4-4L4 16v4zm9-13l4 4" />} />;
 
 // SESSION 48: BhajanTitle renders a title stored as
 // "Devanagari / Latin" as two visual lines — Devanagari
@@ -7329,13 +7402,19 @@ const App = () => {
               {/* Search Bar */}
               <div className="mb-4">
                 <div className="relative">
+                  {/* SESSION 50: search icon moved out of placeholder into
+                      an absolute-positioned SVG so it stays visible when
+                      typing and doesn't get selected/deleted. */}
+                  <div className={`absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none ${darkMode ? 'text-gray-400' : 'text-[#0B5A70]/50'}`}>
+                    <IconSearch size={18} />
+                  </div>
                   <input
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="🔍 Search — try 'babosa' or 'बाबोसा'"
+                    placeholder="Search — try 'babosa' or 'बाबोसा'"
                     aria-label="Search my library"
-                    className={`w-full px-4 py-3 pr-24 border rounded-xl focus:ring-4 outline-none ${
+                    className={`w-full pl-10 pr-24 py-3 border rounded-xl focus:ring-4 outline-none ${
                       darkMode
                         ? 'bg-[#162226] border-[#0B5A70]/15 text-gray-100 focus:ring-[#0B5A70]/20 focus:border-[#0B5A70]/30'
                         : 'bg-white border-[#0B5A70]/12 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30'
@@ -7608,7 +7687,7 @@ const App = () => {
                     className={`px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 transition-colors ${darkMode ? 'bg-[#1e2e33] text-gray-300 hover:bg-[#0B5A70]/20' : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15'}`}
                     title="Share this bhajan"
                   >
-                    ↗ Share
+<IconShare size={14} /> Share
                   </button>
                   {/* SESSION 38: Add-to picker — surface the bhajan
                       into any playlist/program/parody without
@@ -7620,7 +7699,7 @@ const App = () => {
                       className={`px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 transition-colors ${darkMode ? 'bg-[#1e2e33] text-gray-300 hover:bg-[#0B5A70]/20' : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15'}`}
                       title="Add to a playlist, program, or parody"
                     >
-                      📋 Add to
+<IconClipboardList size={14} /> Add to
                     </button>
                   )}
                   <button
@@ -7628,13 +7707,13 @@ const App = () => {
                     className={`px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 transition-colors ${darkMode ? 'bg-[#1e2e33] text-gray-300 hover:bg-[#0B5A70]/20' : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15'}`}
                     title="Reading view options"
                   >
-                    👁️ View
+<IconEye size={14} /> View
                   </button>
                   <button
                     onClick={() => openEditBhajan(selectedBhajan)}
                     className="bg-[#0B5A70]/8 hover:bg-[#0B5A70]/15 text-[#0B5A70] font-semibold px-2.5 py-1 rounded-full text-xs flex items-center gap-1"
                   >
-                    ✏️ Edit
+<IconPencil size={14} /> Edit
                   </button>
                   {/* SESSION 49: Delete moved out of the primary action row
                       into an overflow menu. Same behavior; less visual weight
@@ -8690,7 +8769,7 @@ const App = () => {
                     onClick={() => openEditProgram(selectedProgram)}
                     className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${darkMode ? 'text-teal-200 hover:text-teal-100 hover:bg-[#0B5A70]/15' : 'text-[#0B5A70] hover:text-[#0B5A70]/80 hover:bg-[#0B5A70]/5'}`}
                   >
-                    ✏️ Edit
+<IconPencil size={14} /> Edit
                   </button>
                   <button
                     onClick={() => deleteProgram(selectedProgram)}
@@ -9492,13 +9571,16 @@ const App = () => {
                   a standalone strip that sat empty for regular users. */}
               <div className="mb-4 flex items-stretch gap-2">
                 <div className="relative flex-1 min-w-0">
+                  <div className={`absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none ${darkMode ? 'text-gray-400' : 'text-[#0B5A70]/50'}`}>
+                    <IconSearch size={18} />
+                  </div>
                   <input
                     type="text"
                     value={publicSearchQuery}
                     onChange={(e) => setPublicSearchQuery(e.target.value)}
-                    placeholder="🔍 Search — try 'babosa' or 'बाबोसा'"
+                    placeholder="Search — try 'babosa' or 'बाबोसा'"
                     aria-label="Search public library"
-                    className={`w-full px-4 py-3 pr-24 border rounded-xl focus:ring-4 outline-none ${
+                    className={`w-full pl-10 pr-24 py-3 border rounded-xl focus:ring-4 outline-none ${
                       darkMode
                         ? 'bg-[#162226] border-[#0B5A70]/15 text-gray-100 focus:ring-[#0B5A70]/20 focus:border-[#0B5A70]/30'
                         : 'bg-white border-[#0B5A70]/12 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30'
@@ -9780,7 +9862,7 @@ const App = () => {
                                 : (darkMode ? 'bg-[#162226] border border-[#0B5A70]/25 text-teal-200 hover:border-[#0B5A70]/50' : 'bg-[#FFFCF8] border border-[#0B5A70]/15 text-[#0B5A70] hover:border-[#0B5A70]/40')
                             }`}
                           >
-                            🔥 Popular Bhajans
+                            <IconFlame size={16} /> Popular Bhajans
                             <span className="text-xs opacity-70">
                               {expandedDiscoverySection === 'popular' ? '▲' : '▼'}
                             </span>
@@ -9796,7 +9878,7 @@ const App = () => {
                                 : (darkMode ? 'bg-[#162226] border border-[#0B5A70]/25 text-teal-200 hover:border-[#0B5A70]/50' : 'bg-[#FFFCF8] border border-[#0B5A70]/15 text-[#0B5A70] hover:border-[#0B5A70]/40')
                             }`}
                           >
-                            ✨ Recently Added
+                            <IconSparkle size={16} /> Recently Added
                             <span className="text-xs opacity-70">
                               {expandedDiscoverySection === 'recent' ? '▲' : '▼'}
                             </span>
@@ -10035,7 +10117,7 @@ const App = () => {
                     className={`px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 transition-colors disabled:opacity-50 ${darkMode ? 'bg-[#1e2e33] text-gray-300 hover:bg-[#0B5A70]/20' : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15'}`}
                     title="Add to a playlist, program, or parody (saves to your library first)"
                   >
-                    📋 Add to
+<IconClipboardList size={14} /> Add to
                   </button>
 
                   <button
@@ -10043,7 +10125,7 @@ const App = () => {
                     className={`px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 transition-colors ${darkMode ? 'bg-[#1e2e33] text-gray-300 hover:bg-[#0B5A70]/20' : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15'}`}
                     title="Share this bhajan"
                   >
-                    ↗ Share
+<IconShare size={14} /> Share
                   </button>
 
                   <button
@@ -10051,7 +10133,7 @@ const App = () => {
                     className={`px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 transition-colors ${darkMode ? 'bg-[#1e2e33] text-gray-300 hover:bg-[#0B5A70]/20' : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15'}`}
                     title="Reading view options"
                   >
-                    👁️ View
+<IconEye size={14} /> View
                   </button>
 
                   {isAdmin && (
@@ -10060,7 +10142,7 @@ const App = () => {
                         onClick={() => openEditPublicBhajan(selectedPublicBhajan)}
                         className="bg-[#0B5A70]/8 hover:bg-[#0B5A70]/15 text-[#0B5A70] font-semibold px-2.5 py-1 rounded-full text-xs flex items-center gap-1"
                       >
-                        ✏️ Edit
+<IconPencil size={14} /> Edit
                       </button>
                       <div className="relative">
                         <button
@@ -11443,9 +11525,10 @@ const App = () => {
           >
             <div className="max-w-4xl mx-auto flex items-stretch">
               {[
-                { view: 'public-library', label: 'Public', icon: '🌐', requiresAuth: false },
-                { view: 'library', label: 'My Library', icon: '📚', requiresAuth: true },
-                { view: 'programs', label: 'Playlists', icon: '🎵', requiresAuth: true },
+                // SESSION 50: emoji → SVG icon components
+                { view: 'public-library', label: 'Public', Icon: IconGlobe, requiresAuth: false },
+                { view: 'library', label: 'My Library', Icon: IconBookOpen, requiresAuth: true },
+                { view: 'programs', label: 'Playlists', Icon: IconMusic, requiresAuth: true },
               ].map(tab => {
                 const isActive = currentView === tab.view;
                 const isLocked = tab.requiresAuth && guestMode && !user;
@@ -11476,8 +11559,8 @@ const App = () => {
                     {isActive && (
                       <span className={`absolute top-0 left-1/2 -translate-x-1/2 w-10 h-0.5 rounded-full ${darkMode ? 'bg-[#E65100]' : 'bg-[#0B5A70]'}`}></span>
                     )}
-                    <span className="text-xl leading-none">
-                      {isLocked ? '🔒' : tab.icon}
+                    <span className="leading-none">
+                      {isLocked ? <IconLock size={22} /> : <tab.Icon size={22} />}
                     </span>
                     <span className={`text-[10px] font-semibold ${isActive ? '' : 'font-medium'}`}>
                       {tab.label}
