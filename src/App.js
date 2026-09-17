@@ -1,6 +1,44 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 
 // ==============================================
+// SANKIRTAN SAAS - SESSION 51
+// Bhajan Se Bhagwan Tak
+// CHANGES (Session 51 — small fixes on forms and filter rows):
+//
+// 1. Add Public Bhajan form: Deity and Category selects were
+//    vertically staggered because the two labels wrap to
+//    different heights. Added items-end on the grid so selects
+//    align at the bottom regardless of label height.
+//
+// 2/3. Create/Edit Medley: the Type toggle showed Playlist /
+//    Program / Medley, letting the user accidentally turn a
+//    medley into a playlist. When programForm.type === 'parody'
+//    the toggle now shows ONLY a locked 🎭 Medley pill.
+//    Symmetric with the S43 rule that hid Medley from playlist/
+//    program forms.
+//
+// 4/5. Filter row: undone S49's Filter button + modal. Deity
+//    and Type are back as inline dropdowns. Mood is gone from
+//    the dropdowns — all moods now appear as a horizontally
+//    scrollable chip row below (was: only the first 4).
+//    Negative-margin trick pushes the row to the screen edges
+//    on mobile so users see chips scrolling from/to the edge
+//    and know there's more offscreen. Applied to both
+//    libraries.
+//
+// 6. Search + voice: placeholder shortened to "Search bhajans…"
+//    (was "Search — try 'babosa' or 'बाबोसा'" —
+//    truncated on mobile alongside +Add). Voice language chip
+//    shrunk to just "EN" / "हिं" (was "🎤 EN" / "🎤 हिं") —
+//    the real mic button already sits right next to it, so the
+//    duplicate glyph was noise. Result: search box gets its
+//    breathing room back on phones.
+//
+// Not touched: schema, Firestore rules, S6-50 work. The old
+// Filter sheet modal state (filterSheetView) is now unused but
+// left in place; removing state is riskier than leaving it.
+// ==============================================
+//
 // SANKIRTAN SAAS - SESSION 50
 // Bhajan Se Bhagwan Tak
 // CHANGES (Session 50 — icon system for the app chrome):
@@ -844,7 +882,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.09.16.s50';
+const APP_VERSION = '2026.09.17.s51';
 
 // SESSION 30: log at startup so admin can verify which build is
 // running via the browser console (helps diagnose "is my new
@@ -7412,7 +7450,7 @@ const App = () => {
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Search — try 'babosa' or 'बाबोसा'"
+                    placeholder="Search bhajans…"
                     aria-label="Search my library"
                     className={`w-full pl-10 pr-24 py-3 border rounded-xl focus:ring-4 outline-none ${
                       darkMode
@@ -7430,7 +7468,7 @@ const App = () => {
                     title={`Voice search language: ${speechLang === 'hi-IN' ? 'Hindi' : 'English'} — tap to switch`}
                     aria-label={`Voice input language: ${speechLang === 'hi-IN' ? 'Hindi' : 'English'}. Tap to switch.`}
                   >
-                    {speechLang === 'hi-IN' ? '🎤 हिं' : '🎤 EN'}
+{speechLang === 'hi-IN' ? 'हिं' : 'EN'}
                   </button>
                   <button
                     onClick={() => startVoiceSearch('library')}
@@ -7467,63 +7505,49 @@ const App = () => {
                 </div>
               )}
 
-              {/* SESSION 49: three selects → Filter button + modal. */}
-              {(() => {
-                const active = [filterDeity, filterCategory, libraryFilterKeyword].filter(Boolean);
-                return (
-                  <div className="mb-3">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <button
-                        onClick={() => setFilterSheetView('library')}
-                        className={`inline-flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-semibold border transition-colors ${
-                          active.length > 0
-                            ? 'bg-[#0B5A70] text-white border-[#0B5A70] shadow-sm'
-                            : (darkMode ? 'bg-[#162226] border-[#0B5A70]/25 text-teal-200 hover:border-[#0B5A70]/50' : 'bg-white border-[#0B5A70]/20 text-[#0B5A70] hover:border-[#0B5A70]/40')
-                        }`}
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
-                        </svg>
-                        Filter{active.length > 0 ? ` · ${active.length}` : ''}
-                      </button>
-                      {filterDeity && (
-                        <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${darkMode ? 'bg-[#0B5A70]/25 text-teal-200' : 'bg-[#0B5A70]/10 text-[#0B5A70]'}`}>
-                          {filterDeity}
-                          <button onClick={() => setFilterDeity('')} aria-label="Clear deity filter" className="hover:text-red-500">×</button>
-                        </span>
-                      )}
-                      {filterCategory && (
-                        <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${darkMode ? 'bg-[#0B5A70]/25 text-teal-200' : 'bg-[#0B5A70]/10 text-[#0B5A70]'}`}>
-                          {filterCategory}
-                          <button onClick={() => setFilterCategory('')} aria-label="Clear type filter" className="hover:text-red-500">×</button>
-                        </span>
-                      )}
-                      {libraryFilterKeyword && (
-                        <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${darkMode ? 'bg-[#0B5A70]/25 text-teal-200' : 'bg-[#0B5A70]/10 text-[#0B5A70]'}`}>
-                          #{libraryFilterKeyword}
-                          <button onClick={() => setLibraryFilterKeyword('')} aria-label="Clear mood filter" className="hover:text-red-500">×</button>
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                );
-              })()}
+              {/* SESSION 51: same treatment as Public Library. */}
+              <div className="grid grid-cols-2 gap-2 mb-3">
+                <select
+                  value={filterDeity}
+                  onChange={(e) => setFilterDeity(e.target.value)}
+                  aria-label="Filter by deity"
+                  className={`px-3 py-2 border rounded-xl outline-none text-sm ${darkMode ? 'bg-[#162226] border-[#0B5A70]/25 text-gray-200' : 'bg-white border-[#0B5A70]/20 text-[#0B5A70]'} ${filterDeity ? 'font-semibold border-[#0B5A70]/50' : ''}`}
+                >
+                  <option value="">All deities</option>
+                  {allDeityOptions.map(d => (
+                    <option key={d.value} value={d.value}>{d.value}</option>
+                  ))}
+                </select>
+                <select
+                  value={filterCategory}
+                  onChange={(e) => setFilterCategory(e.target.value)}
+                  aria-label="Filter by type"
+                  className={`px-3 py-2 border rounded-xl outline-none text-sm ${darkMode ? 'bg-[#162226] border-[#0B5A70]/25 text-gray-200' : 'bg-white border-[#0B5A70]/20 text-[#0B5A70]'} ${filterCategory ? 'font-semibold border-[#0B5A70]/50' : ''}`}
+                >
+                  <option value="">All types</option>
+                  {allCategoryOptions.map(c => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              </div>
 
-              {/* Quick Keywords */}
-              <div className="mb-6 flex flex-wrap gap-2 items-center">
-                {allKeywordOptions.slice(0, 4).map(kw => (
-                  <button
-                    key={kw}
-                    onClick={() => setLibraryFilterKeyword(libraryFilterKeyword === kw ? '' : kw)}
-                    className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all border ${
-                      libraryFilterKeyword === kw
-                        ? 'bg-[#0B5A70] text-white border-[#0B5A70] shadow-md'
-                        : `${darkMode ? 'bg-transparent text-teal-200 border-[#0B5A70]/40 hover:border-[#0B5A70]/70 hover:bg-[#0B5A70]/15' : 'bg-white text-[#0B5A70] border-[#0B5A70]/25 hover:border-[#0B5A70]/45 hover:bg-[#0B5A70]/5'}`
-                    }`}
-                  >
-                    {libraryFilterKeyword === kw ? '✓ ' : ''}#{kw}
-                  </button>
-                ))}
+              {/* SESSION 51: all moods, horizontally scrollable. */}
+              <div className="mb-6 -mx-4 px-4 overflow-x-auto [&::-webkit-scrollbar]:hidden" style={{scrollbarWidth: 'none'}}>
+                <div className="flex flex-nowrap gap-2 items-center">
+                  {allKeywordOptions.map(kw => (
+                    <button
+                      key={kw}
+                      onClick={() => setLibraryFilterKeyword(libraryFilterKeyword === kw ? '' : kw)}
+                      className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all border flex-shrink-0 ${
+                        libraryFilterKeyword === kw
+                          ? 'bg-[#0B5A70] text-white border-[#0B5A70] shadow-md'
+                          : `${darkMode ? 'bg-transparent text-teal-200 border-[#0B5A70]/40 hover:border-[#0B5A70]/70 hover:bg-[#0B5A70]/15' : 'bg-white text-[#0B5A70] border-[#0B5A70]/25 hover:border-[#0B5A70]/45 hover:bg-[#0B5A70]/5'}`
+                      }`}
+                    >
+                      {libraryFilterKeyword === kw ? '✓ ' : ''}#{kw}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               {/* Bhajans List */}
@@ -9022,41 +9046,43 @@ const App = () => {
                     accidentally isn't destructive. */}
                 <div className="mb-5">
                   <label className={fLabel}>Type</label>
-                  <div className={`inline-flex items-center gap-1 p-1 rounded-xl ${darkMode ? 'bg-[#0B5A70]/20' : 'bg-[#0B5A70]/5'}`}>
-                    <button
-                      type="button"
-                      onClick={() => setProgramForm({...programForm, type: 'playlist'})}
-                      className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
-                        programForm.type === 'playlist'
-                          ? 'bg-[#E65100] text-white shadow-sm'
-                          : (darkMode ? 'text-teal-200/70 hover:text-teal-100' : 'text-[#0B5A70]/70 hover:text-[#0B5A70]')
-                      }`}
-                    >
-                      🎵 Playlist
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setProgramForm({...programForm, type: 'program'})}
-                      className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
-                        programForm.type === 'program'
-                          ? 'bg-[#E65100] text-white shadow-sm'
-                          : (darkMode ? 'text-teal-200/70 hover:text-teal-100' : 'text-[#0B5A70]/70 hover:text-[#0B5A70]')
-                      }`}
-                    >
-                      📅 Program
-                    </button>
-                    {/* SESSION 43: Parody option only shows when already
-                        editing/creating a parody (entered from My Library).
-                        Playlist/Program forms don't offer it. */}
-                    {programForm.type === 'parody' && (
+                  {/* SESSION 51: symmetric handling — when creating/editing
+                      a medley we ONLY show the medley pill (locked), so the
+                      user can't accidentally turn it into a playlist. When
+                      creating a playlist/program, medley isn't offered.
+                      Same guardrail on both sides of the toggle. */}
+                  {programForm.type === 'parody' ? (
+                    <div className={`inline-flex items-center gap-1 p-1 rounded-xl ${darkMode ? 'bg-[#0B5A70]/20' : 'bg-[#0B5A70]/5'}`}>
+                      <span className="px-3 py-1.5 rounded-lg text-sm font-semibold bg-[#E65100] text-white shadow-sm">
+                        🎭 Medley
+                      </span>
+                    </div>
+                  ) : (
+                    <div className={`inline-flex items-center gap-1 p-1 rounded-xl ${darkMode ? 'bg-[#0B5A70]/20' : 'bg-[#0B5A70]/5'}`}>
                       <button
                         type="button"
-                        className="px-3 py-1.5 rounded-lg text-sm font-semibold bg-[#E65100] text-white shadow-sm"
+                        onClick={() => setProgramForm({...programForm, type: 'playlist'})}
+                        className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
+                          programForm.type === 'playlist'
+                            ? 'bg-[#E65100] text-white shadow-sm'
+                            : (darkMode ? 'text-teal-200/70 hover:text-teal-100' : 'text-[#0B5A70]/70 hover:text-[#0B5A70]')
+                        }`}
                       >
-                        🎭 Medley
+                        🎵 Playlist
                       </button>
-                    )}
-                  </div>
+                      <button
+                        type="button"
+                        onClick={() => setProgramForm({...programForm, type: 'program'})}
+                        className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
+                          programForm.type === 'program'
+                            ? 'bg-[#E65100] text-white shadow-sm'
+                            : (darkMode ? 'text-teal-200/70 hover:text-teal-100' : 'text-[#0B5A70]/70 hover:text-[#0B5A70]')
+                        }`}
+                      >
+                        📅 Program
+                      </button>
+                    </div>
+                  )}
                   <p className={`text-xs mt-1.5 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                     {programForm.type === 'parody'
                       ? 'A medley shows just the mukhda of each bhajan. Tap a mukhda to see full lyrics.'
@@ -9578,7 +9604,7 @@ const App = () => {
                     type="text"
                     value={publicSearchQuery}
                     onChange={(e) => setPublicSearchQuery(e.target.value)}
-                    placeholder="Search — try 'babosa' or 'बाबोसा'"
+                    placeholder="Search bhajans…"
                     aria-label="Search public library"
                     className={`w-full pl-10 pr-24 py-3 border rounded-xl focus:ring-4 outline-none ${
                       darkMode
@@ -9596,7 +9622,7 @@ const App = () => {
                     title={`Voice search language: ${speechLang === 'hi-IN' ? 'Hindi' : 'English'} — tap to switch`}
                     aria-label={`Voice input language: ${speechLang === 'hi-IN' ? 'Hindi' : 'English'}. Tap to switch.`}
                   >
-                    {speechLang === 'hi-IN' ? '🎤 हिं' : '🎤 EN'}
+{speechLang === 'hi-IN' ? 'हिं' : 'EN'}
                   </button>
                   <button
                     onClick={() => startVoiceSearch('public')}
@@ -9642,66 +9668,54 @@ const App = () => {
                 </div>
               )}
 
-              {/* SESSION 49: three selects collapsed into one Filter button
-                  + modal sheet. Active-count badge shows how many are set;
-                  the modal is rendered outside the view-conditional so it
-                  overlays the whole app. Chip summary sits below when
-                  filters are active. */}
-              {(() => {
-                const active = [publicFilterDeity, publicFilterCategory, publicFilterKeyword].filter(Boolean);
-                return (
-                  <div className="mb-3">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <button
-                        onClick={() => setFilterSheetView('public')}
-                        className={`inline-flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-semibold border transition-colors ${
-                          active.length > 0
-                            ? 'bg-[#0B5A70] text-white border-[#0B5A70] shadow-sm'
-                            : (darkMode ? 'bg-[#162226] border-[#0B5A70]/25 text-teal-200 hover:border-[#0B5A70]/50' : 'bg-white border-[#0B5A70]/20 text-[#0B5A70] hover:border-[#0B5A70]/40')
-                        }`}
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
-                        </svg>
-                        Filter{active.length > 0 ? ` · ${active.length}` : ''}
-                      </button>
-                      {publicFilterDeity && (
-                        <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${darkMode ? 'bg-[#0B5A70]/25 text-teal-200' : 'bg-[#0B5A70]/10 text-[#0B5A70]'}`}>
-                          {publicFilterDeity}
-                          <button onClick={() => setPublicFilterDeity('')} aria-label={`Clear deity filter`} className="hover:text-red-500">×</button>
-                        </span>
-                      )}
-                      {publicFilterCategory && (
-                        <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${darkMode ? 'bg-[#0B5A70]/25 text-teal-200' : 'bg-[#0B5A70]/10 text-[#0B5A70]'}`}>
-                          {publicFilterCategory}
-                          <button onClick={() => setPublicFilterCategory('')} aria-label={`Clear type filter`} className="hover:text-red-500">×</button>
-                        </span>
-                      )}
-                      {publicFilterKeyword && (
-                        <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${darkMode ? 'bg-[#0B5A70]/25 text-teal-200' : 'bg-[#0B5A70]/10 text-[#0B5A70]'}`}>
-                          #{publicFilterKeyword}
-                          <button onClick={() => setPublicFilterKeyword('')} aria-label={`Clear mood filter`} className="hover:text-red-500">×</button>
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                );
-              })()}
+              {/* SESSION 51: Filter button retired. Deity and Type are back
+                  as inline dropdowns; Mood is now a horizontally-scrollable
+                  chip row below (see next block). */}
+              <div className="grid grid-cols-2 gap-2 mb-3">
+                <select
+                  value={publicFilterDeity}
+                  onChange={(e) => setPublicFilterDeity(e.target.value)}
+                  aria-label="Filter by deity"
+                  className={`px-3 py-2 border rounded-xl outline-none text-sm ${darkMode ? 'bg-[#162226] border-[#0B5A70]/25 text-gray-200' : 'bg-white border-[#0B5A70]/20 text-[#0B5A70]'} ${publicFilterDeity ? 'font-semibold border-[#0B5A70]/50' : ''}`}
+                >
+                  <option value="">All deities</option>
+                  {allDeityOptions.map(d => (
+                    <option key={d.value} value={d.value}>{d.value}</option>
+                  ))}
+                </select>
+                <select
+                  value={publicFilterCategory}
+                  onChange={(e) => setPublicFilterCategory(e.target.value)}
+                  aria-label="Filter by type"
+                  className={`px-3 py-2 border rounded-xl outline-none text-sm ${darkMode ? 'bg-[#162226] border-[#0B5A70]/25 text-gray-200' : 'bg-white border-[#0B5A70]/20 text-[#0B5A70]'} ${publicFilterCategory ? 'font-semibold border-[#0B5A70]/50' : ''}`}
+                >
+                  <option value="">All types</option>
+                  {allCategoryOptions.map(c => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              </div>
 
-              <div className="mb-6 flex flex-wrap gap-2 items-center">
-                {allKeywordOptions.slice(0, 4).map(kw => (
-                  <button
-                    key={kw}
-                    onClick={() => setPublicFilterKeyword(publicFilterKeyword === kw ? '' : kw)}
-                    className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all border ${
-                      publicFilterKeyword === kw
-                        ? 'bg-[#0B5A70] text-white border-[#0B5A70] shadow-md'
-                        : `${darkMode ? 'bg-transparent text-teal-200 border-[#0B5A70]/40 hover:border-[#0B5A70]/70 hover:bg-[#0B5A70]/15' : 'bg-white text-[#0B5A70] border-[#0B5A70]/25 hover:border-[#0B5A70]/45 hover:bg-[#0B5A70]/5'}`
-                    }`}
-                  >
-                    {publicFilterKeyword === kw ? '✓ ' : ''}#{kw}
-                  </button>
-                ))}
+              {/* SESSION 51: all moods, horizontally scrollable. Negative
+                  margins push the row to the screen edges on mobile so
+                  chips scroll from and to the edge — a signal there's
+                  more offscreen. scrollbar hidden on WebKit. */}
+              <div className="mb-6 -mx-4 px-4 overflow-x-auto [&::-webkit-scrollbar]:hidden" style={{scrollbarWidth: 'none'}}>
+                <div className="flex flex-nowrap gap-2 items-center">
+                  {allKeywordOptions.map(kw => (
+                    <button
+                      key={kw}
+                      onClick={() => setPublicFilterKeyword(publicFilterKeyword === kw ? '' : kw)}
+                      className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all border flex-shrink-0 ${
+                        publicFilterKeyword === kw
+                          ? 'bg-[#0B5A70] text-white border-[#0B5A70] shadow-md'
+                          : `${darkMode ? 'bg-transparent text-teal-200 border-[#0B5A70]/40 hover:border-[#0B5A70]/70 hover:bg-[#0B5A70]/15' : 'bg-white text-[#0B5A70] border-[#0B5A70]/25 hover:border-[#0B5A70]/45 hover:bg-[#0B5A70]/5'}`
+                      }`}
+                    >
+                      {publicFilterKeyword === kw ? '✓ ' : ''}#{kw}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               {publicLoading ? (
@@ -11103,7 +11117,11 @@ const App = () => {
                 </div>
 
                 {/* Deity and Category */}
-                <div className="grid grid-cols-2 gap-3">
+                {/* SESSION 51: items-end so selects align at the bottom
+                    regardless of label wrap-height (the Deity label wraps
+                    to 1 line, Category wraps to 2 — without this the
+                    selects were vertically staggered). */}
+                <div className="grid grid-cols-2 gap-3 items-end">
                   <div>
                     <label className="block text-sm font-semibold text-[#0B5A70] mb-1">Deity <span className="block text-xs font-normal text-gray-500">Who the bhajan is about</span></label>
                     <select
