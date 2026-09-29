@@ -1,6 +1,29 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 
 // ==============================================
+// SANKIRTAN SAAS - SESSION 53
+// Bhajan Se Bhagwan Tak
+// CHANGES (Session 53 — fix double link in shared bhajan message):
+//
+// Bug: sharing a public bhajan on WhatsApp/iMessage put the
+// sankirtan.app link into the outgoing message TWICE.
+//
+// Cause: shareBhajan called navigator.share with the link in
+// both the text body AND the url field. WhatsApp and iMessage
+// concatenate them on send.
+//
+// Fix: build a second version of the body — shareTextNoLink —
+// that drops the inline URL, and pass that to navigator.share
+// alongside the url field. The clipboard fallback keeps the
+// with-link text so pasting into a plain textbox still carries
+// the link.
+//
+// Applies to standard public share and "Today's Bhajan" share.
+// Private-library shares unchanged (no deep link anyway).
+//
+// Not touched: schema, Firestore rules, S6-52 work.
+// ==============================================
+//
 // SANKIRTAN SAAS - SESSION 52
 // Bhajan Se Bhagwan Tak
 // CHANGES (Session 52 — small polish on splash + mood chips):
@@ -903,7 +926,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.09.29.s52';
+const APP_VERSION = '2026.09.29.s53';
 
 // SESSION 30: log at startup so admin can verify which build is
 // running via the browser console (helps diagnose "is my new
@@ -1284,37 +1307,49 @@ const shareBhajan = async (bhajan, isPublic = false, opts = {}) => {
     ? `https://sankirtan.app/?b=${encodeURIComponent(bhajan.id)}`
     : 'https://sankirtan.app';
 
+  // SESSION 53: build TWO versions of the share body:
+  //   - shareText (with link) — for the clipboard fallback.
+  //   - shareTextNoLink — for navigator.share on public bhajans,
+  //     because we ALSO pass url as its own field. WhatsApp and
+  //     iMessage merge text + url and previously appended the URL
+  //     twice (once inline, once from the url field). Dropping
+  //     the inline URL from the text sent to navigator.share
+  //     yields exactly one link in the outgoing message.
   let shareText;
+  let shareTextNoLink;
   if (isDaily && isPublic) {
-    // Bilingual "Today's Bhajan" header + meta + optional curator
-    // note + lyric preview + warm Hindi CTA. Format tuned for
-    // WhatsApp readability in Marwari bhakt groups.
-    const parts = [
+    const head = [
       '🌟 आज का भजन · Today\'s Bhajan',
       '',
       shareTitle,
     ];
-    if (meta) parts.push(`(${meta})`);
-    if (dailyNote) parts.push('', `"${dailyNote}"`);
-    parts.push('', lyricsPreview + truncated);
-    parts.push('', 'एक tap में पूरा भजन पढ़ें:', deepLink);
-    shareText = parts.join('\n');
+    const partsWithLink = [...head];
+    const partsNoLink = [...head];
+    if (meta) { partsWithLink.push(`(${meta})`); partsNoLink.push(`(${meta})`); }
+    if (dailyNote) {
+      partsWithLink.push('', `"${dailyNote}"`);
+      partsNoLink.push('', `"${dailyNote}"`);
+    }
+    partsWithLink.push('', lyricsPreview + truncated);
+    partsNoLink.push('', lyricsPreview + truncated);
+    partsWithLink.push('', 'एक tap में पूरा भजन पढ़ें:', deepLink);
+    partsNoLink.push('', 'एक tap में पूरा भजन पढ़ें ↓');
+    shareText = partsWithLink.join('\n');
+    shareTextNoLink = partsNoLink.join('\n');
   } else if (isPublic) {
-    // Standard public share (from reading view etc)
     shareText = `${shareTitle}\n\n${lyricsPreview}${truncated}\n\nRead full at: ${deepLink}`;
+    shareTextNoLink = `${shareTitle}\n\n${lyricsPreview}${truncated}\n\nRead the full bhajan ↓`;
   } else {
-    // Private-library bhajan — text-only, no link
+    // Private-library bhajan — no deep link, no double-link risk.
     shareText = `${shareTitle}\n\n${lyricsPreview}${truncated}\n\n— Shared from Sankirtan (sankirtan.app)`;
+    shareTextNoLink = shareText;
   }
 
   if (navigator.share) {
     try {
-      // SESSION 13: pass URL as a separate field on public shares so
-      // platforms that render link previews (WhatsApp, iMessage) can
-      // pick it up cleanly. Fallback platforms just see the text.
       const shareData = isPublic
-        ? { title: isDaily ? `आज का भजन: ${shareTitle}` : shareTitle, text: shareText, url: deepLink }
-        : { title: shareTitle, text: shareText };
+        ? { title: isDaily ? `आज का भजन: ${shareTitle}` : shareTitle, text: shareTextNoLink, url: deepLink }
+        : { title: shareTitle, text: shareTextNoLink };
       await navigator.share(shareData);
       return 'shared';
     } catch (err) {
