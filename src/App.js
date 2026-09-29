@@ -1,6 +1,27 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 
 // ==============================================
+// SANKIRTAN SAAS - SESSION 52
+// Bhajan Se Bhagwan Tak
+// CHANGES (Session 52 — small polish on splash + mood chips):
+//
+// 1. Splash credit: 🙏 Namaste emojis now flank the "Inspired by
+//    Manju Baisa" line, matching the "🙏 By Grace of Lord Babosa 🙏"
+//    line above it.
+//
+// 2. Mood chips in the reading-view footer are now TAPPABLE.
+//    Was: read-only <span> chips — decoration only.
+//    Now: <button> chips. Tapping one applies that mood as the
+//    library's mood filter (clearing deity/type filters) and
+//    returns the user to the library view. Applied on both
+//    reading views:
+//    - My Library reading view → filters My Library
+//    - Public reading view → filters Public Library
+//    Hover state added so the affordance reads as clickable.
+//
+// Not touched: schema, Firestore rules, all Session 6-51 work.
+// ==============================================
+//
 // SANKIRTAN SAAS - SESSION 51
 // Bhajan Se Bhagwan Tak
 // CHANGES (Session 51 — small fixes on forms and filter rows):
@@ -882,7 +903,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.09.17.s51';
+const APP_VERSION = '2026.09.29.s52';
 
 // SESSION 30: log at startup so admin can verify which build is
 // running via the browser console (helps diagnose "is my new
@@ -6132,8 +6153,10 @@ const App = () => {
               </span>
               <span>🙏</span>
             </p>
-            <p className="text-[#0B5A70]/60 text-xs sm:text-sm mt-1">
-              Inspired by <span className="font-semibold text-[#E65100]/80">Manju Baisa</span>
+            <p className="text-[#0B5A70]/60 text-xs sm:text-sm mt-1 flex items-center justify-center gap-1.5">
+              <span aria-hidden="true">🙏</span>
+              <span>Inspired by <span className="font-semibold text-[#E65100]/80">Manju Baisa</span></span>
+              <span aria-hidden="true">🙏</span>
             </p>
           </div>
 
@@ -7862,10 +7885,25 @@ const App = () => {
                 {(selectedBhajan.keywords && selectedBhajan.keywords.length > 0) || selectedBhajan.source ? (
                   <div className="mt-6 pt-4 border-t border-[#0B5A70]/8 flex items-center justify-between gap-3 flex-wrap">
                     <div className="flex flex-wrap gap-2 flex-1 min-w-0">
+                      {/* SESSION 52: mood chips are now tappable — apply the
+                          mood as a library filter and return to the list. */}
                       {(selectedBhajan.keywords || []).map(kw => (
-                        <span key={kw} className={`px-3 py-1 rounded-full text-sm font-semibold border ${darkMode ? "bg-[#0B5A70]/25 text-teal-200 border-[#0B5A70]/40" : "bg-[#0B5A70]/10 text-[#0B5A70] border-[#0B5A70]/25"}`}>
+                        <button
+                          key={kw}
+                          type="button"
+                          onClick={() => {
+                            setLibraryFilterKeyword(kw);
+                            setFilterDeity('');
+                            setFilterCategory('');
+                            setCurrentView('library');
+                            window.scrollTo({ top: 0, behavior: 'smooth' });
+                          }}
+                          title={`Show my bhajans tagged #${kw}`}
+                          aria-label={`Filter my library by #${kw}`}
+                          className={`px-3 py-1 rounded-full text-sm font-semibold border transition-colors cursor-pointer ${darkMode ? "bg-[#0B5A70]/25 text-teal-200 border-[#0B5A70]/40 hover:bg-[#0B5A70]/40 hover:border-teal-300" : "bg-[#0B5A70]/10 text-[#0B5A70] border-[#0B5A70]/25 hover:bg-[#0B5A70]/20 hover:border-[#0B5A70]/50"}`}
+                        >
                           #{kw}
-                        </span>
+                        </button>
                       ))}
                     </div>
                     {selectedBhajan.source && (
@@ -10255,10 +10293,25 @@ const App = () => {
                 {(selectedPublicBhajan.keywords && selectedPublicBhajan.keywords.length > 0) || selectedPublicBhajan.source ? (
                   <div className="mt-6 pt-4 border-t border-[#0B5A70]/8 flex items-center justify-between gap-3 flex-wrap">
                     <div className="flex flex-wrap gap-2 flex-1 min-w-0">
+                      {/* SESSION 52: mood chips are now tappable — apply the
+                          mood as a public library filter and return to it. */}
                       {(selectedPublicBhajan.keywords || []).map(kw => (
-                        <span key={kw} className={`px-3 py-1 rounded-full text-sm font-semibold border ${darkMode ? "bg-[#0B5A70]/25 text-teal-200 border-[#0B5A70]/40" : "bg-[#0B5A70]/10 text-[#0B5A70] border-[#0B5A70]/25"}`}>
+                        <button
+                          key={kw}
+                          type="button"
+                          onClick={() => {
+                            setPublicFilterKeyword(kw);
+                            setPublicFilterDeity('');
+                            setPublicFilterCategory('');
+                            setCurrentView('public-library');
+                            window.scrollTo({ top: 0, behavior: 'smooth' });
+                          }}
+                          title={`Show public bhajans tagged #${kw}`}
+                          aria-label={`Filter public library by #${kw}`}
+                          className={`px-3 py-1 rounded-full text-sm font-semibold border transition-colors cursor-pointer ${darkMode ? "bg-[#0B5A70]/25 text-teal-200 border-[#0B5A70]/40 hover:bg-[#0B5A70]/40 hover:border-teal-300" : "bg-[#0B5A70]/10 text-[#0B5A70] border-[#0B5A70]/25 hover:bg-[#0B5A70]/20 hover:border-[#0B5A70]/50"}`}
+                        >
                           #{kw}
-                        </span>
+                        </button>
                       ))}
                     </div>
                     {selectedPublicBhajan.source && (
