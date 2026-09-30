@@ -1,6 +1,28 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 
 // ==============================================
+// SANKIRTAN SAAS - SESSION 56
+// Bhajan Se Bhagwan Tak
+// CHANGES (Session 56 — YouTube-branded Listen button, drop Source text):
+//
+// Every source is a YouTube URL (confirmed by the user), so the
+// separate "🔗 Source" text link next to the Play button was
+// redundant. Both merged into a single YouTube-branded button:
+//
+//   [YouTube icon] Listen   (or)   [YouTube icon] Hide
+//
+// The YouTube icon is drawn inline as SVG — red rounded rectangle
+// with a white play triangle. Signals "this plays a YouTube video"
+// without needing separate Source text.
+//
+// Non-YouTube URLs (rare/never in practice) still show a small
+// "🔗 Source" link, so nothing becomes unreachable if a
+// non-YouTube URL sneaks in.
+//
+// Not touched: schema, Firestore rules, S6-55 work. The inline
+// player itself (S54) and past-program filtering (S55) unchanged.
+// ==============================================
+//
 // SANKIRTAN SAAS - SESSION 55
 // Bhajan Se Bhagwan Tak
 // CHANGES (Session 55 — hide past programs in the Add-to picker):
@@ -994,7 +1016,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.09.30.s55';
+const APP_VERSION = '2026.09.30.s56';
 
 // SESSION 30: log at startup so admin can verify which build is
 // running via the browser console (helps diagnose "is my new
@@ -8105,32 +8127,43 @@ const App = () => {
                       ))}
                     </div>
                     {selectedBhajan.source && (() => {
-                      // SESSION 54: if the source is a YouTube URL, show
-                      // a ▶ Play button next to Source. Tapping expands
-                      // an inline player below the footer row.
+                      // SESSION 56: replaced the "Play + Source" pair with
+                      // a single YouTube-branded button. Since every
+                      // source is a YouTube URL, the Source link was
+                      // redundant. Non-YT URLs (rare/never) still get a
+                      // small Source fallback so nothing becomes
+                      // unreachable.
                       const yt = getYouTubeVideoId(selectedBhajan.source);
-                      return (
-                        <div className="flex items-center gap-2 flex-shrink-0">
-                          {yt && (
-                            <button
-                              type="button"
-                              onClick={() => setShowAudioPlayer(v => !v)}
-                              className={`inline-flex items-center gap-1 text-xs font-semibold ${darkMode ? "text-orange-300 hover:text-orange-200" : "text-[#E65100] hover:text-[#d64800]"} hover:underline`}
-                              aria-expanded={showAudioPlayer}
-                              aria-controls="sk-audio-player"
-                            >
-                              {showAudioPlayer ? '✕ Hide' : '▶ Play'}
-                            </button>
-                          )}
+                      if (!yt) {
+                        return (
                           <a
                             href={selectedBhajan.source}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className={`inline-flex items-center gap-1.5 text-xs font-semibold ${darkMode ? "text-orange-300 hover:text-orange-200" : "text-[#E65100] hover:text-[#d64800]"} hover:underline`}
+                            className={`inline-flex items-center gap-1.5 text-xs font-semibold flex-shrink-0 ${darkMode ? "text-orange-300 hover:text-orange-200" : "text-[#E65100] hover:text-[#d64800]"} hover:underline`}
                           >
                             🔗 Source
                           </a>
-                        </div>
+                        );
+                      }
+                      return (
+                        <button
+                          type="button"
+                          onClick={() => setShowAudioPlayer(v => !v)}
+                          className="inline-flex items-center gap-2 flex-shrink-0 rounded-lg px-2 py-1 hover:bg-red-50/60 transition-colors group"
+                          aria-expanded={showAudioPlayer}
+                          aria-controls="sk-audio-player"
+                          aria-label={showAudioPlayer ? 'Hide audio player' : 'Play audio'}
+                          title={showAudioPlayer ? 'Hide player' : 'Play audio'}
+                        >
+                          <svg width="28" height="20" viewBox="0 0 28 20" aria-hidden="true">
+                            <rect width="28" height="20" rx="5" fill="#FF0000" />
+                            <path d="M11 6 L11 14 L18 10 Z" fill="white" />
+                          </svg>
+                          <span className={`text-xs font-semibold ${darkMode ? 'text-gray-300 group-hover:text-white' : 'text-[#0B5A70]/70 group-hover:text-[#0B5A70]'}`}>
+                            {showAudioPlayer ? 'Hide' : 'Listen'}
+                          </span>
+                        </button>
                       );
                     })()}
                   </div>
@@ -10554,28 +10587,36 @@ const App = () => {
                     </div>
                     {selectedPublicBhajan.source && (() => {
                       const yt = getYouTubeVideoId(selectedPublicBhajan.source);
-                      return (
-                        <div className="flex items-center gap-2 flex-shrink-0">
-                          {yt && (
-                            <button
-                              type="button"
-                              onClick={() => setShowAudioPlayer(v => !v)}
-                              className={`inline-flex items-center gap-1 text-xs font-semibold ${darkMode ? "text-orange-300 hover:text-orange-200" : "text-[#E65100] hover:text-[#d64800]"} hover:underline`}
-                              aria-expanded={showAudioPlayer}
-                              aria-controls="sk-audio-player-public"
-                            >
-                              {showAudioPlayer ? '✕ Hide' : '▶ Play'}
-                            </button>
-                          )}
+                      if (!yt) {
+                        return (
                           <a
                             href={selectedPublicBhajan.source}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className={`inline-flex items-center gap-1.5 text-xs font-semibold ${darkMode ? "text-orange-300 hover:text-orange-200" : "text-[#E65100] hover:text-[#d64800]"} hover:underline`}
+                            className={`inline-flex items-center gap-1.5 text-xs font-semibold flex-shrink-0 ${darkMode ? "text-orange-300 hover:text-orange-200" : "text-[#E65100] hover:text-[#d64800]"} hover:underline`}
                           >
                             🔗 Source
                           </a>
-                        </div>
+                        );
+                      }
+                      return (
+                        <button
+                          type="button"
+                          onClick={() => setShowAudioPlayer(v => !v)}
+                          className="inline-flex items-center gap-2 flex-shrink-0 rounded-lg px-2 py-1 hover:bg-red-50/60 transition-colors group"
+                          aria-expanded={showAudioPlayer}
+                          aria-controls="sk-audio-player-public"
+                          aria-label={showAudioPlayer ? 'Hide audio player' : 'Play audio'}
+                          title={showAudioPlayer ? 'Hide player' : 'Play audio'}
+                        >
+                          <svg width="28" height="20" viewBox="0 0 28 20" aria-hidden="true">
+                            <rect width="28" height="20" rx="5" fill="#FF0000" />
+                            <path d="M11 6 L11 14 L18 10 Z" fill="white" />
+                          </svg>
+                          <span className={`text-xs font-semibold ${darkMode ? 'text-gray-300 group-hover:text-white' : 'text-[#0B5A70]/70 group-hover:text-[#0B5A70]'}`}>
+                            {showAudioPlayer ? 'Hide' : 'Listen'}
+                          </span>
+                        </button>
                       );
                     })()}
                   </div>
