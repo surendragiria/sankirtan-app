@@ -1,6 +1,74 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 
 // ==============================================
+// SANKIRTAN SAAS - SESSION 55
+// Bhajan Se Bhagwan Tak
+// CHANGES (Session 55 — hide past programs in the Add-to picker):
+//
+// When adding a bhajan from a reading view to a program, dated
+// events that already happened (program.date < today) are no
+// longer shown. Only playlists, medleys, and upcoming programs
+// appear. A program with a blank/missing date is still shown
+// (safer than silently dropping it).
+//
+// Filter uses getTodayKey() for the YYYY-MM-DD comparison, so
+// timezone matches the user's local calendar. A program dated
+// today is still "current" — not hidden.
+//
+// Empty state refined into two branches:
+//   - Nothing at all — "No playlists, programs, or medleys yet"
+//     (unchanged copy)
+//   - Only past programs — "No upcoming programs. Past programs
+//     are hidden here. Create a new program or add this bhajan
+//     to a playlist / medley instead."
+//
+// Not touched: schema, Firestore rules, S6-54 work. Past
+// programs still exist and remain visible in the Playlists tab
+// itself — this only affects the Add-to picker.
+// ==============================================
+//
+// SANKIRTAN SAAS - SESSION 54
+// Bhajan Se Bhagwan Tak
+// CHANGES (Session 54 — inline YouTube audio on bhajan pages):
+//
+// User confirmed: every existing bhajan's `source` field points
+// to a YouTube URL. This session makes those YouTube links
+// playable inline on the bhajan reading view, without leaving
+// the page.
+//
+// New helper (top of file, near shareBhajan):
+//   getYouTubeVideoId(url) — parses youtube.com/watch, youtu.be,
+//   /shorts/, /embed/, /live/, with optional timestamp
+//   (t=90 or t=1m30s). Returns { id, start } or null.
+//
+// New state: showAudioPlayer (bool). Resets to false whenever a
+// new bhajan opens (openBhajanDetail / openPublicBhajanDetail).
+//
+// Reading view footer: if source is a YouTube URL, a new
+// ▶ Play button sits alongside 🔗 Source. Tapping it expands
+// a compact inline player below the footer:
+//   - 16:9 aspect ratio, capped at 260px tall
+//   - Lazy-loaded — the <iframe> only mounts after the user taps
+//     Play, so opening a bhajan never quietly loads YouTube
+//     tracking / ads
+//   - Uses youtube-nocookie.com/embed for privacy-preserving
+//     embed
+//   - autoplay=1 works because the tap is a user gesture
+//   - Timestamp preserved if the source URL had t=/start=
+//   - rel=0 keeps recommended videos on-channel only
+//   - When expanded, the Play button becomes ✕ Hide
+//
+// Non-YouTube sources still show just 🔗 Source (unchanged).
+//
+// Not built in this session:
+//   - Autoplay in Live mode — deliberately absent; singers don't
+//     want a video fighting them mid-performance.
+//   - Cross-bhajan playback continuation — each bhajan gets a
+//     fresh, collapsed player.
+//
+// Not touched: schema, Firestore rules, S6-53 work.
+// ==============================================
+//
 // SANKIRTAN SAAS - SESSION 53
 // Bhajan Se Bhagwan Tak
 // CHANGES (Session 53 — fix double link in shared bhajan message):
@@ -926,7 +994,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.09.29.s53';
+const APP_VERSION = '2026.09.30.s55';
 
 // SESSION 30: log at startup so admin can verify which build is
 // running via the browser console (helps diagnose "is my new
@@ -1291,6 +1359,49 @@ const shareApp = async () => {
     document.body.removeChild(ta);
     return 'copied';
   }
+};
+
+// SESSION 54: parse a YouTube URL and return { id, start } or null.
+// Handles youtube.com/watch, youtu.be short links, /shorts/, /embed/,
+// and optional timestamps (t=90 or t=1m30s → seconds).
+const getYouTubeVideoId = (url) => {
+  if (!url || typeof url !== 'string') return null;
+  try {
+    const u = new URL(url.trim());
+    const host = u.hostname.replace(/^www\./, '').toLowerCase();
+    let id = null;
+    if (host === 'youtu.be') {
+      id = u.pathname.slice(1).split('/')[0] || null;
+    } else if (host.endsWith('youtube.com') || host.endsWith('youtube-nocookie.com')) {
+      if (u.pathname === '/watch') {
+        id = u.searchParams.get('v');
+      } else if (u.pathname.startsWith('/shorts/')) {
+        id = u.pathname.split('/')[2] || null;
+      } else if (u.pathname.startsWith('/embed/')) {
+        id = u.pathname.split('/')[2] || null;
+      } else if (u.pathname.startsWith('/live/')) {
+        id = u.pathname.split('/')[2] || null;
+      }
+    }
+    if (!id || !/^[A-Za-z0-9_-]{6,}$/.test(id)) return null;
+
+    // Extract optional start time (t or start param).
+    let start = 0;
+    const raw = u.searchParams.get('t') || u.searchParams.get('start') || '';
+    if (raw) {
+      if (/^\d+$/.test(raw)) {
+        start = parseInt(raw, 10);
+      } else {
+        const m = raw.match(/(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s?)?/);
+        if (m) {
+          start = (parseInt(m[1] || 0, 10) * 3600)
+                + (parseInt(m[2] || 0, 10) * 60)
+                + (parseInt(m[3] || 0, 10));
+        }
+      }
+    }
+    return { id, start };
+  } catch { return null; }
 };
 
 const shareBhajan = async (bhajan, isPublic = false, opts = {}) => {
@@ -2081,6 +2192,9 @@ const App = () => {
     }
   });
   const [showReadingSettings, setShowReadingSettings] = useState(false);
+  // SESSION 54: expanded inline YouTube player on reading views.
+  // Reset to false when a different bhajan is opened.
+  const [showAudioPlayer, setShowAudioPlayer] = useState(false);
   const [readingWakeLock, setReadingWakeLock] = useState(null);
 
   // ==============================================
@@ -4199,6 +4313,7 @@ const App = () => {
   const openBhajanDetail = useCallback(async (bhajan) => {
     setSelectedBhajan(bhajan);
     setCurrentView('bhajan-detail');
+    setShowAudioPlayer(false); // SESSION 54: collapse any prior player
     trackRecentRead(bhajan);
 
     try {
@@ -4589,6 +4704,7 @@ const App = () => {
   const openPublicBhajanDetail = useCallback((bhajan) => {
     setSelectedPublicBhajan(bhajan);
     setCurrentView('public-bhajan-detail');
+    setShowAudioPlayer(false); // SESSION 54: collapse any prior player
 
     // SESSION 19: increment readCount for signed-in users so
     // "Popular Bhajans" reflects what's actually being read, not
@@ -6934,34 +7050,80 @@ const App = () => {
 
               {/* List */}
               <div className="overflow-y-auto flex-1 p-4">
-                {programs.length === 0 ? (
-                  <div className="text-center py-10">
-                    <div className="text-5xl mb-3">🎵</div>
-                    <p className={`text-sm font-semibold mb-1 ${darkMode ? 'text-amber-100' : 'text-[#0B5A70]'}`}>
-                      No playlists, programs, or medleys yet
-                    </p>
-                    <p className={`text-xs mb-4 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                      Create one first, then come back to add this bhajan.
-                    </p>
-                    <button
-                      onClick={() => {
-                        setAddToProgramFor(null);
-                        setCurrentView('programs');
-                      }}
-                      className="bg-[#0B5A70] hover:bg-[#094a5d] text-white font-semibold px-5 py-2 rounded-xl text-sm"
-                    >
-                      Go to Playlists →
-                    </button>
-                  </div>
-                ) : (
+                {(() => {
+                  // SESSION 55: refined empty state — differentiates
+                  // "no lists yet" from "only past programs left".
+                  const todayKey = getTodayKey();
+                  const hasAny = programs.length > 0;
+                  const hasCurrent = programs.some(pp => {
+                    const t = getProgramType(pp);
+                    if (t !== 'program') return true;
+                    const d = (pp.date && String(pp.date).trim()) || '';
+                    return !d || d >= todayKey;
+                  });
+                  if (!hasAny) {
+                    return (
+                      <div className="text-center py-10">
+                        <div className="text-5xl mb-3">🎵</div>
+                        <p className={`text-sm font-semibold mb-1 ${darkMode ? 'text-amber-100' : 'text-[#0B5A70]'}`}>
+                          No playlists, programs, or medleys yet
+                        </p>
+                        <p className={`text-xs mb-4 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                          Create one first, then come back to add this bhajan.
+                        </p>
+                        <button
+                          onClick={() => {
+                            setAddToProgramFor(null);
+                            setCurrentView('programs');
+                          }}
+                          className="bg-[#0B5A70] hover:bg-[#094a5d] text-white font-semibold px-5 py-2 rounded-xl text-sm"
+                        >
+                          Go to Playlists →
+                        </button>
+                      </div>
+                    );
+                  }
+                  if (!hasCurrent) {
+                    return (
+                      <div className="text-center py-10">
+                        <div className="text-5xl mb-3">📅</div>
+                        <p className={`text-sm font-semibold mb-1 ${darkMode ? 'text-amber-100' : 'text-[#0B5A70]'}`}>
+                          No upcoming programs
+                        </p>
+                        <p className={`text-xs mb-4 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                          Past programs are hidden here. Create a new program or add this bhajan to a playlist / medley instead.
+                        </p>
+                        <button
+                          onClick={() => {
+                            setAddToProgramFor(null);
+                            setCurrentView('programs');
+                          }}
+                          className="bg-[#0B5A70] hover:bg-[#094a5d] text-white font-semibold px-5 py-2 rounded-xl text-sm"
+                        >
+                          Go to Playlists →
+                        </button>
+                      </div>
+                    );
+                  }
+                  return (
                   <div className="space-y-2">
                     {(() => {
                       // Group by type (parody, playlist, program) —
                       // parody at top since it's the newest concept
                       // and often what users add short bhajans to.
+                      // SESSION 55: filter out PAST programs (dated
+                      // events that already happened). Playlists and
+                      // medleys are ongoing collections — no date, no
+                      // filter. A program with a missing/blank date
+                      // is kept (safer than silently hiding it).
+                      const todayKey = getTodayKey();
                       const byType = { parody: [], playlist: [], program: [] };
                       for (const p of programs) {
                         const t = getProgramType(p);
+                        if (t === 'program') {
+                          const d = (p.date && String(p.date).trim()) || '';
+                          if (d && d < todayKey) continue; // skip past
+                        }
                         byType[t] = byType[t] || [];
                         byType[t].push(p);
                       }
@@ -7029,7 +7191,8 @@ const App = () => {
                       ));
                     })()}
                   </div>
-                )}
+                  );
+                })()}
               </div>
 
               {/* Footer */}
@@ -7941,18 +8104,58 @@ const App = () => {
                         </button>
                       ))}
                     </div>
-                    {selectedBhajan.source && (
-                      <a
-                        href={selectedBhajan.source}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className={`inline-flex items-center gap-1.5 text-xs font-semibold flex-shrink-0 ${darkMode ? "text-orange-300 hover:text-orange-200" : "text-[#E65100] hover:text-[#d64800]"} hover:underline`}
-                      >
-                        🔗 Source
-                      </a>
-                    )}
+                    {selectedBhajan.source && (() => {
+                      // SESSION 54: if the source is a YouTube URL, show
+                      // a ▶ Play button next to Source. Tapping expands
+                      // an inline player below the footer row.
+                      const yt = getYouTubeVideoId(selectedBhajan.source);
+                      return (
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          {yt && (
+                            <button
+                              type="button"
+                              onClick={() => setShowAudioPlayer(v => !v)}
+                              className={`inline-flex items-center gap-1 text-xs font-semibold ${darkMode ? "text-orange-300 hover:text-orange-200" : "text-[#E65100] hover:text-[#d64800]"} hover:underline`}
+                              aria-expanded={showAudioPlayer}
+                              aria-controls="sk-audio-player"
+                            >
+                              {showAudioPlayer ? '✕ Hide' : '▶ Play'}
+                            </button>
+                          )}
+                          <a
+                            href={selectedBhajan.source}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className={`inline-flex items-center gap-1.5 text-xs font-semibold ${darkMode ? "text-orange-300 hover:text-orange-200" : "text-[#E65100] hover:text-[#d64800]"} hover:underline`}
+                          >
+                            🔗 Source
+                          </a>
+                        </div>
+                      );
+                    })()}
                   </div>
                 ) : null}
+                {/* SESSION 54: lazy-loaded YouTube player. Only injected
+                    once the user taps Play — no upfront YouTube tracking
+                    on every bhajan open. Uses youtube-nocookie for
+                    privacy. Autoplay works because the tap is a user
+                    gesture. */}
+                {showAudioPlayer && (() => {
+                  const yt = getYouTubeVideoId(selectedBhajan.source);
+                  if (!yt) return null;
+                  const startParam = yt.start > 0 ? `&start=${yt.start}` : '';
+                  return (
+                    <div id="sk-audio-player" className="mt-4 rounded-xl overflow-hidden border border-[#0B5A70]/15 bg-black" style={{aspectRatio: '16/9', maxHeight: '260px'}}>
+                      <iframe
+                        title={`Audio for ${selectedBhajan.title}`}
+                        src={`https://www.youtube-nocookie.com/embed/${yt.id}?autoplay=1&rel=0${startParam}`}
+                        style={{width: '100%', height: '100%', border: 0}}
+                        allow="autoplay; encrypted-media; picture-in-picture"
+                        allowFullScreen
+                      />
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* SESSION 34: context-aware "next-tap" list below reading view.
@@ -10349,18 +10552,50 @@ const App = () => {
                         </button>
                       ))}
                     </div>
-                    {selectedPublicBhajan.source && (
-                      <a
-                        href={selectedPublicBhajan.source}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className={`inline-flex items-center gap-1.5 text-xs font-semibold flex-shrink-0 ${darkMode ? "text-orange-300 hover:text-orange-200" : "text-[#E65100] hover:text-[#d64800]"} hover:underline`}
-                      >
-                        🔗 Source
-                      </a>
-                    )}
+                    {selectedPublicBhajan.source && (() => {
+                      const yt = getYouTubeVideoId(selectedPublicBhajan.source);
+                      return (
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          {yt && (
+                            <button
+                              type="button"
+                              onClick={() => setShowAudioPlayer(v => !v)}
+                              className={`inline-flex items-center gap-1 text-xs font-semibold ${darkMode ? "text-orange-300 hover:text-orange-200" : "text-[#E65100] hover:text-[#d64800]"} hover:underline`}
+                              aria-expanded={showAudioPlayer}
+                              aria-controls="sk-audio-player-public"
+                            >
+                              {showAudioPlayer ? '✕ Hide' : '▶ Play'}
+                            </button>
+                          )}
+                          <a
+                            href={selectedPublicBhajan.source}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className={`inline-flex items-center gap-1.5 text-xs font-semibold ${darkMode ? "text-orange-300 hover:text-orange-200" : "text-[#E65100] hover:text-[#d64800]"} hover:underline`}
+                          >
+                            🔗 Source
+                          </a>
+                        </div>
+                      );
+                    })()}
                   </div>
                 ) : null}
+                {showAudioPlayer && (() => {
+                  const yt = getYouTubeVideoId(selectedPublicBhajan.source);
+                  if (!yt) return null;
+                  const startParam = yt.start > 0 ? `&start=${yt.start}` : '';
+                  return (
+                    <div id="sk-audio-player-public" className="mt-4 rounded-xl overflow-hidden border border-[#0B5A70]/15 bg-black" style={{aspectRatio: '16/9', maxHeight: '260px'}}>
+                      <iframe
+                        title={`Audio for ${selectedPublicBhajan.title}`}
+                        src={`https://www.youtube-nocookie.com/embed/${yt.id}?autoplay=1&rel=0${startParam}`}
+                        style={{width: '100%', height: '100%', border: 0}}
+                        allow="autoplay; encrypted-media; picture-in-picture"
+                        allowFullScreen
+                      />
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Related Bhajans — SESSION 6: uses memoized relatedPublicBhajans */}
