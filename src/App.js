@@ -1,6 +1,34 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 
 // ==============================================
+// SANKIRTAN SAAS - SESSION 58
+// Bhajan Se Bhagwan Tak
+// CHANGES (Session 58 — Listen button on card opens inline player):
+//
+// S57 made the YouTube button on the full card open YouTube in
+// a new tab. User feedback: that defeats the purpose of inline
+// playback. Users were jumping out of the app to YouTube.
+//
+// Now: tapping the YouTube Listen button on a full card opens
+// the bhajan's reading view AND auto-expands the inline player
+// in one step. User never leaves the app.
+//
+// Implementation
+// - openBhajanDetail and openPublicBhajanDetail accept an optional
+//   second argument: { autoplay: true }. When set, showAudioPlayer
+//   is initialized to true instead of false.
+// - Card YouTube buttons became <button> instead of <a>, calling
+//   onOpen(bhajan, { autoplay: true }) with stopPropagation so the
+//   card's own click handler doesn't fight it.
+// - Non-YouTube source URLs (rare) still open in a new tab via the
+//   original <a href> — there's no inline player for a blog link.
+//
+// Reading-view Listen button is unchanged — it still toggles the
+// inline player normally.
+//
+// Not touched: schema, Firestore rules, S6-57 work.
+// ==============================================
+//
 // SANKIRTAN SAAS - SESSION 57
 // Bhajan Se Bhagwan Tak
 // CHANGES (Session 57 — card YouTube button + tighten playlist/program/medley heroes):
@@ -1051,7 +1079,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.10.01.s57';
+const APP_VERSION = '2026.10.05.s58';
 
 // SESSION 30: log at startup so admin can verify which build is
 // running via the browser console (helps diagnose "is my new
@@ -1756,11 +1784,35 @@ const MyBhajanCard = React.memo(function MyBhajanCard({
           card's role="button" onClick from firing (which would
           open the reading view instead of the source URL). */}
       {bhajan.source && (() => {
-        // SESSION 57: YouTube-branded button on the detailed card.
-        // Opens YouTube in a new tab (same behavior as the old Source
-        // link). The inline player lives on the reading view — the
-        // whole card is already tappable to get there.
+        // SESSION 58: tapping the YouTube button on a card now opens the
+        // reading view AND auto-expands the inline player — so the user
+        // never leaves the app. Non-YouTube sources still open in a new
+        // tab (there's no inline player for a blog link).
         const yt = getYouTubeVideoId(bhajan.source);
+        if (yt) {
+          return (
+            <div className="mt-3 text-center">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpen(bhajan, { autoplay: true });
+                }}
+                className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 hover:bg-red-50/60 transition-colors group"
+                aria-label="Listen inline"
+                title="Listen inline"
+              >
+                <svg width="24" height="17" viewBox="0 0 28 20" aria-hidden="true">
+                  <rect width="28" height="20" rx="5" fill="#FF0000" />
+                  <path d="M11 6 L11 14 L18 10 Z" fill="white" />
+                </svg>
+                <span className={`text-xs font-semibold ${darkMode ? 'text-gray-300 group-hover:text-white' : 'text-[#0B5A70]/70 group-hover:text-[#0B5A70]'}`}>
+                  Listen
+                </span>
+              </button>
+            </div>
+          );
+        }
         return (
           <div className="mt-3 text-center">
             <a
@@ -1768,20 +1820,13 @@ const MyBhajanCard = React.memo(function MyBhajanCard({
               target="_blank"
               rel="noopener noreferrer"
               onClick={(e) => e.stopPropagation()}
-              className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 hover:bg-red-50/60 transition-colors group"
-              aria-label={yt ? 'Open on YouTube' : 'Open source'}
-              title={yt ? 'Open on YouTube' : 'Open source'}
+              className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 hover:bg-[#0B5A70]/5 transition-colors group"
+              aria-label="Open source"
+              title="Open source"
             >
-              {yt ? (
-                <svg width="24" height="17" viewBox="0 0 28 20" aria-hidden="true">
-                  <rect width="28" height="20" rx="5" fill="#FF0000" />
-                  <path d="M11 6 L11 14 L18 10 Z" fill="white" />
-                </svg>
-              ) : (
-                <span aria-hidden="true">🔗</span>
-              )}
-              <span className={`text-xs font-semibold ${darkMode ? 'text-gray-300 group-hover:text-white' : 'text-[#0B5A70]/70 group-hover:text-[#0B5A70]'}`}>
-                {yt ? 'Listen' : 'Source'}
+              <span aria-hidden="true">🔗</span>
+              <span className={`text-xs font-semibold ${darkMode ? 'text-gray-300' : 'text-[#0B5A70]/70'}`}>
+                Source
               </span>
             </a>
           </div>
@@ -1898,8 +1943,33 @@ const PublicBhajanCard = React.memo(function PublicBhajanCard({
           button so click doesn't compete with "open reading
           view", and doesn't nest an anchor inside a button. */}
       {bhajan.source && (() => {
-        // SESSION 57: YouTube-branded button on the detailed card.
+        // SESSION 58: tapping Listen on the card opens the reading view
+        // with the inline player expanded instead of jumping to YouTube.
         const yt = getYouTubeVideoId(bhajan.source);
+        if (yt) {
+          return (
+            <div className="mt-2 text-center">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpen(bhajan, { autoplay: true });
+                }}
+                className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 hover:bg-red-50/60 transition-colors group"
+                aria-label="Listen inline"
+                title="Listen inline"
+              >
+                <svg width="24" height="17" viewBox="0 0 28 20" aria-hidden="true">
+                  <rect width="28" height="20" rx="5" fill="#FF0000" />
+                  <path d="M11 6 L11 14 L18 10 Z" fill="white" />
+                </svg>
+                <span className={`text-xs font-semibold ${darkMode ? 'text-gray-300 group-hover:text-white' : 'text-[#0B5A70]/70 group-hover:text-[#0B5A70]'}`}>
+                  Listen
+                </span>
+              </button>
+            </div>
+          );
+        }
         return (
           <div className="mt-2 text-center">
             <a
@@ -1907,20 +1977,13 @@ const PublicBhajanCard = React.memo(function PublicBhajanCard({
               target="_blank"
               rel="noopener noreferrer"
               onClick={(e) => e.stopPropagation()}
-              className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 hover:bg-red-50/60 transition-colors group"
-              aria-label={yt ? 'Open on YouTube' : 'Open source'}
-              title={yt ? 'Open on YouTube' : 'Open source'}
+              className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 hover:bg-[#0B5A70]/5 transition-colors group"
+              aria-label="Open source"
+              title="Open source"
             >
-              {yt ? (
-                <svg width="24" height="17" viewBox="0 0 28 20" aria-hidden="true">
-                  <rect width="28" height="20" rx="5" fill="#FF0000" />
-                  <path d="M11 6 L11 14 L18 10 Z" fill="white" />
-                </svg>
-              ) : (
-                <span aria-hidden="true">🔗</span>
-              )}
-              <span className={`text-xs font-semibold ${darkMode ? 'text-gray-300 group-hover:text-white' : 'text-[#0B5A70]/70 group-hover:text-[#0B5A70]'}`}>
-                {yt ? 'Listen' : 'Source'}
+              <span aria-hidden="true">🔗</span>
+              <span className={`text-xs font-semibold ${darkMode ? 'text-gray-300' : 'text-[#0B5A70]/70'}`}>
+                Source
               </span>
             </a>
           </div>
@@ -4402,10 +4465,12 @@ const App = () => {
 
   // SESSION 6: useCallback so MyBhajanCard's React.memo holds
   // (a fresh function every render would defeat memoization).
-  const openBhajanDetail = useCallback(async (bhajan) => {
+  const openBhajanDetail = useCallback(async (bhajan, opts) => {
     setSelectedBhajan(bhajan);
     setCurrentView('bhajan-detail');
-    setShowAudioPlayer(false); // SESSION 54: collapse any prior player
+    // SESSION 58: when opened from the card's YouTube Listen button,
+    // auto-expand the inline player. Otherwise collapse any prior one.
+    setShowAudioPlayer(!!(opts && opts.autoplay));
     trackRecentRead(bhajan);
 
     try {
@@ -4793,10 +4858,12 @@ const App = () => {
   // PUBLIC LIBRARY OPERATIONS
   // ==============================================
   // SESSION 6: useCallback so PublicBhajanCard's React.memo holds.
-  const openPublicBhajanDetail = useCallback((bhajan) => {
+  const openPublicBhajanDetail = useCallback((bhajan, opts) => {
     setSelectedPublicBhajan(bhajan);
     setCurrentView('public-bhajan-detail');
-    setShowAudioPlayer(false); // SESSION 54: collapse any prior player
+    // SESSION 58: auto-expand the inline player when the user tapped
+    // the YouTube Listen button on the card.
+    setShowAudioPlayer(!!(opts && opts.autoplay));
 
     // SESSION 19: increment readCount for signed-in users so
     // "Popular Bhajans" reflects what's actually being read, not
