@@ -1,6 +1,41 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 
 // ==============================================
+// SANKIRTAN SAAS - SESSION 57
+// Bhajan Se Bhagwan Tak
+// CHANGES (Session 57 — card YouTube button + tighten playlist/program/medley heroes):
+//
+// 1. Detailed-card YouTube button. Both MyBhajanCard and
+//    PublicBhajanCard in full (non-compact) view were still
+//    showing a "🔗 Source" text link at the bottom. Now they
+//    show the YouTube-branded Listen button, matching the
+//    reading view (S56). On a card, the button opens YouTube in
+//    a new tab (same behavior as the old Source link) — the
+//    inline player lives on the reading view, which the whole
+//    card already opens.
+//
+// 2. Playlist/Program cards (Playlists tab) shrunk. Was p-5
+//    rounded-2xl with a text-3xl emoji at top-left, text-lg
+//    title, bhajan-count pill at top-right, date/venue lines,
+//    and an "Open →" footer. Now a compact one-liner card:
+//    small emoji inline next to a text-sm title, meta
+//    (bhajan count · date · venue) in a single text-xs line
+//    beneath. Footer arrow dropped — the whole card is already
+//    tappable.
+//
+// 3. Playlist/Program detail page title shrunk. Was p-6/8 hero
+//    with text-3xl/4xl title and separate 🎵 icon above. Now
+//    p-4/5 with text-xl/2xl title, icon inline, meta row
+//    (count · date · venue) under the title. Live Performance
+//    button and other controls below are unchanged.
+//
+// 4. Medley detail page title tightened further. Already shrunk
+//    in S46; now p-3/4 with text-base/lg title.
+//
+// Not touched: schema, Firestore rules, S6-56 work. Compact card
+// list unchanged (already small enough).
+// ==============================================
+//
 // SANKIRTAN SAAS - SESSION 56
 // Bhajan Se Bhagwan Tak
 // CHANGES (Session 56 — YouTube-branded Listen button, drop Source text):
@@ -1016,7 +1051,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.09.30.s56';
+const APP_VERSION = '2026.10.01.s57';
 
 // SESSION 30: log at startup so admin can verify which build is
 // running via the browser console (helps diagnose "is my new
@@ -1720,19 +1755,38 @@ const MyBhajanCard = React.memo(function MyBhajanCard({
           bhajan.source is set. stopPropagation prevents the
           card's role="button" onClick from firing (which would
           open the reading view instead of the source URL). */}
-      {bhajan.source && (
-        <div className="mt-3 text-center">
-          <a
-            href={bhajan.source}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={(e) => e.stopPropagation()}
-            className={`text-xs inline-flex items-center gap-1 ${darkMode ? 'text-orange-300 hover:text-orange-200' : 'text-[#E65100] hover:text-[#d64800]'} hover:underline`}
-          >
-            🔗 Source
-          </a>
-        </div>
-      )}
+      {bhajan.source && (() => {
+        // SESSION 57: YouTube-branded button on the detailed card.
+        // Opens YouTube in a new tab (same behavior as the old Source
+        // link). The inline player lives on the reading view — the
+        // whole card is already tappable to get there.
+        const yt = getYouTubeVideoId(bhajan.source);
+        return (
+          <div className="mt-3 text-center">
+            <a
+              href={bhajan.source}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 hover:bg-red-50/60 transition-colors group"
+              aria-label={yt ? 'Open on YouTube' : 'Open source'}
+              title={yt ? 'Open on YouTube' : 'Open source'}
+            >
+              {yt ? (
+                <svg width="24" height="17" viewBox="0 0 28 20" aria-hidden="true">
+                  <rect width="28" height="20" rx="5" fill="#FF0000" />
+                  <path d="M11 6 L11 14 L18 10 Z" fill="white" />
+                </svg>
+              ) : (
+                <span aria-hidden="true">🔗</span>
+              )}
+              <span className={`text-xs font-semibold ${darkMode ? 'text-gray-300 group-hover:text-white' : 'text-[#0B5A70]/70 group-hover:text-[#0B5A70]'}`}>
+                {yt ? 'Listen' : 'Source'}
+              </span>
+            </a>
+          </div>
+        );
+      })()}
     </div>
   );
 });
@@ -1843,19 +1897,35 @@ const PublicBhajanCard = React.memo(function PublicBhajanCard({
           shouldn't show an empty label. Sits outside the tap-
           button so click doesn't compete with "open reading
           view", and doesn't nest an anchor inside a button. */}
-      {bhajan.source && (
-        <div className="mt-2 text-center">
-          <a
-            href={bhajan.source}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={(e) => e.stopPropagation()}
-            className={`text-xs inline-flex items-center gap-1 ${darkMode ? 'text-orange-300 hover:text-orange-200' : 'text-[#E65100] hover:text-[#d64800]'} hover:underline`}
-          >
-            🔗 Source
-          </a>
-        </div>
-      )}
+      {bhajan.source && (() => {
+        // SESSION 57: YouTube-branded button on the detailed card.
+        const yt = getYouTubeVideoId(bhajan.source);
+        return (
+          <div className="mt-2 text-center">
+            <a
+              href={bhajan.source}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 hover:bg-red-50/60 transition-colors group"
+              aria-label={yt ? 'Open on YouTube' : 'Open source'}
+              title={yt ? 'Open on YouTube' : 'Open source'}
+            >
+              {yt ? (
+                <svg width="24" height="17" viewBox="0 0 28 20" aria-hidden="true">
+                  <rect width="28" height="20" rx="5" fill="#FF0000" />
+                  <path d="M11 6 L11 14 L18 10 Z" fill="white" />
+                </svg>
+              ) : (
+                <span aria-hidden="true">🔗</span>
+              )}
+              <span className={`text-xs font-semibold ${darkMode ? 'text-gray-300 group-hover:text-white' : 'text-[#0B5A70]/70 group-hover:text-[#0B5A70]'}`}>
+                {yt ? 'Listen' : 'Source'}
+              </span>
+            </a>
+          </div>
+        );
+      })()}
 
       {(bhajan.saveCount > 0) && (
         <p className={`text-xs mt-2 text-center ${darkMode ? 'text-gray-500' : 'text-[#0B5A70]/50'}`}>
@@ -9020,46 +9090,33 @@ const App = () => {
                     const isPar = pType === 'parody';
                     // SESSION 36: three-way emoji + label
                     const cardEmoji = isPar ? '🎭' : (isPl ? '🎵' : '📅');
+                    // SESSION 57: compact program/playlist card. Was
+                    // p-5 with text-3xl emoji and text-lg title; now p-3
+                    // with text-xl emoji inline next to the title, meta
+                    // on a single line. Open-arrow footer dropped.
                     return (
                       <button
                         key={program.id}
                         onClick={() => openProgramDetail(program)}
-                        className="bg-[#FFFCF8] rounded-2xl shadow-[0_2px_12px_rgba(11,90,112,0.06)] p-5 border border-[#0B5A70]/8 hover:border-[#0B5A70]/25 hover:shadow-[0_4px_20px_rgba(11,90,112,0.12)] transition-all text-left"
+                        className="bg-[#FFFCF8] rounded-xl shadow-[0_1px_4px_rgba(11,90,112,0.04)] p-3 border border-[#0B5A70]/8 hover:border-[#0B5A70]/25 hover:shadow-[0_2px_8px_rgba(11,90,112,0.08)] transition-all text-left"
                       >
-                        <div className="flex items-start justify-between mb-2">
-                          <div className="text-3xl">{cardEmoji}</div>
-                          <span className="text-xs bg-[#0B5A70]/8 text-[#0B5A70] px-2 py-1 rounded-full font-semibold">
-                            {program.bhajanCount || 0} bhajans
-                          </span>
+                        <div className="flex items-center gap-3">
+                          <div className="text-xl flex-shrink-0" aria-hidden="true">{cardEmoji}</div>
+                          <div className="flex-1 min-w-0">
+                            <h3 className="text-sm font-bold text-[#0B5A70] truncate">
+                              {program.name}
+                            </h3>
+                            <p className="text-xs text-gray-500 truncate">
+                              {isPar ? (
+                                `${program.bhajanCount || 0} mukhda${(program.bhajanCount || 0) === 1 ? '' : 's'}${program.purpose ? ` · ${program.purpose}` : ''}`
+                              ) : isPl ? (
+                                `${program.bhajanCount || 0} bhajan${(program.bhajanCount || 0) === 1 ? '' : 's'}${program.purpose ? ` · ${program.purpose}` : ''}`
+                              ) : (
+                                `${program.bhajanCount || 0} bhajan${(program.bhajanCount || 0) === 1 ? '' : 's'}${program.date ? ` · 📅 ${program.date}` : ''}${program.venue ? ` · 📍 ${program.venue}` : ''}`
+                              )}
+                            </p>
+                          </div>
                         </div>
-                        <h3 className="text-lg font-bold text-[#0B5A70] mb-1">
-                          {program.name}
-                        </h3>
-                        {isPar ? (
-                          program.purpose ? (
-                            <p className="text-sm text-[#E65100] mb-1">{program.purpose}</p>
-                          ) : (
-                            <p className="text-xs text-gray-500 mb-1 italic">Medley</p>
-                          )
-                        ) : isPl ? (
-                          program.purpose ? (
-                            <p className="text-sm text-[#E65100] mb-1">{program.purpose}</p>
-                          ) : (
-                            <p className="text-xs text-gray-500 mb-1 italic">Playlist</p>
-                          )
-                        ) : (
-                          <>
-                            {program.date && (
-                              <p className="text-sm text-[#E65100] mb-1">📅 {program.date}</p>
-                            )}
-                            {program.venue && (
-                              <p className="text-sm text-gray-600 mb-2">📍 {program.venue}</p>
-                            )}
-                          </>
-                        )}
-                        <p className="text-xs text-[#0B5A70]/60 mt-3">
-                          {isPar ? 'Open Medley →' : (isPl ? 'Open Playlist →' : 'View Program →')}
-                        </p>
                       </button>
                     );
                   })}
@@ -9120,12 +9177,14 @@ const App = () => {
                 // relevant to a medley — you don't perform a medley "live"
                 // from a stage, you sing through its mukhdas).
                 if (t === 'parody') {
+                  // SESSION 57: medley hero tightened a bit further.
+                  // p-3/4, text-base/lg title, smaller icon.
                   return (
-                    <div className="bg-[#FFFCF8] rounded-xl shadow-[0_1px_6px_rgba(11,90,112,0.05)] p-4 md:p-5 border border-[#0B5A70]/8 mb-4">
-                      <div className="flex items-center gap-3">
-                        <div className="text-2xl flex-shrink-0" aria-hidden="true">🎭</div>
+                    <div className="bg-[#FFFCF8] rounded-xl shadow-[0_1px_6px_rgba(11,90,112,0.05)] p-3 md:p-4 border border-[#0B5A70]/8 mb-4">
+                      <div className="flex items-center gap-2.5">
+                        <div className="text-xl flex-shrink-0" aria-hidden="true">🎭</div>
                         <div className="flex-1 min-w-0">
-                          <h1 className="text-lg md:text-xl font-bold text-[#0B5A70] truncate">
+                          <h1 className="text-base md:text-lg font-bold text-[#0B5A70] truncate">
                             {selectedProgram.name}
                           </h1>
                           <p className="text-xs text-gray-500 mt-0.5">
@@ -9139,21 +9198,23 @@ const App = () => {
                 }
                 // Playlists and Programs keep the full-size hero card.
                 return (
-                  <div className="bg-[#FFFCF8] rounded-2xl shadow-[0_2px_12px_rgba(11,90,112,0.06)] p-6 md:p-8 border border-[#0B5A70]/8 mb-4">
-                    <div className="text-4xl mb-2">🎵</div>
-                    <h1 className="text-3xl md:text-4xl font-bold text-[#0B5A70] mb-3">
-                      {selectedProgram.name}
-                    </h1>
-                    {selectedProgram.date && (
-                      <p className="text-lg text-[#E65100] mb-1">📅 {selectedProgram.date}</p>
-                    )}
-                    {selectedProgram.venue && (
-                      <p className="text-lg text-gray-600 mb-3">📍 {selectedProgram.venue}</p>
-                    )}
-                    <div className="flex items-center gap-2 mt-4">
-                      <span className="bg-[#0B5A70]/8 text-[#0B5A70] px-3 py-1 rounded-full text-sm font-semibold">
-                        {selectedProgram.bhajanIds?.length || 0} bhajans
-                      </span>
+                  // SESSION 57: shrunk playlist/program hero. Was p-6/8
+                  // with text-3xl/4xl title; now p-4/5 with text-xl/2xl
+                  // title, icon inline with title, date/venue in a
+                  // single meta line. Live button still prominent.
+                  <div className="bg-[#FFFCF8] rounded-xl shadow-[0_1px_6px_rgba(11,90,112,0.05)] p-4 md:p-5 border border-[#0B5A70]/8 mb-4">
+                    <div className="flex items-center gap-3">
+                      <div className="text-2xl flex-shrink-0" aria-hidden="true">{t === 'playlist' ? '🎵' : '📅'}</div>
+                      <div className="flex-1 min-w-0">
+                        <h1 className="text-xl md:text-2xl font-bold text-[#0B5A70] truncate">
+                          {selectedProgram.name}
+                        </h1>
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          {selectedProgram.bhajanIds?.length || 0} bhajan{(selectedProgram.bhajanIds?.length || 0) === 1 ? '' : 's'}
+                          {selectedProgram.date ? ` · 📅 ${selectedProgram.date}` : ''}
+                          {selectedProgram.venue ? ` · 📍 ${selectedProgram.venue}` : ''}
+                        </p>
+                      </div>
                     </div>
 
                     {/* SESSION 47: per-playlist Live explainer removed.
