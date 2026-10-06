@@ -1,0 +1,10 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "app.sankirtan.twa",
+    "sha256_cert_fingerprints": [
+      "2F:1B:DC:F6:13:9B:4A:58:6B:7F:F1:4F:05:46:B3:22:45:9A:59:79:02:39:F7:3F:04:F4:AC:68:3A:DE:26:F9"
+    ]
+  }
+}]
