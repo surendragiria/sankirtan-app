@@ -1083,7 +1083,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.10.11.s68';
+const APP_VERSION = '2026.10.11.s69';
 
 // SESSION 30: log at startup so admin can verify which build is
 // running via the browser console (helps diagnose "is my new
@@ -2287,7 +2287,18 @@ const App = () => {
 
   // Live Program Mode states
   const [liveProgramIndex, setLiveProgramIndex] = useState(0);
-  const [liveFontSize, setLiveFontSize] = useState(20);
+  // SESSION 69: Live mode has its own font size, remembered across
+  // sessions. Defaults to the reading size + 4 (stage distance).
+  const [liveFontSize, setLiveFontSize] = useState(() => {
+    try {
+      const saved = parseInt(localStorage.getItem('sankirtan-live-font-size'), 10);
+      if (saved >= 14 && saved <= 48) return saved;
+      const rs = JSON.parse(localStorage.getItem('sankirtan-reading-settings') || '{}');
+      if (rs.fontSize) return Math.min(48, rs.fontSize + 4);
+    } catch {}
+    return 24;
+  });
+  useEffect(() => { try { localStorage.setItem('sankirtan-live-font-size', String(liveFontSize)); } catch {} }, [liveFontSize]);
   const [liveWakeLock, setLiveWakeLock] = useState(null);
 
   // Public Library states
@@ -6807,7 +6818,7 @@ const App = () => {
             </button>
             <span className={`text-xs min-w-[40px] text-center ${liveMutedGray}`}>{liveFontSize}px</span>
             <button
-              onClick={() => setLiveFontSize(Math.min(40, liveFontSize + 2))}
+              onClick={() => setLiveFontSize(Math.min(48, liveFontSize + 2))}
               className={`w-8 h-8 rounded-lg font-bold ${liveBtnMuted}`}
               title="Increase font"
               aria-label="Increase font size"
@@ -6861,7 +6872,7 @@ const App = () => {
             <pre
               className={`whitespace-pre-wrap leading-relaxed ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}
               style={{
-                fontSize: `${Math.max(readingSettings.fontSize, liveFontSize)}px`,
+                fontSize: `${liveFontSize}px`,
                 fontFamily: readingSettings.fontFamily,
                 lineHeight: readingSettings.lineHeight,
                 textAlign: readingSettings.textAlign
