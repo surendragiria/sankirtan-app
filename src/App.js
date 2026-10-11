@@ -1083,7 +1083,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.10.11.s66';
+const APP_VERSION = '2026.10.11.s67';
 
 // SESSION 30: log at startup so admin can verify which build is
 // running via the browser console (helps diagnose "is my new
@@ -5991,6 +5991,13 @@ const App = () => {
       setProgramFormError(`Please enter a ${noun} name`);
       return;
     }
+    // SESSION 67: a program is a dated event by definition — without a
+    // date it can't be sorted or marked complete. Playlists are for
+    // undated collections.
+    if (programForm.type === 'program' && !programForm.date.trim()) {
+      setProgramFormError('Please pick the program date — or make it a Playlist if it has no date');
+      return;
+    }
 
     try {
       setProgramFormSaving(true);
@@ -6090,6 +6097,39 @@ const App = () => {
       ...prev,
       bhajanIds: prev.bhajanIds.filter(id => id !== bhajanId)
     }));
+  };
+
+  // SESSION 67: reorder / remove straight from the program page, no
+  // Edit form needed. Writes the new setlist immediately; the programs
+  // onSnapshot listener keeps the list view in sync.
+  const [setlistEditMode, setSetlistEditMode] = useState(false);
+  useEffect(() => { if (currentView !== 'program-detail') setSetlistEditMode(false); }, [currentView]);
+  const persistSetlist = async (program, newIds) => {
+    if (!user || !program) return;
+    const updated = { ...program, bhajanIds: newIds, bhajanCount: newIds.length };
+    setSelectedProgram(updated);
+    try {
+      await window.firebase.firestore()
+        .collection('users').doc(user.uid).collection('programs').doc(program.id)
+        .update({
+          bhajanIds: newIds,
+          bhajanCount: newIds.length,
+          updatedAt: window.firebase.firestore.FieldValue.serverTimestamp()
+        });
+    } catch (e) {
+      console.error('Setlist update failed:', e);
+      showToast('Could not save the new order — check your connection', 'error');
+    }
+  };
+  const moveInSetlist = (program, index, delta) => {
+    const ids = [...(program.bhajanIds || [])];
+    const j = index + delta;
+    if (j < 0 || j >= ids.length) return;
+    [ids[index], ids[j]] = [ids[j], ids[index]];
+    persistSetlist(program, ids);
+  };
+  const removeFromSetlist = (program, bhajanId) => {
+    persistSetlist(program, (program.bhajanIds || []).filter(id => id !== bhajanId));
   };
 
   // SESSION 43: AUTO-SAVE THE SETLIST WHEN EDITING AN EXISTING LIST.
@@ -9365,13 +9405,27 @@ const App = () => {
               })()}
 
               <div className="mb-4">
-                <h3 className={`text-xs font-semibold uppercase tracking-wide mb-2 ${darkMode ? 'text-gray-500' : 'text-[#0B5A70]/60'}`}>
-                  {(() => {
-                    const n = selectedProgram.bhajanIds?.length || 0;
-                    const t = getProgramType(selectedProgram);
-                    return `${n} ${t === 'parody' ? 'mukhda' : 'bhajan'}${n === 1 ? '' : 's'}`;
-                  })()}
-                </h3>
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-500' : 'text-[#0B5A70]/60'}`}>
+                    {(() => {
+                      const n = selectedProgram.bhajanIds?.length || 0;
+                      const t = getProgramType(selectedProgram);
+                      return `${n} ${t === 'parody' ? 'mukhda' : 'bhajan'}${n === 1 ? '' : 's'}`;
+                    })()}
+                  </h3>
+                  {(selectedProgram.bhajanIds?.length || 0) > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => setSetlistEditMode(v => !v)}
+                      className={`text-xs font-semibold px-2.5 py-1 rounded-full transition-colors ${setlistEditMode
+                        ? 'bg-[#E65100] text-white'
+                        : (darkMode ? 'bg-[#1e2e33] text-gray-300 hover:bg-[#0B5A70]/20' : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15')}`}
+                      aria-pressed={setlistEditMode}
+                    >
+                      {setlistEditMode ? '✓ Done' : '⇅ Reorder'}
+                    </button>
+                  )}
+                </div>
                 {(!selectedProgram.bhajanIds || selectedProgram.bhajanIds.length === 0) ? (
                   <div className="bg-[#FFFCF8] rounded-2xl p-6 text-center border-2 border-dashed border-[#0B5A70]/12">
                     <p className="text-[#0B5A70] mb-2">
@@ -9462,18 +9516,9 @@ const App = () => {
                           <p className="text-sm text-red-700">⚠️ Bhajan not found (may have been deleted)</p>
                         </div>
                       );
-                      return (
-                        <button
-                          key={bhajanId}
-                          onClick={() => {
-                            // SESSION 34: remember we came from this
-                            // program/playlist, so the reading view
-                            // shows siblings instead of Related.
-                            setProgramContext(selectedProgram);
-                            openBhajanDetail(bhajan);
-                          }}
-                          className="w-full bg-[#FFFCF8] rounded-xl p-4 border border-[#0B5A70]/8 hover:border-[#0B5A70]/25 transition-all text-left flex items-center gap-3 shadow-[0_1px_4px_rgba(11,90,112,0.04)]"
-                        >
+                      const total = selectedProgram.bhajanIds.length;
+                      const rowBody = (
+                        <>
                           <div className="text-2xl font-bold text-[#E65100] min-w-[40px] text-center">
                             {index + 1}
                           </div>
@@ -9488,6 +9533,38 @@ const App = () => {
                               </span>
                             </div>
                           </div>
+                        </>
+                      );
+                      if (setlistEditMode) {
+                        // SESSION 67: reorder/remove controls, saved instantly
+                        const ctl = 'w-9 h-9 rounded-lg flex items-center justify-center text-base font-bold transition-colors disabled:opacity-25';
+                        return (
+                          <div
+                            key={bhajanId}
+                            className="w-full bg-[#FFFCF8] rounded-xl p-3 border border-[#E65100]/30 flex items-center gap-2 shadow-[0_1px_4px_rgba(11,90,112,0.04)]"
+                          >
+                            {rowBody}
+                            <div className="flex items-center gap-1 flex-shrink-0">
+                              <button type="button" onClick={() => moveInSetlist(selectedProgram, index, -1)} disabled={index === 0} className={`${ctl} bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15`} aria-label={`Move ${bhajan.title} up`}>↑</button>
+                              <button type="button" onClick={() => moveInSetlist(selectedProgram, index, 1)} disabled={index === total - 1} className={`${ctl} bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15`} aria-label={`Move ${bhajan.title} down`}>↓</button>
+                              <button type="button" onClick={() => removeFromSetlist(selectedProgram, bhajanId)} className={`${ctl} bg-red-50 text-red-600 hover:bg-red-100`} aria-label={`Remove ${bhajan.title}`}>✕</button>
+                            </div>
+                          </div>
+                        );
+                      }
+                      return (
+                        <button
+                          key={bhajanId}
+                          onClick={() => {
+                            // SESSION 34: remember we came from this
+                            // program/playlist, so the reading view
+                            // shows siblings instead of Related.
+                            setProgramContext(selectedProgram);
+                            openBhajanDetail(bhajan);
+                          }}
+                          className="w-full bg-[#FFFCF8] rounded-xl p-4 border border-[#0B5A70]/8 hover:border-[#0B5A70]/25 transition-all text-left flex items-center gap-3 shadow-[0_1px_4px_rgba(11,90,112,0.04)]"
+                        >
+                          {rowBody}
                         </button>
                       );
                     })}
@@ -9643,7 +9720,7 @@ const App = () => {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
                   <div>
                     <label className={fLabel}>
-                      Date (optional)
+                      Date <span className="text-red-500">*</span>
                     </label>
                     <input
                       type="date"
