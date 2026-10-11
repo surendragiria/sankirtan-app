@@ -1083,7 +1083,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.10.11.s63';
+const APP_VERSION = '2026.10.11.s64';
 
 // SESSION 30: log at startup so admin can verify which build is
 // running via the browser console (helps diagnose "is my new
@@ -3997,13 +3997,9 @@ const App = () => {
 
         loadConfigLists();
 
-        const hasSeenTour = localStorage.getItem('sankirtan-onboarding-completed');
-        if (!hasSeenTour && !profile.hasSeenOnboarding) {
-          setTimeout(() => {
-            setShowOnboarding(true);
-            setOnboardingStep(0);
-          }, 800);
-        }
+        // SESSION 64: the automatic first-login feature tour is retired —
+        // new users land straight in the library. (Singer's Guide in the
+        // menu covers the same ground, on demand.)
       } else {
         setProfileForm({
           displayName: firebaseUser.displayName || '',
@@ -4084,13 +4080,7 @@ const App = () => {
       setShowProfileSetup(false);
       setAuthError('');
 
-      const hasSeenTour = localStorage.getItem('sankirtan-onboarding-completed');
-      if (!hasSeenTour) {
-        setTimeout(() => {
-          setShowOnboarding(true);
-          setOnboardingStep(0);
-        }, 800);
-      }
+      // SESSION 64: no automatic feature tour after profile setup either.
     } catch (error) {
       console.error('Error saving profile:', error);
       setAuthError('Could not save profile: ' + error.message);
@@ -7735,7 +7725,7 @@ const App = () => {
                         <span>{darkMode ? 'Light mode' : 'Dark mode'}</span>
                       </button>
                       <a
-                        href="/guide"
+                        href="/guide.html"
                         target="_blank"
                         rel="noopener noreferrer"
                         onClick={() => setShowAccountMenu(false)}
