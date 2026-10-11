@@ -1079,7 +1079,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.10.11.s59';
+const APP_VERSION = '2026.10.11.s60';
 
 // SESSION 30: log at startup so admin can verify which build is
 // running via the browser console (helps diagnose "is my new
@@ -1477,11 +1477,11 @@ const ListenBar = ({ bhajan, show, onToggle, darkMode, playerId }) => {
         aria-expanded={show}
         aria-controls={playerId}
         aria-label={show ? 'Hide audio player' : 'Listen on YouTube'}
-        className={`w-full flex items-center justify-center gap-2.5 rounded-xl px-4 py-2.5 font-semibold text-sm transition-colors border ${show
+        className={`inline-flex items-center gap-2 rounded-full pl-2.5 pr-3.5 py-1.5 font-semibold text-xs transition-colors border ${show
           ? (darkMode ? 'bg-[#1e2e33] text-gray-300 border-[#0B5A70]/25' : 'bg-[#0B5A70]/5 text-[#0B5A70] border-[#0B5A70]/15')
           : 'bg-[#FF0000] text-white border-[#FF0000] hover:bg-[#e60000] shadow-sm'}`}
       >
-        <svg width="26" height="18" viewBox="0 0 28 20" aria-hidden="true">
+        <svg width="22" height="16" viewBox="0 0 28 20" aria-hidden="true">
           <rect width="28" height="20" rx="5" fill={show ? '#FF0000' : 'white'} />
           <path d="M11 6 L11 14 L18 10 Z" fill={show ? 'white' : '#FF0000'} />
         </svg>
