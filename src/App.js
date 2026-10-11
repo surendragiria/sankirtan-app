@@ -1083,7 +1083,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.10.11.s64';
+const APP_VERSION = '2026.10.11.s65';
 
 // SESSION 30: log at startup so admin can verify which build is
 // running via the browser console (helps diagnose "is my new
@@ -2791,7 +2791,16 @@ const App = () => {
         window.history.pushState({ view: currentView }, '', window.location.pathname);
       }
 
-      if (!window.__sankirtanBackNav) {
+      // SESSION 65: returning from a bhajan page to the list it came
+      // from is a "back" move whichever control was used — the in-app
+      // ← Back button as much as the phone's back gesture. Restore the
+      // saved scroll so the user lands on the same bhajans they left.
+      const prevView = previousViewRef.current;
+      const isReturnToList =
+        (prevView === 'bhajan-detail' && (currentView === 'library' || currentView === 'program-detail')) ||
+        (prevView === 'public-bhajan-detail' && currentView === 'public-library');
+
+      if (!window.__sankirtanBackNav && !isReturnToList) {
         window.scrollTo(0, 0);
       } else {
         const savedScroll = scrollPositions[currentView] || 0;
