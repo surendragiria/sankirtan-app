@@ -1083,7 +1083,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.10.11.s61';
+const APP_VERSION = '2026.10.11.s62';
 
 // SESSION 30: log at startup so admin can verify which build is
 // running via the browser console (helps diagnose "is my new
@@ -2552,11 +2552,13 @@ const App = () => {
     }
   }, [RECENT_KEY]);
 
-  const trackRecentRead = useCallback((bhajan) => {
+  const trackRecentRead = useCallback((bhajan, scope) => {
     if (!bhajan || !bhajan.id) return;
     setRecentlyRead(prev => {
       const filtered = prev.filter(b => b.id !== bhajan.id);
-      const updated = [{ id: bhajan.id, title: bhajan.title, deity: bhajan.deity, category: bhajan.category }, ...filtered].slice(0, 5);
+      // SESSION 62: scope ('public' | undefined) tells the home-screen
+      // "Recently opened" row which list to resolve the id against.
+      const updated = [{ id: bhajan.id, title: bhajan.title, deity: bhajan.deity, category: bhajan.category, scope: scope || 'library' }, ...filtered].slice(0, 6);
       try { localStorage.setItem(RECENT_KEY, JSON.stringify(updated)); } catch {}
       return updated;
     });
@@ -4927,6 +4929,7 @@ const App = () => {
     // SESSION 58: auto-expand the inline player when the user tapped
     // the YouTube Listen button on the card.
     setShowAudioPlayer(!!(opts && opts.autoplay));
+    trackRecentRead(bhajan, 'public');
 
     // SESSION 19: increment readCount for signed-in users so
     // "Popular Bhajans" reflects what's actually being read, not
@@ -4964,7 +4967,7 @@ const App = () => {
         }
       } catch { /* firebase not ready — extremely rare */ }
     }
-  }, [user]);
+  }, [user, trackRecentRead]);
 
   // SESSION 13: consume a pending deep link once the public library
   // has loaded. We wait for publicBhajans (rather than opening
@@ -6174,6 +6177,7 @@ const App = () => {
     setTimeout(() => setSlideDir(null), 350);
     if (isPublic) {
       setSelectedPublicBhajan(nextBhajan);
+      trackRecentRead(nextBhajan, 'public');
     } else {
       setSelectedBhajan(nextBhajan);
       trackRecentRead(nextBhajan);
@@ -8165,22 +8169,26 @@ const App = () => {
                       onClick={() => setAddToProgramFor(selectedBhajan)}
                       className={`px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 transition-colors ${darkMode ? 'bg-[#1e2e33] text-gray-300 hover:bg-[#0B5A70]/20' : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15'}`}
                       title="Add to a playlist, program, or parody"
+                      aria-label="Add to a playlist, program, or medley"
                     >
-<IconClipboardList size={14} /> Add to
+<IconClipboardList size={16} />
                     </button>
                   )}
                   <button
                     onClick={() => setShowReadingSettings(true)}
                     className={`px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 transition-colors ${darkMode ? 'bg-[#1e2e33] text-gray-300 hover:bg-[#0B5A70]/20' : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15'}`}
                     title="Reading view options"
+                    aria-label="Reading view options"
                   >
-<IconEye size={14} /> View
+<IconEye size={16} />
                   </button>
                   <button
                     onClick={() => openEditBhajan(selectedBhajan)}
                     className="bg-[#0B5A70]/8 hover:bg-[#0B5A70]/15 text-[#0B5A70] font-semibold px-2.5 py-1 rounded-full text-xs flex items-center gap-1"
+                    title="Edit bhajan"
+                    aria-label="Edit bhajan"
                   >
-<IconPencil size={14} /> Edit
+<IconPencil size={16} />
                   </button>
                   {/* SESSION 49: Delete moved out of the primary action row
                       into an overflow menu. Same behavior; less visual weight
@@ -10037,6 +10045,38 @@ const App = () => {
                 </div>
               )}
 
+              {/* SESSION 62: Recently opened — the fastest route back to
+                  yesterday's bhajan. Hidden while searching/filtering. */}
+              {recentlyRead.length > 0 && !publicSearchQuery && !publicFilterDeity && !publicFilterCategory && !publicFilterKeyword && (() => {
+                const items = recentlyRead.map(r => {
+                  const pub = publicBhajans.find(b => b.id === r.id);
+                  if (pub) return { key: r.id, b: pub, open: () => openPublicBhajanDetail(pub) };
+                  const mine = user ? bhajans.find(b => b.id === r.id) : null;
+                  if (mine) return { key: r.id, b: mine, open: () => openBhajanDetail(mine) };
+                  return null;
+                }).filter(Boolean).slice(0, 5);
+                if (items.length === 0) return null;
+                return (
+                  <div className="mb-3">
+                    <p className={`text-[11px] font-semibold uppercase tracking-wide mb-1.5 ${darkMode ? 'text-gray-500' : 'text-[#0B5A70]/60'}`}>
+                      🕐 Recently opened
+                    </p>
+                    <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
+                      {items.map(({ key, b, open }) => (
+                        <button
+                          key={key}
+                          onClick={open}
+                          className={`flex-shrink-0 px-3 py-1.5 rounded-xl border text-left transition-colors max-w-[170px] ${darkMode ? 'bg-[#162226] border-[#0B5A70]/15 hover:border-[#0B5A70]/30' : 'bg-[#FFFCF8] border-[#0B5A70]/8 hover:border-[#0B5A70]/25'}`}
+                        >
+                          <p className={`text-xs font-bold truncate ${darkMode ? 'text-amber-100' : 'text-[#0B5A70]'}`}>{(b.title || '').split(' / ')[0]}</p>
+                          <p className="text-[10px] text-gray-500 truncate">{b.deity}{b.category ? ` · ${b.category}` : ''}</p>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+
               {/* SESSION 48: +Add (admin) merged into the search row — was
                   a standalone strip that sat empty for regular users. */}
               <div className="mb-4 flex items-stretch gap-2">
@@ -10573,9 +10613,10 @@ const App = () => {
                     }}
                     disabled={savingToLibrary}
                     className={`px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 transition-colors disabled:opacity-50 ${darkMode ? 'bg-[#1e2e33] text-gray-300 hover:bg-[#0B5A70]/20' : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15'}`}
-                    title="Add to a playlist, program, or parody (saves to your library first)"
+                    title="Add to a playlist, program, or medley (saves to your library first)"
+                    aria-label="Add to a playlist, program, or medley"
                   >
-<IconClipboardList size={14} /> Add to
+<IconClipboardList size={16} />
                   </button>
 
                   <button
@@ -10590,8 +10631,9 @@ const App = () => {
                     onClick={() => setShowReadingSettings(true)}
                     className={`px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 transition-colors ${darkMode ? 'bg-[#1e2e33] text-gray-300 hover:bg-[#0B5A70]/20' : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15'}`}
                     title="Reading view options"
+                    aria-label="Reading view options"
                   >
-<IconEye size={14} /> View
+<IconEye size={16} />
                   </button>
 
                   {isAdmin && (
@@ -10599,8 +10641,10 @@ const App = () => {
                       <button
                         onClick={() => openEditPublicBhajan(selectedPublicBhajan)}
                         className="bg-[#0B5A70]/8 hover:bg-[#0B5A70]/15 text-[#0B5A70] font-semibold px-2.5 py-1 rounded-full text-xs flex items-center gap-1"
+                        title="Edit public bhajan"
+                        aria-label="Edit public bhajan"
                       >
-<IconPencil size={14} /> Edit
+<IconPencil size={16} />
                       </button>
                       <div className="relative">
                         <button
