@@ -7,7 +7,7 @@ module.exports = {
       // Tailwind's default 5-step scale, so declare them here.
       opacity: { 8: '0.08', 12: '0.12' },
       fontFamily: {
-        sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
+        sans: ['Inter', 'Noto Sans Devanagari', '-apple-system', 'BlinkMacSystemFont', 'system-ui', 'sans-serif'],
       },
     },
   },

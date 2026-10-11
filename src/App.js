@@ -1012,6 +1012,10 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 // SANKIRTAN WORDMARK COMPONENT (Devanagari)
 // ==============================================
 const WORDMARK_FONT = "'Noto Sans Devanagari', 'Mangal', system-ui, sans-serif";
+// SESSION 61: lyrics font. Noto Sans Devanagari is now loaded from Google
+// Fonts (index.html), so Hindi lyrics render in a proper typeface instead
+// of whatever the phone happens to ship with.
+const LYRICS_FONT = "'Noto Sans Devanagari', 'Inter', system-ui, sans-serif";
 
 const SankirtanWordmark = ({ className = "" }) => {
   let fontSize = '34px';
@@ -1079,7 +1083,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.10.11.s60';
+const APP_VERSION = '2026.10.11.s61';
 
 // SESSION 30: log at startup so admin can verify which build is
 // running via the browser console (helps diagnose "is my new
@@ -2388,11 +2392,14 @@ const App = () => {
 
   // Reading view settings
   const [readingSettings, setReadingSettings] = useState(() => {
-    const defaults = { fontSize: 18, fontFamily: 'sans-serif', lineHeight: 1.8, textAlign: 'center', readingMode: false, keepScreenOn: false };
+    const defaults = { fontSize: 18, fontFamily: LYRICS_FONT, lineHeight: 1.8, textAlign: 'center', readingMode: false, keepScreenOn: false };
     try {
       const saved = localStorage.getItem('sankirtan-reading-settings');
       if (saved) {
-        return { ...defaults, ...JSON.parse(saved) };
+        const merged = { ...defaults, ...JSON.parse(saved) };
+        // SESSION 61: migrate the old bare 'sans-serif' default to the real stack
+        if (!merged.fontFamily || merged.fontFamily === 'sans-serif') merged.fontFamily = LYRICS_FONT;
+        return merged;
       }
       return defaults;
     } catch {
@@ -2949,8 +2956,11 @@ const App = () => {
     const alreadyDismissed = localStorage.getItem('sankirtan-install-dismissed');
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
     const isIOSStandalone = window.navigator.standalone === true;
+    // SESSION 61: the Play Store app is a Trusted Web Activity — it is
+    // already installed, so never offer "Install" inside it.
+    const isPlayStoreApp = (document.referrer || '').startsWith('android-app://');
 
-    if (alreadyDismissed || isStandalone || isIOSStandalone) {
+    if (alreadyDismissed || isStandalone || isIOSStandalone || isPlayStoreApp) {
       return;
     }
 
@@ -10001,28 +10011,25 @@ const App = () => {
                   here directly (no sign-in wall), so this is where they
                   learn what registering unlocks. Dismissible per device. */}
               {guestMode && !user && !guestBannerDismissed && (
-                <div className={`mb-4 rounded-2xl border p-4 flex items-start gap-3 ${darkMode ? 'bg-[#1e2e33] border-[#E65100]/30' : 'bg-[#FFF3E5] border-[#E65100]/30'}`}>
-                  <div className="text-2xl flex-shrink-0" aria-hidden="true">🙏</div>
-                  <div className="flex-1 min-w-0">
-                    <p className={`text-sm font-bold ${darkMode ? 'text-amber-100' : 'text-[#0B5A70]'}`}>
-                      You're browsing as a guest
-                    </p>
-                    <p className={`text-xs mt-0.5 ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                      Sign in (free) to save bhajans, build playlists for jagrans, and edit lyrics your way.
-                    </p>
-                    <button
-                      onClick={() => { setGuestMode(false); setLoading(false); }}
-                      className="mt-2 bg-[#0B5A70] hover:bg-[#094a5d] text-white text-xs font-bold px-3 py-1.5 rounded-lg"
-                    >
-                      Sign in with Google →
-                    </button>
-                  </div>
+                /* SESSION 61: single-line guest strip. The old card took a
+                   third of the first screen; the library is the hero now. */
+                <div className={`mb-3 rounded-xl border px-3 py-2 flex items-center gap-2 text-xs ${darkMode ? 'bg-[#1e2e33] border-[#E65100]/30 text-gray-300' : 'bg-[#FFF3E5] border-[#E65100]/25 text-[#0B5A70]'}`}>
+                  <span aria-hidden="true">🙏</span>
+                  <span className="flex-1 min-w-0 truncate">
+                    <span className="font-semibold">Sign in</span> (free) to save bhajans &amp; build playlists
+                  </span>
+                  <button
+                    onClick={() => { setGuestMode(false); setLoading(false); }}
+                    className="flex-shrink-0 bg-[#0B5A70] hover:bg-[#094a5d] text-white font-bold px-2.5 py-1 rounded-lg"
+                  >
+                    Sign in →
+                  </button>
                   <button
                     onClick={() => {
                       setGuestBannerDismissed(true);
                       try { localStorage.setItem('sankirtan-guest-banner-dismissed', '1'); } catch {}
                     }}
-                    className={`text-xl leading-none px-1 flex-shrink-0 ${darkMode ? 'text-gray-500 hover:text-gray-300' : 'text-gray-400 hover:text-gray-600'}`}
+                    className={`text-lg leading-none px-1 flex-shrink-0 ${darkMode ? 'text-gray-500 hover:text-gray-300' : 'text-gray-400 hover:text-gray-600'}`}
                     aria-label="Dismiss"
                   >
                     ×
