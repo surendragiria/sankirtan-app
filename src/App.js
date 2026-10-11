@@ -1083,7 +1083,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.10.11.s65';
+const APP_VERSION = '2026.10.11.s66';
 
 // SESSION 30: log at startup so admin can verify which build is
 // running via the browser console (helps diagnose "is my new
@@ -1156,6 +1156,25 @@ const getTodayKey = (d = new Date()) => {
   const day = String(d.getDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
 };
+
+// SESSION 66: human-readable program date. "Today", "Tomorrow",
+// "Sat, 18 Oct", or "18 Oct 2025" when it's another year.
+const formatProgramDate = (dateStr) => {
+  if (!dateStr) return '';
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(dateStr).trim());
+  if (!m) return String(dateStr);
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  const today = getTodayKey();
+  const key = getTodayKey(d);
+  if (key === today) return 'Today';
+  const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
+  if (key === getTodayKey(tomorrow)) return 'Tomorrow';
+  const sameYear = d.getFullYear() === new Date().getFullYear();
+  return d.toLocaleDateString('en-IN', sameYear
+    ? { weekday: 'short', day: 'numeric', month: 'short' }
+    : { day: 'numeric', month: 'short', year: 'numeric' });
+};
+const isPastProgramDate = (dateStr) => !!dateStr && String(dateStr).trim() < getTodayKey();
 
 // SESSION 16: hash a YYYY-MM-DD date string to a 32-bit int
 // suitable for seeding mulberry32. Simple FNV-1a — deterministic,
@@ -9009,12 +9028,7 @@ const App = () => {
             return (
             <>
               <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h2 className="text-2xl font-bold text-[#0B5A70]">🎵 Playlists</h2>
-                  <p className="text-sm text-[#0B5A70]/70">
-                    Playlists ({playlists.length}) · Programs ({events.length})
-                  </p>
-                </div>
+                <h2 className="text-2xl font-bold text-[#0B5A70]">{isPlaylistView ? '🎵 Playlists' : '📅 Programs'}</h2>
                 <button
                   onClick={openCreateProgram}
                   className="bg-[#0B5A70] hover:bg-[#094a5d] text-white font-semibold px-4 py-2 rounded-xl shadow-md flex items-center gap-2 text-sm"
@@ -9038,7 +9052,7 @@ const App = () => {
                       : 'text-[#0B5A70]/70 hover:text-[#0B5A70]'
                   }`}
                 >
-                  🎵 Playlists
+                  🎵 Playlists{playlists.length > 0 ? ` (${playlists.length})` : ''}
                 </button>
                 <button
                   onClick={() => {
@@ -9051,7 +9065,7 @@ const App = () => {
                       : 'text-[#0B5A70]/70 hover:text-[#0B5A70]'
                   }`}
                 >
-                  📅 Programs
+                  📅 Programs{events.length > 0 ? ` (${events.length})` : ''}
                 </button>
                 {/* SESSION 43: Parodies pill removed — parodies now live in
                     My Library alongside bhajans (they're performance units,
@@ -9061,12 +9075,17 @@ const App = () => {
               {/* SESSION 47: one-line explainer of the difference between
                   Playlist and Program. Small, always visible, teaches the
                   distinction so per-playlist explainers aren't needed. */}
-              <p className={`text-xs mb-4 ${darkMode ? 'text-gray-400' : 'text-[#0B5A70]/60'}`}>
-                <span className="font-semibold">🎵 Playlist</span> — an undated collection for daily practice.
-                {' '}<span className="font-semibold">📅 Program</span> — a dated event (jagran, sankirtan) with <strong>Live mode</strong> for performing.
-              </p>
+              {/* SESSION 66: explainer only while the user is new to this
+                  tab; search only once the list is long enough to need it. */}
+              {programs.length < 2 && (
+                <p className={`text-xs mb-4 ${darkMode ? 'text-gray-400' : 'text-[#0B5A70]/60'}`}>
+                  <span className="font-semibold">🎵 Playlist</span> — an undated collection for daily practice.
+                  {' '}<span className="font-semibold">📅 Program</span> — a dated event (jagran, sankirtan) with <strong>Live mode</strong> for performing.
+                </p>
+              )}
 
-              <div className="mb-6">
+              {(programs.length > 5 || programSearchQuery) && (
+              <div className="mb-4">
                 <input
                   type="text"
                   value={programSearchQuery}
@@ -9080,6 +9099,7 @@ const App = () => {
                   className="w-full px-4 py-3 border border-[#0B5A70]/15 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none"
                 />
               </div>
+              )}
 
               {programsLoading ? (
                 <div className="text-center py-12">
@@ -9138,44 +9158,70 @@ const App = () => {
                   );
                 })()
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {visibleItems.map(program => {
+                (() => {
+                  // SESSION 66: programs sort upcoming-first (soonest at
+                  // top), then a dimmed "Past" section newest-first.
+                  // Playlists keep their existing order.
+                  const renderCard = (program, isPast) => {
                     const pType = getProgramType(program);
                     const isPl = pType === 'playlist';
                     const isPar = pType === 'parody';
-                    // SESSION 36: three-way emoji + label
                     const cardEmoji = isPar ? '🎭' : (isPl ? '🎵' : '📅');
-                    // SESSION 57: compact program/playlist card. Was
-                    // p-5 with text-3xl emoji and text-lg title; now p-3
-                    // with text-xl emoji inline next to the title, meta
-                    // on a single line. Open-arrow footer dropped.
+                    const count = program.bhajanCount || 0;
+                    const noun = isPar ? 'mukhda' : 'bhajan';
                     return (
                       <button
                         key={program.id}
                         onClick={() => openProgramDetail(program)}
-                        className="bg-[#FFFCF8] rounded-xl shadow-[0_1px_4px_rgba(11,90,112,0.04)] p-3 border border-[#0B5A70]/8 hover:border-[#0B5A70]/25 hover:shadow-[0_2px_8px_rgba(11,90,112,0.08)] transition-all text-left"
+                        className={`bg-[#FFFCF8] rounded-xl shadow-[0_1px_4px_rgba(11,90,112,0.04)] p-3 border border-[#0B5A70]/8 hover:border-[#0B5A70]/25 hover:shadow-[0_2px_8px_rgba(11,90,112,0.08)] transition-all text-left ${isPast ? 'opacity-60' : ''}`}
                       >
                         <div className="flex items-center gap-3">
                           <div className="text-xl flex-shrink-0" aria-hidden="true">{cardEmoji}</div>
                           <div className="flex-1 min-w-0">
-                            <h3 className="text-sm font-bold text-[#0B5A70] truncate">
-                              {program.name}
-                            </h3>
+                            <h3 className="text-sm font-bold text-[#0B5A70] truncate">{program.name}</h3>
                             <p className="text-xs text-gray-500 truncate">
-                              {isPar ? (
-                                `${program.bhajanCount || 0} mukhda${(program.bhajanCount || 0) === 1 ? '' : 's'}${program.purpose ? ` · ${program.purpose}` : ''}`
-                              ) : isPl ? (
-                                `${program.bhajanCount || 0} bhajan${(program.bhajanCount || 0) === 1 ? '' : 's'}${program.purpose ? ` · ${program.purpose}` : ''}`
-                              ) : (
-                                `${program.bhajanCount || 0} bhajan${(program.bhajanCount || 0) === 1 ? '' : 's'}${program.date ? ` · 📅 ${program.date}` : ''}${program.venue ? ` · 📍 ${program.venue}` : ''}`
-                              )}
+                              {count} {noun}{count === 1 ? '' : 's'}
+                              {isPl || isPar ? (program.purpose ? ` · ${program.purpose}` : '') : (program.venue ? ` · 📍 ${program.venue}` : '')}
                             </p>
                           </div>
+                          {!isPl && !isPar && program.date && (
+                            <span className={`flex-shrink-0 text-[11px] font-semibold px-2 py-1 rounded-lg ${isPast ? 'bg-gray-100 text-gray-500' : 'bg-[#E65100]/10 text-[#E65100]'}`}>
+                              {formatProgramDate(program.date)}
+                            </span>
+                          )}
                         </div>
                       </button>
                     );
-                  })}
-                </div>
+                  };
+                  if (isPlaylistView) {
+                    return (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {visibleItems.map(p => renderCard(p, false))}
+                      </div>
+                    );
+                  }
+                  const upcoming = visibleItems.filter(p => !isPastProgramDate(p.date)).sort((x, y) => String(x.date || '').localeCompare(String(y.date || '')));
+                  const past = visibleItems.filter(p => isPastProgramDate(p.date)).sort((x, y) => String(y.date || '').localeCompare(String(x.date || '')));
+                  return (
+                    <>
+                      {upcoming.length > 0 && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {upcoming.map(p => renderCard(p, false))}
+                        </div>
+                      )}
+                      {past.length > 0 && (
+                        <>
+                          <p className={`text-[11px] font-semibold uppercase tracking-wide mt-6 mb-2 ${darkMode ? 'text-gray-500' : 'text-[#0B5A70]/50'}`}>
+                            Past programs
+                          </p>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {past.map(p => renderCard(p, true))}
+                          </div>
+                        </>
+                      )}
+                    </>
+                  );
+                })()
               )}
             </>
             );
@@ -9191,10 +9237,10 @@ const App = () => {
                   onClick={() => setCurrentView(getProgramType(selectedProgram) === 'parody' ? 'library' : 'programs')}
                   className="text-[#0B5A70] hover:text-[#0B5A70]/80 flex items-center gap-1 text-sm"
                 >
-                  {/* SESSION 43: parodies live in My Library now */}
-                  {getProgramType(selectedProgram) === 'parody' ? '← Back to My Library' : '← Back to Playlists'}
+                  {/* SESSION 66: short label so the header stays on one line */}
+                  ← Back
                 </button>
-                <div className="flex gap-2 flex-wrap">
+                <div className="flex items-center gap-1.5">
                   <button
                     onClick={() => {
                       // SESSION 10 (item 5): opens the picker directly from
@@ -9206,22 +9252,43 @@ const App = () => {
                       setPickerDeityFilter('');
                       setPickerKeywordFilter('');
                     }}
-                    className="text-white bg-[#0B5A70] hover:bg-[#094a5d] px-3 py-1.5 rounded-lg text-sm font-semibold"
+                    className="text-white bg-[#0B5A70] hover:bg-[#094a5d] px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap"
                   >
-                    ➕ Add Bhajan
+                    ➕ Add bhajan
                   </button>
                   <button
                     onClick={() => openEditProgram(selectedProgram)}
-                    className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${darkMode ? 'text-teal-200 hover:text-teal-100 hover:bg-[#0B5A70]/15' : 'text-[#0B5A70] hover:text-[#0B5A70]/80 hover:bg-[#0B5A70]/5'}`}
+                    className={`px-2.5 py-1.5 rounded-full text-xs font-semibold flex items-center transition-colors ${darkMode ? 'bg-[#1e2e33] text-gray-300 hover:bg-[#0B5A70]/20' : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15'}`}
+                    title="Edit details"
+                    aria-label="Edit details"
                   >
-<IconPencil size={14} /> Edit
+<IconPencil size={16} />
                   </button>
-                  <button
-                    onClick={() => deleteProgram(selectedProgram)}
-                    className="text-red-600 hover:text-red-800 px-3 py-1.5 rounded-lg hover:bg-red-50 text-sm font-semibold"
-                  >
-                    🗑️ Delete
-                  </button>
+                  {/* SESSION 66: Delete moved into an overflow menu, matching
+                      the bhajan page. */}
+                  <div className="relative">
+                    <button
+                      onClick={() => setShowDeleteMenu(showDeleteMenu === 'program' ? null : 'program')}
+                      className={`px-2.5 py-1.5 rounded-full text-xs font-semibold flex items-center transition-colors ${darkMode ? 'bg-[#1e2e33] text-gray-400 hover:text-gray-200 hover:bg-[#0B5A70]/20' : 'bg-[#0B5A70]/8 text-[#0B5A70]/70 hover:text-[#0B5A70] hover:bg-[#0B5A70]/15'}`}
+                      aria-label="More options"
+                      title="More options"
+                    >
+                      ⋯
+                    </button>
+                    {showDeleteMenu === 'program' && (
+                      <>
+                        <div className="fixed inset-0 z-40" onClick={() => setShowDeleteMenu(null)} />
+                        <div className={`absolute right-0 mt-2 w-48 rounded-xl shadow-lg border z-50 overflow-hidden ${darkMode ? 'bg-[#162226] border-[#0B5A70]/25' : 'bg-white border-[#0B5A70]/12'}`}>
+                          <button
+                            onClick={() => { setShowDeleteMenu(null); deleteProgram(selectedProgram); }}
+                            className={`w-full text-left px-4 py-2.5 text-sm flex items-center gap-2 transition-colors ${darkMode ? 'hover:bg-red-900/20 text-red-300' : 'hover:bg-red-50 text-red-600'}`}
+                          >
+                            🗑️ <span>Delete {getProgramType(selectedProgram) === 'parody' ? 'medley' : getProgramType(selectedProgram) === 'playlist' ? 'playlist' : 'program'}</span>
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -9266,7 +9333,7 @@ const App = () => {
                         </h1>
                         <p className="text-xs text-gray-500 mt-0.5">
                           {selectedProgram.bhajanIds?.length || 0} bhajan{(selectedProgram.bhajanIds?.length || 0) === 1 ? '' : 's'}
-                          {selectedProgram.date ? ` · 📅 ${selectedProgram.date}` : ''}
+                          {selectedProgram.date ? ` · ${isPastProgramDate(selectedProgram.date) ? 'Completed' : '📅'} ${formatProgramDate(selectedProgram.date)}` : ''}
                           {selectedProgram.venue ? ` · 📍 ${selectedProgram.venue}` : ''}
                         </p>
                       </div>
@@ -9278,9 +9345,19 @@ const App = () => {
                     {selectedProgram.bhajanIds && selectedProgram.bhajanIds.length > 0 && t === 'program' && (
                       <button
                         onClick={() => startLiveProgram(selectedProgram)}
-                        className="w-full mt-6 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-bold py-4 rounded-xl shadow-lg text-lg flex items-center justify-center gap-2"
+                        className="w-full mt-5 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-bold py-3.5 rounded-xl shadow-lg text-base flex items-center justify-center gap-2"
                       >
                         🎤 START LIVE PERFORMANCE
+                      </button>
+                    )}
+                    {/* SESSION 66: playlists get Live mode too (full-screen
+                        lyrics, screen awake) — quieter button than a program's. */}
+                    {selectedProgram.bhajanIds && selectedProgram.bhajanIds.length > 0 && t === 'playlist' && (
+                      <button
+                        onClick={() => startLiveProgram(selectedProgram)}
+                        className={`w-full mt-4 font-semibold py-2.5 rounded-xl text-sm flex items-center justify-center gap-2 border transition-colors ${darkMode ? 'border-[#0B5A70]/40 text-teal-200 hover:bg-[#0B5A70]/20' : 'border-[#0B5A70]/25 text-[#0B5A70] hover:bg-[#0B5A70]/5'}`}
+                      >
+                        🎤 Sing in Live mode
                       </button>
                     )}
                   </div>
@@ -9288,12 +9365,11 @@ const App = () => {
               })()}
 
               <div className="mb-4">
-                <h3 className="text-lg font-bold text-[#0B5A70] mb-3">
+                <h3 className={`text-xs font-semibold uppercase tracking-wide mb-2 ${darkMode ? 'text-gray-500' : 'text-[#0B5A70]/60'}`}>
                   {(() => {
+                    const n = selectedProgram.bhajanIds?.length || 0;
                     const t = getProgramType(selectedProgram);
-                    return t === 'parody' ? 'Mukhdas in this Medley:' :
-                           t === 'playlist' ? 'Bhajans in this Playlist:' :
-                           'Bhajans in this Program:';
+                    return `${n} ${t === 'parody' ? 'mukhda' : 'bhajan'}${n === 1 ? '' : 's'}`;
                   })()}
                 </h3>
                 {(!selectedProgram.bhajanIds || selectedProgram.bhajanIds.length === 0) ? (
@@ -9307,7 +9383,13 @@ const App = () => {
                       })()}
                     </p>
                     <button
-                      onClick={() => openEditProgram(selectedProgram)}
+                      onClick={() => {
+                        openEditProgram(selectedProgram);
+                        setShowBhajanPicker(true);
+                        setBhajanPickerSearch('');
+                        setPickerDeityFilter('');
+                        setPickerKeywordFilter('');
+                      }}
                       className="text-[#0B5A70] hover:text-[#0B5A70]/80 font-semibold text-sm"
                     >
                       + Add bhajans
