@@ -1083,7 +1083,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.10.11.s67';
+const APP_VERSION = '2026.10.11.s68';
 
 // SESSION 30: log at startup so admin can verify which build is
 // running via the browser console (helps diagnose "is my new
@@ -6168,11 +6168,32 @@ const App = () => {
   // Central close-and-reset helper for the picker.
   // Used by the Done button, X button, and backdrop click so all three
   // paths reset search + filters consistently.
+  // SESSION 68: when the picker was opened from the program page, Done
+  // returns there (writing any setlist change immediately) instead of
+  // dropping the user into the Edit form.
+  const [pickerReturnTo, setPickerReturnTo] = useState(null);
+  const openPickerFromProgramPage = (program) => {
+    openEditProgram(program);
+    setShowBhajanPicker(true);
+    setBhajanPickerSearch('');
+    setPickerDeityFilter('');
+    setPickerKeywordFilter('');
+    setPickerReturnTo('program-detail');
+  };
   const closeBhajanPicker = () => {
     setShowBhajanPicker(false);
     setBhajanPickerSearch('');
     setPickerDeityFilter('');
     setPickerKeywordFilter('');
+    if (pickerReturnTo === 'program-detail' && editingProgram) {
+      const ids = programForm.bhajanIds || [];
+      const stored = editingProgram.bhajanIds || [];
+      const changed = !(ids.length === stored.length && ids.every((id, i) => id === stored[i]));
+      if (changed) persistSetlist(editingProgram, ids);
+      else setSelectedProgram(editingProgram);
+      setCurrentView('program-detail');
+    }
+    setPickerReturnTo(null);
   };
 
   const moveBhajanUp = (index) => {
@@ -9213,7 +9234,7 @@ const App = () => {
                       <button
                         key={program.id}
                         onClick={() => openProgramDetail(program)}
-                        className={`bg-[#FFFCF8] rounded-xl shadow-[0_1px_4px_rgba(11,90,112,0.04)] p-3 border border-[#0B5A70]/8 hover:border-[#0B5A70]/25 hover:shadow-[0_2px_8px_rgba(11,90,112,0.08)] transition-all text-left ${isPast ? 'opacity-60' : ''}`}
+                        className={`bg-[#FFFCF8] rounded-xl shadow-[0_1px_4px_rgba(11,90,112,0.04)] p-3 border border-[#0B5A70]/8 hover:border-[#0B5A70]/25 hover:shadow-[0_2px_8px_rgba(11,90,112,0.08)] transition-all text-left`}
                       >
                         <div className="flex items-center gap-3">
                           <div className="text-xl flex-shrink-0" aria-hidden="true">{cardEmoji}</div>
@@ -9282,16 +9303,7 @@ const App = () => {
                 </button>
                 <div className="flex items-center gap-1.5">
                   <button
-                    onClick={() => {
-                      // SESSION 10 (item 5): opens the picker directly from
-                      // program-detail so the singer doesn't have to go
-                      // Edit → scroll to bhajan list → tap Add every time.
-                      openEditProgram(selectedProgram);
-                      setShowBhajanPicker(true);
-                      setBhajanPickerSearch('');
-                      setPickerDeityFilter('');
-                      setPickerKeywordFilter('');
-                    }}
+                    onClick={() => openPickerFromProgramPage(selectedProgram)}
                     className="text-white bg-[#0B5A70] hover:bg-[#094a5d] px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap"
                   >
                     ➕ Add bhajan
@@ -9437,13 +9449,7 @@ const App = () => {
                       })()}
                     </p>
                     <button
-                      onClick={() => {
-                        openEditProgram(selectedProgram);
-                        setShowBhajanPicker(true);
-                        setBhajanPickerSearch('');
-                        setPickerDeityFilter('');
-                        setPickerKeywordFilter('');
-                      }}
+                      onClick={() => openPickerFromProgramPage(selectedProgram)}
                       className="text-[#0B5A70] hover:text-[#0B5A70]/80 font-semibold text-sm"
                     >
                       + Add bhajans
@@ -9902,8 +9908,11 @@ const App = () => {
 
               {/* Bhajan Picker Modal */}
               {showBhajanPicker && (() => {
-                const pickerDeities = [...new Set(bhajans.map(b => b.deity).filter(Boolean))].sort();
-                const allPickerKeywords = allKeywordOptions;
+                const pickerNoun = programForm.type === 'parody' ? 'medley' : programForm.type === 'playlist' ? 'playlist' : 'program';
+                const pickerDeities = [...new Set([...bhajans, ...publicBhajans].map(b => b.deity).filter(Boolean))].sort();
+                // SESSION 68: second filter is Type (Bhajan/Aarti/…) to match
+                // the library pages; keyword chips still searchable by text.
+                const pickerTypes = [...new Set([...bhajans, ...publicBhajans].map(b => b.category).filter(Boolean))].sort();
                 // SESSION 10 (item 4): was derived from the user's own
                 // bhajans only, which meant a nearly-empty dropdown for
                 // users with a small personal library. Now uses the
@@ -9923,9 +9932,31 @@ const App = () => {
                     (b.keywords && b.keywords.some(kw => kw.toLowerCase().includes(searchLower)))
                   )) return false;
                   if (pickerDeityFilter && b.deity !== pickerDeityFilter) return false;
-                  if (pickerKeywordFilter && !(b.keywords && b.keywords.includes(pickerKeywordFilter))) return false;
+                  if (pickerKeywordFilter && b.category !== pickerKeywordFilter) return false;
                   return true;
                 });
+
+                // SESSION 68: public-library results. Shown once the user
+                // searches or filters (not all 280+ by default). Public
+                // bhajans already saved to My Library are excluded — their
+                // personal copy is in the list above.
+                const publicPickerMatches = hasActiveFiltersFn() ? publicBhajans.filter(b => {
+                  if (savedBhajanIds.has(b.id)) return false;
+                  if (bhajanPickerSearch && !(
+                    (b.title || '').toLowerCase().includes(searchLower) ||
+                    (b.lyrics && b.lyrics.toLowerCase().includes(searchLower)) ||
+                    (b.keywords && b.keywords.some(kw => kw.toLowerCase().includes(searchLower)))
+                  )) return false;
+                  if (pickerDeityFilter && b.deity !== pickerDeityFilter) return false;
+                  if (pickerKeywordFilter && b.category !== pickerKeywordFilter) return false;
+                  return true;
+                }).slice(0, 40) : [];
+                function hasActiveFiltersFn() { return !!(bhajanPickerSearch || pickerDeityFilter || pickerKeywordFilter); }
+                const addPublicToProgram = async (pb) => {
+                  if (savingToLibrary) return;
+                  const saved = await saveToMyLibrary(pb);
+                  if (saved && saved.id) toggleBhajanInProgram(saved.id);
+                };
 
                 const relatedBhajans = programKeywords.size > 0 && !bhajanPickerSearch && !pickerDeityFilter && !pickerKeywordFilter
                   ? bhajans.filter(b => {
@@ -9941,8 +9972,8 @@ const App = () => {
                   <div onClick={(e) => e.stopPropagation()} className="bg-[#FFFCF8] rounded-2xl shadow-[0_8px_40px_rgba(11,90,112,0.15)] max-w-lg w-full max-h-[85vh] flex flex-col">
                     <div className="p-4 border-b border-[#0B5A70]/10 flex items-center justify-between">
                       <div>
-                        <h3 className="text-lg font-bold text-[#0B5A70]">Add Bhajans to Program</h3>
-                        <p className="text-xs text-[#0B5A70]/60 mt-0.5">Tap to add or remove. Hit Done when finished.</p>
+                        <h3 className="text-lg font-bold text-[#0B5A70]">Add bhajans to {pickerNoun}</h3>
+                        <p className="text-xs text-[#0B5A70]/60 mt-0.5">Tap to add or remove · search to find more in the public library</p>
                       </div>
                       <button
                         onClick={closeBhajanPicker}
@@ -9980,15 +10011,15 @@ const App = () => {
                         <select
                           value={pickerKeywordFilter}
                           onChange={(e) => setPickerKeywordFilter(e.target.value)}
-                          aria-label="Filter picker by keyword"
+                          aria-label="Filter picker by type"
                           className={`flex-1 min-w-0 px-2 py-1.5 border rounded-lg text-xs outline-none bg-[#FFFCF8] transition-all ${
                             pickerKeywordFilter
                               ? 'border-[#0B5A70]/50 ring-2 ring-[#0B5A70]/10 font-semibold text-[#0B5A70]'
                               : 'border-[#0B5A70]/15'
                           }`}
                         >
-                          <option value="">Mood</option>
-                          {allPickerKeywords.map(kw => <option key={kw} value={kw}>#{kw}</option>)}
+                          <option value="">Type</option>
+                          {pickerTypes.map(t => <option key={t} value={t}>{t}</option>)}
                         </select>
                         {hasActiveFilters && (
                           <button
@@ -10006,10 +10037,10 @@ const App = () => {
                     </div>
 
                     <div className="flex-1 overflow-y-auto p-4">
-                      {bhajans.length === 0 ? (
+                      {bhajans.length === 0 && !hasActiveFilters ? (
                         <div className="text-center py-8">
                           <p className="text-[#0B5A70] font-semibold">Your library is empty</p>
-                          <p className="text-sm text-gray-600 mt-1">Add bhajans to your library first</p>
+                          <p className="text-sm text-gray-600 mt-1">Search above to add bhajans from the public library</p>
                         </div>
                       ) : (
                         <>
@@ -10118,6 +10149,33 @@ const App = () => {
                               })}
                             </div>
                           )}
+
+                          {publicPickerMatches.length > 0 && (
+                            <div className="mt-5">
+                              <p className="text-xs font-semibold text-[#E65100] uppercase tracking-wide mb-2">
+                                🌐 From the public library ({publicPickerMatches.length})
+                              </p>
+                              <div className="space-y-1.5">
+                                {publicPickerMatches.map(pb => (
+                                  <button
+                                    key={`pub-${pb.id}`}
+                                    onClick={() => addPublicToProgram(pb)}
+                                    disabled={savingToLibrary}
+                                    title={`Save to My Library and add to ${pickerNoun}`}
+                                    className="w-full text-left p-3 rounded-xl border transition-all bg-white border-[#E65100]/20 hover:border-[#E65100]/40 disabled:opacity-50"
+                                  >
+                                    <div className="flex items-center justify-between">
+                                      <div className="flex-1 min-w-0">
+                                        <p className="font-semibold text-[#0B5A70] truncate text-sm">{pb.title}</p>
+                                        <p className="text-xs text-gray-600 truncate">{pb.deity} • {pb.category}</p>
+                                      </div>
+                                      <span className="text-[#E65100] font-semibold ml-2 text-sm whitespace-nowrap">+ Add</span>
+                                    </div>
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </>
                       )}
                     </div>
@@ -10128,7 +10186,7 @@ const App = () => {
                         onClick={closeBhajanPicker}
                         className="w-full bg-[#0B5A70] hover:bg-[#094a5d] text-white font-semibold py-2.5 rounded-xl shadow-md transition-colors"
                       >
-                        Done · {programForm.bhajanIds.length} {programForm.bhajanIds.length === 1 ? 'bhajan' : 'bhajans'} in program
+                        Done · {programForm.bhajanIds.length} {programForm.bhajanIds.length === 1 ? 'bhajan' : 'bhajans'} in {pickerNoun}
                       </button>
                     </div>
                   </div>
