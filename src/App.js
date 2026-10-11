@@ -1079,7 +1079,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.10.05.s58';
+const APP_VERSION = '2026.10.11.s59';
 
 // SESSION 30: log at startup so admin can verify which build is
 // running via the browser console (helps diagnose "is my new
@@ -1449,6 +1449,59 @@ const shareApp = async () => {
 // SESSION 54: parse a YouTube URL and return { id, start } or null.
 // Handles youtube.com/watch, youtu.be short links, /shorts/, /embed/,
 // and optional timestamps (t=90 or t=1m30s → seconds).
+// SESSION 59: Listen bar — YouTube player lives at the TOP of the
+// bhajan page (under the title), not in the footer. One full-width
+// button; the player expands directly beneath it so the singer never
+// has to scroll past the lyrics to find audio.
+const ListenBar = ({ bhajan, show, onToggle, darkMode, playerId }) => {
+  if (!bhajan || !bhajan.source) return null;
+  const yt = getYouTubeVideoId(bhajan.source);
+  if (!yt) {
+    return (
+      <a
+        href={bhajan.source}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={`inline-flex items-center gap-1.5 text-xs font-semibold mb-4 ${darkMode ? 'text-orange-300 hover:text-orange-200' : 'text-[#E65100] hover:text-[#d64800]'} hover:underline`}
+      >
+        🔗 Source
+      </a>
+    );
+  }
+  const startParam = yt.start > 0 ? `&start=${yt.start}` : '';
+  return (
+    <div className="mb-4">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={show}
+        aria-controls={playerId}
+        aria-label={show ? 'Hide audio player' : 'Listen on YouTube'}
+        className={`w-full flex items-center justify-center gap-2.5 rounded-xl px-4 py-2.5 font-semibold text-sm transition-colors border ${show
+          ? (darkMode ? 'bg-[#1e2e33] text-gray-300 border-[#0B5A70]/25' : 'bg-[#0B5A70]/5 text-[#0B5A70] border-[#0B5A70]/15')
+          : 'bg-[#FF0000] text-white border-[#FF0000] hover:bg-[#e60000] shadow-sm'}`}
+      >
+        <svg width="26" height="18" viewBox="0 0 28 20" aria-hidden="true">
+          <rect width="28" height="20" rx="5" fill={show ? '#FF0000' : 'white'} />
+          <path d="M11 6 L11 14 L18 10 Z" fill={show ? 'white' : '#FF0000'} />
+        </svg>
+        <span>{show ? 'Hide player' : 'Listen'}</span>
+      </button>
+      {show && (
+        <div id={playerId} className="mt-3 rounded-xl overflow-hidden border border-[#0B5A70]/15 bg-black" style={{aspectRatio: '16/9', maxHeight: '260px'}}>
+          <iframe
+            title={`Audio for ${bhajan.title}`}
+            src={`https://www.youtube-nocookie.com/embed/${yt.id}?autoplay=1&rel=0${startParam}`}
+            style={{width: '100%', height: '100%', border: 0}}
+            allow="autoplay; encrypted-media; picture-in-picture"
+            allowFullScreen
+          />
+        </div>
+      )}
+    </div>
+  );
+};
+
 const getYouTubeVideoId = (url) => {
   if (!url || typeof url !== 'string') return null;
   try {
@@ -8158,6 +8211,14 @@ const App = () => {
                   <BhajanTitle title={selectedBhajan.title} size="xl" darkMode={darkMode} />
                 </div>
 
+                <ListenBar
+                  bhajan={selectedBhajan}
+                  show={showAudioPlayer}
+                  onToggle={() => setShowAudioPlayer(v => !v)}
+                  darkMode={darkMode}
+                  playerId="sk-audio-player"
+                />
+
                 {selectedBhajan.dhun && (
                   <div className={`border-l-4 border-[#E65100]/40 p-3 rounded-r-lg mb-4 ${darkMode ? 'bg-[#1e2e33]' : 'bg-[#0B5A70]/5'}`}>
                     <p className={`text-sm ${darkMode ? 'text-orange-200' : 'text-[#E65100]'}`}>
@@ -8239,7 +8300,7 @@ const App = () => {
                 {/* SESSION 48: quiet footer — moods on the left, source on
                     the right, single hairline above. Was two stacked
                     border-t sections that read like form fields. */}
-                {(selectedBhajan.keywords && selectedBhajan.keywords.length > 0) || selectedBhajan.source ? (
+                {(selectedBhajan.keywords && selectedBhajan.keywords.length > 0) ? (
                   <div className="mt-6 pt-4 border-t border-[#0B5A70]/8 flex items-center justify-between gap-3 flex-wrap">
                     <div className="flex flex-wrap gap-2 flex-1 min-w-0">
                       {/* SESSION 52: mood chips are now tappable — apply the
@@ -8263,69 +8324,8 @@ const App = () => {
                         </button>
                       ))}
                     </div>
-                    {selectedBhajan.source && (() => {
-                      // SESSION 56: replaced the "Play + Source" pair with
-                      // a single YouTube-branded button. Since every
-                      // source is a YouTube URL, the Source link was
-                      // redundant. Non-YT URLs (rare/never) still get a
-                      // small Source fallback so nothing becomes
-                      // unreachable.
-                      const yt = getYouTubeVideoId(selectedBhajan.source);
-                      if (!yt) {
-                        return (
-                          <a
-                            href={selectedBhajan.source}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className={`inline-flex items-center gap-1.5 text-xs font-semibold flex-shrink-0 ${darkMode ? "text-orange-300 hover:text-orange-200" : "text-[#E65100] hover:text-[#d64800]"} hover:underline`}
-                          >
-                            🔗 Source
-                          </a>
-                        );
-                      }
-                      return (
-                        <button
-                          type="button"
-                          onClick={() => setShowAudioPlayer(v => !v)}
-                          className="inline-flex items-center gap-2 flex-shrink-0 rounded-lg px-2 py-1 hover:bg-red-50/60 transition-colors group"
-                          aria-expanded={showAudioPlayer}
-                          aria-controls="sk-audio-player"
-                          aria-label={showAudioPlayer ? 'Hide audio player' : 'Play audio'}
-                          title={showAudioPlayer ? 'Hide player' : 'Play audio'}
-                        >
-                          <svg width="28" height="20" viewBox="0 0 28 20" aria-hidden="true">
-                            <rect width="28" height="20" rx="5" fill="#FF0000" />
-                            <path d="M11 6 L11 14 L18 10 Z" fill="white" />
-                          </svg>
-                          <span className={`text-xs font-semibold ${darkMode ? 'text-gray-300 group-hover:text-white' : 'text-[#0B5A70]/70 group-hover:text-[#0B5A70]'}`}>
-                            {showAudioPlayer ? 'Hide' : 'Listen'}
-                          </span>
-                        </button>
-                      );
-                    })()}
                   </div>
                 ) : null}
-                {/* SESSION 54: lazy-loaded YouTube player. Only injected
-                    once the user taps Play — no upfront YouTube tracking
-                    on every bhajan open. Uses youtube-nocookie for
-                    privacy. Autoplay works because the tap is a user
-                    gesture. */}
-                {showAudioPlayer && (() => {
-                  const yt = getYouTubeVideoId(selectedBhajan.source);
-                  if (!yt) return null;
-                  const startParam = yt.start > 0 ? `&start=${yt.start}` : '';
-                  return (
-                    <div id="sk-audio-player" className="mt-4 rounded-xl overflow-hidden border border-[#0B5A70]/15 bg-black" style={{aspectRatio: '16/9', maxHeight: '260px'}}>
-                      <iframe
-                        title={`Audio for ${selectedBhajan.title}`}
-                        src={`https://www.youtube-nocookie.com/embed/${yt.id}?autoplay=1&rel=0${startParam}`}
-                        style={{width: '100%', height: '100%', border: 0}}
-                        allow="autoplay; encrypted-media; picture-in-picture"
-                        allowFullScreen
-                      />
-                    </div>
-                  );
-                })()}
               </div>
 
               {/* SESSION 34: context-aware "next-tap" list below reading view.
@@ -10632,6 +10632,14 @@ const App = () => {
                   <BhajanTitle title={selectedPublicBhajan.title} size="xl" darkMode={darkMode} />
                 </div>
 
+                <ListenBar
+                  bhajan={selectedPublicBhajan}
+                  show={showAudioPlayer}
+                  onToggle={() => setShowAudioPlayer(v => !v)}
+                  darkMode={darkMode}
+                  playerId="sk-audio-player-public"
+                />
+
                 {selectedPublicBhajan.dhun && (
                   <div className={`border-l-4 border-[#E65100]/40 p-3 rounded-r-lg mb-4 ${darkMode ? 'bg-[#1e2e33]' : 'bg-[#0B5A70]/5'}`}>
                     <p className={`text-sm ${darkMode ? 'text-orange-200' : 'text-[#E65100]'}`}>
@@ -10689,7 +10697,7 @@ const App = () => {
                   </pre>
                 </div>
 
-                {(selectedPublicBhajan.keywords && selectedPublicBhajan.keywords.length > 0) || selectedPublicBhajan.source ? (
+                {(selectedPublicBhajan.keywords && selectedPublicBhajan.keywords.length > 0) ? (
                   <div className="mt-6 pt-4 border-t border-[#0B5A70]/8 flex items-center justify-between gap-3 flex-wrap">
                     <div className="flex flex-wrap gap-2 flex-1 min-w-0">
                       {/* SESSION 52: mood chips are now tappable — apply the
@@ -10713,58 +10721,8 @@ const App = () => {
                         </button>
                       ))}
                     </div>
-                    {selectedPublicBhajan.source && (() => {
-                      const yt = getYouTubeVideoId(selectedPublicBhajan.source);
-                      if (!yt) {
-                        return (
-                          <a
-                            href={selectedPublicBhajan.source}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className={`inline-flex items-center gap-1.5 text-xs font-semibold flex-shrink-0 ${darkMode ? "text-orange-300 hover:text-orange-200" : "text-[#E65100] hover:text-[#d64800]"} hover:underline`}
-                          >
-                            🔗 Source
-                          </a>
-                        );
-                      }
-                      return (
-                        <button
-                          type="button"
-                          onClick={() => setShowAudioPlayer(v => !v)}
-                          className="inline-flex items-center gap-2 flex-shrink-0 rounded-lg px-2 py-1 hover:bg-red-50/60 transition-colors group"
-                          aria-expanded={showAudioPlayer}
-                          aria-controls="sk-audio-player-public"
-                          aria-label={showAudioPlayer ? 'Hide audio player' : 'Play audio'}
-                          title={showAudioPlayer ? 'Hide player' : 'Play audio'}
-                        >
-                          <svg width="28" height="20" viewBox="0 0 28 20" aria-hidden="true">
-                            <rect width="28" height="20" rx="5" fill="#FF0000" />
-                            <path d="M11 6 L11 14 L18 10 Z" fill="white" />
-                          </svg>
-                          <span className={`text-xs font-semibold ${darkMode ? 'text-gray-300 group-hover:text-white' : 'text-[#0B5A70]/70 group-hover:text-[#0B5A70]'}`}>
-                            {showAudioPlayer ? 'Hide' : 'Listen'}
-                          </span>
-                        </button>
-                      );
-                    })()}
                   </div>
                 ) : null}
-                {showAudioPlayer && (() => {
-                  const yt = getYouTubeVideoId(selectedPublicBhajan.source);
-                  if (!yt) return null;
-                  const startParam = yt.start > 0 ? `&start=${yt.start}` : '';
-                  return (
-                    <div id="sk-audio-player-public" className="mt-4 rounded-xl overflow-hidden border border-[#0B5A70]/15 bg-black" style={{aspectRatio: '16/9', maxHeight: '260px'}}>
-                      <iframe
-                        title={`Audio for ${selectedPublicBhajan.title}`}
-                        src={`https://www.youtube-nocookie.com/embed/${yt.id}?autoplay=1&rel=0${startParam}`}
-                        style={{width: '100%', height: '100%', border: 0}}
-                        allow="autoplay; encrypted-media; picture-in-picture"
-                        allowFullScreen
-                      />
-                    </div>
-                  );
-                })()}
               </div>
 
               {/* Related Bhajans — SESSION 6: uses memoized relatedPublicBhajans */}
