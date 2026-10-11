@@ -4000,9 +4000,33 @@ const App = () => {
         // SESSION 64: the automatic first-login feature tour is retired —
         // new users land straight in the library. (Singer's Guide in the
         // menu covers the same ground, on demand.)
+      } else if (firebaseUser.displayName && firebaseUser.displayName.trim()) {
+        // SESSION 64: first sign-in with Google — create the profile
+        // silently from the Google name. No form, no questions; the
+        // bhakt lands straight in the library.
+        const profileData = {
+          uid: firebaseUser.uid,
+          email: firebaseUser.email || null,
+          phoneNumber: firebaseUser.phoneNumber || null,
+          photoURL: firebaseUser.photoURL || null,
+          displayName: firebaseUser.displayName.trim(),
+          bio: '',
+          location: '',
+          contactInfo: { whatsapp: firebaseUser.phoneNumber || '', youtube: '', instagram: '' },
+          verified: false,
+          stats: { bhajanCount: 0, publicBhajanCount: 0, followerCount: 0, followingCount: 0 },
+          preferences: { theme: 'saffron', hindiTypingEnabled: true, viewMode: 'normal', fontSize: 18 },
+          hasSeenOnboarding: true,
+          createdAt: window.firebase.firestore.FieldValue.serverTimestamp(),
+          lastActive: window.firebase.firestore.FieldValue.serverTimestamp()
+        };
+        await db.collection('users').doc(firebaseUser.uid).set(profileData);
+        setUserProfile(profileData);
+        loadConfigLists();
       } else {
+        // No name available (e.g. phone sign-in): ask for just the name.
         setProfileForm({
-          displayName: firebaseUser.displayName || '',
+          displayName: '',
           bio: '',
           location: '',
           whatsapp: firebaseUser.phoneNumber || '',
@@ -4071,6 +4095,7 @@ const App = () => {
           viewMode: 'normal',
           fontSize: 18
         },
+        hasSeenOnboarding: true,
         createdAt: window.firebase.firestore.FieldValue.serverTimestamp(),
         lastActive: window.firebase.firestore.FieldValue.serverTimestamp()
       };
@@ -6564,7 +6589,7 @@ const App = () => {
             <div className="bg-[#0B5A70] p-6 text-white text-center">
               <div className="text-5xl mb-2">🙏</div>
               <h2 className="text-2xl font-bold">Welcome to Sankirtan!</h2>
-              <p className="text-white/80 text-sm mt-1">Let's set up your profile</p>
+              <p className="text-white/80 text-sm mt-1">What should we call you?</p>
             </div>
 
             <div className="p-6 space-y-4">
@@ -6582,60 +6607,6 @@ const App = () => {
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-semibold text-[#0B5A70] mb-1">
-                  Bio (optional)
-                </label>
-                <textarea
-                  value={profileForm.bio}
-                  onChange={(e) => setProfileForm({...profileForm, bio: e.target.value})}
-                  className="w-full px-4 py-2 border border-[#0B5A70]/15 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none"
-                  placeholder="e.g., Bhajan singer, Kirtan lover"
-                  rows={2}
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-[#0B5A70] mb-1">
-                  Location (optional)
-                </label>
-                <input
-                  type="text"
-                  value={profileForm.location}
-                  onChange={(e) => setProfileForm({...profileForm, location: e.target.value})}
-                  className="w-full px-4 py-3 border border-[#0B5A70]/15 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none"
-                  placeholder="e.g., Delhi, India"
-                />
-              </div>
-
-              <div className="pt-2 border-t border-[#0B5A70]/8">
-                <p className="text-xs text-gray-500 mb-2">📱 Social & Contact (optional)</p>
-
-                <div className="space-y-2">
-                  <input
-                    type="text"
-                    value={profileForm.whatsapp}
-                    onChange={(e) => setProfileForm({...profileForm, whatsapp: e.target.value})}
-                    className="w-full px-3 py-2 border border-[#0B5A70]/15 rounded-lg focus:ring-2 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none text-sm"
-                    placeholder="WhatsApp number"
-                  />
-                  <input
-                    type="text"
-                    value={profileForm.youtube}
-                    onChange={(e) => setProfileForm({...profileForm, youtube: e.target.value})}
-                    className="w-full px-3 py-2 border border-[#0B5A70]/15 rounded-lg focus:ring-2 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none text-sm"
-                    placeholder="YouTube channel URL"
-                  />
-                  <input
-                    type="text"
-                    value={profileForm.instagram}
-                    onChange={(e) => setProfileForm({...profileForm, instagram: e.target.value})}
-                    className="w-full px-3 py-2 border border-[#0B5A70]/15 rounded-lg focus:ring-2 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none text-sm"
-                    placeholder="Instagram handle"
-                  />
-                </div>
-              </div>
-
               {authError && (
                 <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
                   ⚠️ {authError}
@@ -6647,7 +6618,7 @@ const App = () => {
                 disabled={authLoading || !profileForm.displayName.trim()}
                 className="w-full bg-[#0B5A70] hover:bg-[#094a5d] text-white font-bold py-3 rounded-xl shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {authLoading ? 'Saving...' : '🚀 Complete Setup'}
+                {authLoading ? 'Saving...' : 'Continue →'}
               </button>
 
               <button
