@@ -1083,7 +1083,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.10.12.s71';
+const APP_VERSION = '2026.10.12.s72';
 
 // SESSION 30: log at startup so admin can verify which build is
 // running via the browser console (helps diagnose "is my new
@@ -2470,6 +2470,12 @@ const App = () => {
     let raf = 0;
     let acc = 0;
     let last = performance.now();
+    // index.css sets `html { scroll-behavior: smooth }`; on iOS Safari a
+    // smooth scrollBy() every frame is restarted before it moves, so the
+    // page never scrolls. Force instant scrolling while we drive it.
+    const htmlStyle = document.documentElement.style;
+    const prevBehavior = htmlStyle.scrollBehavior;
+    htmlStyle.scrollBehavior = 'auto';
     const pxPerSec = 12 + liveScrollSpeed * 12; // 24 … 72 px/s
     const step = (now) => {
       const dt = Math.min(100, now - last);
@@ -2478,19 +2484,25 @@ const App = () => {
       const whole = Math.floor(acc);
       if (whole >= 1) {
         acc -= whole;
-        window.scrollBy(0, whole);
+        window.scrollBy({ top: whole, left: 0, behavior: 'instant' });
       }
       const atBottom = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2;
       if (atBottom) { setLiveAutoScroll(false); return; }
       raf = requestAnimationFrame(step);
     };
     raf = requestAnimationFrame(step);
-    const pause = () => setLiveAutoScroll(false);
+    // Touching the Scroll/speed buttons themselves must not pause
+    // (otherwise ⏸ would pause on touchstart and re-start on click).
+    const pause = (e) => {
+      if (e && e.target && e.target.closest && e.target.closest('[data-live-controls]')) return;
+      setLiveAutoScroll(false);
+    };
     window.addEventListener('touchstart', pause, { passive: true });
     window.addEventListener('wheel', pause, { passive: true });
     window.addEventListener('keydown', pause);
     return () => {
       cancelAnimationFrame(raf);
+      htmlStyle.scrollBehavior = prevBehavior;
       window.removeEventListener('touchstart', pause);
       window.removeEventListener('wheel', pause);
       window.removeEventListener('keydown', pause);
@@ -7049,7 +7061,7 @@ const App = () => {
           </div>
 
           {/* Font Size Controls */}
-          <div className="max-w-4xl mx-auto px-4 pb-2 flex items-center justify-center gap-2">
+          <div className="max-w-4xl mx-auto px-4 pb-2 flex items-center justify-center gap-2 flex-wrap" data-live-controls>
             <button
               onClick={() => setLiveFontSize(Math.max(14, liveFontSize - 2))}
               className={`w-8 h-8 rounded-lg font-bold ${liveBtnMuted}`}
