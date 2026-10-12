@@ -1083,7 +1083,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.10.12.s70';
+const APP_VERSION = '2026.10.12.s71';
 
 // SESSION 30: log at startup so admin can verify which build is
 // running via the browser console (helps diagnose "is my new
@@ -1115,6 +1115,87 @@ const mulberry32 = (seed) => {
     r = (r + Math.imul(r ^ (r >>> 7), 61 | r)) ^ r;
     return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
   };
+};
+
+// SESSION 71: forgiving search. Both the query and the bhajan text are
+// folded to a loose key so "Shree Ganesh", "shri ganesha", "sree ganes"
+// and "श्री गणेश" / "श्रि गनेश" all meet. Latin: diacritics stripped,
+// aspirates and doubled vowels collapsed, w→v, z→j, ph→f, trailing
+// schwa dropped. Devanagari: nukta and chandrabindu folded, long vowels
+// shortened, श/ष→स, ण→न, ऋ→रि. Punctuation and dandas removed.
+const foldSearchKey = (str) => {
+  if (!str) return '';
+  let t = String(str).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').normalize('NFC');
+  // Devanagari folds
+  t = t
+    .replace(/़/g, '')              // nukta
+    .replace(/ँ/g, 'ं')        // chandrabindu → anusvara
+    .replace(/ी/g, 'ि')        // ी → ि
+    .replace(/ू/g, 'ु')        // ू → ु
+    .replace(/ई/g, 'इ')        // ई → इ
+    .replace(/ऊ/g, 'उ')        // ऊ → उ
+    .replace(/ै/g, 'े')        // ै → े
+    .replace(/ौ/g, 'ो')        // ौ → ो
+    .replace(/औ/g, 'ओ')        // औ → ओ
+    .replace(/ऐ/g, /ए/.source) // ऐ → ए
+    .replace(/[शष]/g, 'स') // श ष → स
+    .replace(/ण/g, 'न')        // ण → न
+    .replace(/ऋ/g, 'रि')  // ऋ → रि
+    .replace(/ृ/g, '्रि') // ृ → ्रि
+    .replace(/[।॥]/g, ' ');    // । ॥
+  // Latin folds (only touch a-z runs)
+  t = t.replace(/[a-z]+/g, (w) => w
+    .replace(/chh/g, 'ch')
+    .replace(/([kgjtdpb])h/g, '$1')
+    .replace(/sh/g, 's')
+    .replace(/ph/g, 'f')
+    .replace(/w/g, 'v')
+    .replace(/z/g, 'j')
+    .replace(/q/g, 'k')
+    .replace(/y(?![aeiou])/g, 'i')      // jay → jai, but shyam keeps y
+    .replace(/ee|ii/g, 'i')
+    .replace(/oo|uu/g, 'u')
+    .replace(/aa/g, 'a')
+    .replace(/([bcdfghjklmnpqrstvxyz])\1/g, '$1')
+    .replace(/^(.{3,}[^aeiou])a$/, '$1'));
+  return t.replace(/[^\p{L}\p{M}\p{N}\s]/gu, ' ').replace(/\s+/g, ' ').trim();
+};
+
+// Per-bhajan folded text, cached on the object (Firestore snapshots hand
+// us fresh objects on change, so the cache naturally invalidates).
+const searchIndexCache = new WeakMap();
+const getSearchIndex = (b) => {
+  let idx = searchIndexCache.get(b);
+  if (idx) return idx;
+  idx = {
+    title: foldSearchKey(b.title),
+    meta: foldSearchKey([b.dhun, b.singer, b.lyricist, ...(b.keywords || [])].filter(Boolean).join(' ')),
+    lyrics: foldSearchKey(b.lyrics)
+  };
+  searchIndexCache.set(b, idx);
+  return idx;
+};
+
+// Returns 0 (title), 1 (dhun/singer/keywords), 2 (lyrics) or -1 (no match).
+// Multi-word queries match when every word is found somewhere in that field.
+const searchTier = (b, foldedQuery) => {
+  if (!foldedQuery) return 0;
+  const idx = getSearchIndex(b);
+  const words = foldedQuery.split(' ');
+  const hit = (field) => field && words.every(w => field.includes(w));
+  if (hit(idx.title)) return 0;
+  if (hit(idx.meta)) return 1;
+  if (hit(idx.lyrics)) return 2;
+  return -1;
+};
+
+// Stable re-order: title matches first, then dhun/keywords, then lyrics.
+const rankByTier = (list, foldedQuery) => {
+  if (!foldedQuery) return list;
+  return list
+    .map((b, i) => ({ b, i, t: searchTier(b, foldedQuery) }))
+    .sort((x, y) => x.t - y.t || x.i - y.i)
+    .map(x => x.b);
 };
 
 const seededShuffle = (arr, seed) => {
@@ -5339,18 +5420,9 @@ const App = () => {
   // .toLowerCase().includes() on every single render)
   // ==============================================
   const filteredPublicBhajans = useMemo(() => {
-    const q = debouncedPublicSearch.toLowerCase();
+    const q = foldSearchKey(debouncedPublicSearch);
     const filtered = publicBhajans.filter(bhajan => {
-      if (q) {
-        const matches =
-          (bhajan.title && bhajan.title.toLowerCase().includes(q)) ||
-          (bhajan.lyrics && bhajan.lyrics.toLowerCase().includes(q)) ||
-          (bhajan.dhun && bhajan.dhun.toLowerCase().includes(q)) ||
-          (bhajan.singer && bhajan.singer.toLowerCase().includes(q)) ||
-          (bhajan.lyricist && bhajan.lyricist.toLowerCase().includes(q)) ||
-          (bhajan.keywords && bhajan.keywords.some(k => k.toLowerCase().includes(q)));
-        if (!matches) return false;
-      }
+      if (q && searchTier(bhajan, q) < 0) return false;
       if (publicFilterDeity && bhajan.deity !== publicFilterDeity) return false;
       if (publicFilterCategory && bhajan.category !== publicFilterCategory) return false;
       if (publicFilterKeyword && (!bhajan.keywords || !bhajan.keywords.includes(publicFilterKeyword))) return false;
@@ -5362,7 +5434,8 @@ const App = () => {
     // giving returning visitors a "fresh library" feeling.
     // Popular Bhajans section stays deterministic (sorted by
     // saveCount) — this shuffle only affects the main grid below it.
-    return seededShuffle(filtered, shuffleSeed);
+    // SESSION 71: when searching, title matches come first.
+    return rankByTier(seededShuffle(filtered, shuffleSeed), q);
   }, [publicBhajans, debouncedPublicSearch, publicFilterDeity, publicFilterCategory, publicFilterKeyword, shuffleSeed]);
 
   // SESSION 11: Popular Bhajans section — top 8 by saveCount
@@ -5443,18 +5516,9 @@ const App = () => {
   );
 
   const filteredBhajans = useMemo(() => {
-    const q = debouncedSearchQuery.toLowerCase();
+    const q = foldSearchKey(debouncedSearchQuery);
     const filtered = bhajans.filter(bhajan => {
-      if (q) {
-        const matches =
-          (bhajan.title && bhajan.title.toLowerCase().includes(q)) ||
-          (bhajan.lyrics && bhajan.lyrics.toLowerCase().includes(q)) ||
-          (bhajan.dhun && bhajan.dhun.toLowerCase().includes(q)) ||
-          (bhajan.singer && bhajan.singer.toLowerCase().includes(q)) ||
-          (bhajan.lyricist && bhajan.lyricist.toLowerCase().includes(q)) ||
-          (bhajan.keywords && bhajan.keywords.some(k => k.toLowerCase().includes(q)));
-        if (!matches) return false;
-      }
+      if (q && searchTier(bhajan, q) < 0) return false;
       if (filterDeity && bhajan.deity !== filterDeity) return false;
       if (filterCategory && bhajan.category !== filterCategory) return false;
       if (libraryFilterKeyword && (!bhajan.keywords || !bhajan.keywords.includes(libraryFilterKeyword))) return false;
@@ -5464,7 +5528,7 @@ const App = () => {
     // sing most often float to the top. Tiebreak by lastActive so
     // recently-opened bhajans beat older ones with the same view
     // count. Falls back to title A-Z for bhajans never opened.
-    return filtered.sort((a, b) => {
+    const sorted = filtered.sort((a, b) => {
       const va = a.viewCount || 0;
       const vb = b.viewCount || 0;
       if (vb !== va) return vb - va;
@@ -5473,6 +5537,8 @@ const App = () => {
       if (lb !== la) return lb - la;
       return (a.title || '').localeCompare(b.title || '');
     });
+    // SESSION 71: when searching, title matches come first.
+    return rankByTier(sorted, q);
   }, [bhajans, debouncedSearchQuery, filterDeity, filterCategory, libraryFilterKeyword]);
 
   const filteredPrograms = useMemo(() => {
@@ -10152,33 +10218,25 @@ const App = () => {
                   if (b && b.keywords) b.keywords.forEach(kw => programKeywords.add(kw));
                 });
 
-                const searchLower = bhajanPickerSearch.toLowerCase();
-                const filteredPickerBhajans = bhajans.filter(b => {
-                  if (bhajanPickerSearch && !(
-                    b.title.toLowerCase().includes(searchLower) ||
-                    (b.lyrics && b.lyrics.toLowerCase().includes(searchLower)) ||
-                    (b.keywords && b.keywords.some(kw => kw.toLowerCase().includes(searchLower)))
-                  )) return false;
+                const pickerQ = foldSearchKey(bhajanPickerSearch);
+                const filteredPickerBhajans = rankByTier(bhajans.filter(b => {
+                  if (pickerQ && searchTier(b, pickerQ) < 0) return false;
                   if (pickerDeityFilter && b.deity !== pickerDeityFilter) return false;
                   if (pickerKeywordFilter && b.category !== pickerKeywordFilter) return false;
                   return true;
-                });
+                }), pickerQ);
 
                 // SESSION 68: public-library results. Shown once the user
                 // searches or filters (not all 280+ by default). Public
                 // bhajans already saved to My Library are excluded — their
                 // personal copy is in the list above.
-                const publicPickerMatches = hasActiveFiltersFn() ? publicBhajans.filter(b => {
+                const publicPickerMatches = hasActiveFiltersFn() ? rankByTier(publicBhajans.filter(b => {
                   if (savedBhajanIds.has(b.id)) return false;
-                  if (bhajanPickerSearch && !(
-                    (b.title || '').toLowerCase().includes(searchLower) ||
-                    (b.lyrics && b.lyrics.toLowerCase().includes(searchLower)) ||
-                    (b.keywords && b.keywords.some(kw => kw.toLowerCase().includes(searchLower)))
-                  )) return false;
+                  if (pickerQ && searchTier(b, pickerQ) < 0) return false;
                   if (pickerDeityFilter && b.deity !== pickerDeityFilter) return false;
                   if (pickerKeywordFilter && b.category !== pickerKeywordFilter) return false;
                   return true;
-                }).slice(0, 40) : [];
+                }), pickerQ).slice(0, 40) : [];
                 function hasActiveFiltersFn() { return !!(bhajanPickerSearch || pickerDeityFilter || pickerKeywordFilter); }
                 const addPublicToProgram = async (pb) => {
                   if (savingToLibrary) return;
