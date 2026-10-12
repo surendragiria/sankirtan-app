@@ -1083,7 +1083,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.10.11.s69';
+const APP_VERSION = '2026.10.12.s70';
 
 // SESSION 30: log at startup so admin can verify which build is
 // running via the browser console (helps diagnose "is my new
@@ -1429,6 +1429,80 @@ const getMukhda = (bhajan) => {
   // Tier 3: fallback for lyrics with no blank-line structure
   const allNonEmpty = rawLines.slice(start).filter(l => l.trim().length > 0);
   return allNonEmpty.slice(0, 3).map(l => l.trim()).join('\n');
+};
+
+// SESSION 70: split lyrics into the mukhda (opening refrain) and the
+// rest so the mukhda can be emphasised. Returns null when the lyrics
+// have no detectable refrain (no blank-line stanza break and no explicit
+// mukhdaLines) — in that case callers render the lyrics unchanged rather
+// than bolding three arbitrary lines.
+const splitMukhda = (bhajan) => {
+  if (!bhajan || !bhajan.lyrics) return null;
+  const text = String(bhajan.lyrics).replace(/\r\n/g, '\n');
+  const lines = text.split('\n');
+  let start = 0;
+  while (start < lines.length && lines[start].trim().length === 0) start++;
+  const override = Number(bhajan.mukhdaLines);
+  let end = -1; // index of first line after the mukhda
+  if (override > 0) {
+    let seen = 0;
+    for (let i = start; i < lines.length; i++) {
+      if (lines[i].trim().length > 0 && ++seen === override) { end = i + 1; break; }
+    }
+  } else {
+    for (let i = start; i < lines.length; i++) {
+      if (lines[i].trim().length === 0) { end = i; break; }
+    }
+  }
+  if (end <= start || end >= lines.length) return null;   // no refrain, or refrain is the whole text
+  const mukhda = lines.slice(start, end).join('\n');
+  let restStart = end;
+  while (restStart < lines.length && lines[restStart].trim().length === 0) restStart++;
+  const rest = lines.slice(restStart).join('\n');
+  if (!rest.trim()) return null;
+  return { mukhda, rest };
+};
+
+// SESSION 70: generic share-or-copy for plain text (program setlists etc.)
+const shareTextContent = async (title, text) => {
+  if (navigator.share) {
+    try {
+      await navigator.share({ title, text });
+      return 'shared';
+    } catch (err) {
+      if (err.name === 'AbortError') return 'cancelled';
+    }
+  }
+  try {
+    await navigator.clipboard.writeText(text);
+    return 'copied';
+  } catch {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.cssText = 'position:fixed;left:-9999px';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    return 'copied';
+  }
+};
+
+// SESSION 70: lyrics with the mukhda emphasised (bold + saffron, with a
+// thin rule below). Falls back to plain text when no refrain is detected.
+const LyricsBody = ({ bhajan, darkMode, emphasize = true }) => {
+  const parts = emphasize ? splitMukhda(bhajan) : null;
+  if (!parts) return <>{bhajan?.lyrics}</>;
+  return (
+    <>
+      <span
+        className={`block font-bold pb-3 mb-3 border-b border-dashed ${darkMode ? 'text-orange-200 border-orange-300/30' : 'text-[#E65100] border-[#E65100]/30'}`}
+      >
+        {parts.mukhda}
+      </span>
+      {parts.rest}
+    </>
+  );
 };
 
 const shareApp = async () => {
@@ -2287,6 +2361,8 @@ const App = () => {
 
   // Live Program Mode states
   const [liveProgramIndex, setLiveProgramIndex] = useState(0);
+  // SESSION 70: moving to another bhajan (or leaving Live) stops auto-scroll.
+  useEffect(() => { setLiveAutoScroll(false); }, [liveProgramIndex, currentView]);
   // SESSION 69: Live mode has its own font size, remembered across
   // sessions. Defaults to the reading size + 4 (stage distance).
   const [liveFontSize, setLiveFontSize] = useState(() => {
@@ -2299,6 +2375,46 @@ const App = () => {
     return 24;
   });
   useEffect(() => { try { localStorage.setItem('sankirtan-live-font-size', String(liveFontSize)); } catch {} }, [liveFontSize]);
+
+  // SESSION 70: hands-free auto-scroll in Live mode. Speed 1–5 (px/frame
+  // scaled); any touch / wheel / key pauses it so the singer can grab the
+  // page; it stops by itself at the bottom.
+  const [liveAutoScroll, setLiveAutoScroll] = useState(false);
+  const [liveScrollSpeed, setLiveScrollSpeed] = useState(() => {
+    try { const v = Number(localStorage.getItem('sankirtan-live-scroll-speed')); return v >= 1 && v <= 5 ? v : 2; } catch { return 2; }
+  });
+  useEffect(() => { try { localStorage.setItem('sankirtan-live-scroll-speed', String(liveScrollSpeed)); } catch {} }, [liveScrollSpeed]);
+  useEffect(() => {
+    if (!liveAutoScroll || currentView !== 'live-program') return;
+    let raf = 0;
+    let acc = 0;
+    let last = performance.now();
+    const pxPerSec = 12 + liveScrollSpeed * 12; // 24 … 72 px/s
+    const step = (now) => {
+      const dt = Math.min(100, now - last);
+      last = now;
+      acc += (pxPerSec * dt) / 1000;
+      const whole = Math.floor(acc);
+      if (whole >= 1) {
+        acc -= whole;
+        window.scrollBy(0, whole);
+      }
+      const atBottom = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2;
+      if (atBottom) { setLiveAutoScroll(false); return; }
+      raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    const pause = () => setLiveAutoScroll(false);
+    window.addEventListener('touchstart', pause, { passive: true });
+    window.addEventListener('wheel', pause, { passive: true });
+    window.addEventListener('keydown', pause);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener('touchstart', pause);
+      window.removeEventListener('wheel', pause);
+      window.removeEventListener('keydown', pause);
+    };
+  }, [liveAutoScroll, liveScrollSpeed, currentView]);
   const [liveWakeLock, setLiveWakeLock] = useState(null);
 
   // Public Library states
@@ -6066,6 +6182,66 @@ const App = () => {
     }
   };
 
+  // SESSION 70: share the setlist as plain text (WhatsApp-friendly).
+  const shareProgramText = async (program) => {
+    const pType = getProgramType(program);
+    const label = pType === 'parody' ? 'Medley' : (pType === 'playlist' ? 'Playlist' : 'Program');
+    const ids = program.bhajanIds || [];
+    const lines = [`🙏 ${program.name}`];
+    if (pType === 'program') {
+      const when = program.date ? formatProgramDate(program.date) : '';
+      const where = program.venue ? program.venue : '';
+      if (when || where) lines.push([when, where].filter(Boolean).join(' · '));
+    } else if (program.purpose) {
+      lines.push(program.purpose);
+    }
+    lines.push('');
+    ids.forEach((id, i) => {
+      const b = getBhajanById(id);
+      if (!b) return;
+      let row = `${i + 1}. ${b.title}`;
+      if (b.dhun) row += `  (तर्ज़: ${b.dhun})`;
+      if (b.scale) row += `  [${b.scale}]`;
+      lines.push(row);
+    });
+    lines.push('', `${ids.length} bhajan${ids.length === 1 ? '' : 's'} · via sankirtan.app`);
+    const result = await shareTextContent(`${label}: ${program.name}`, lines.join('\n'));
+    if (result === 'copied') showToast('📋 Setlist copied — paste in WhatsApp');
+    else if (result === 'shared') showToast('✓ Setlist shared');
+  };
+
+  // SESSION 70: duplicate a program/playlist/medley into a new one.
+  const duplicateProgram = async (program) => {
+    const pType = getProgramType(program);
+    const label = pType === 'parody' ? 'Medley' : (pType === 'playlist' ? 'Playlist' : 'Program');
+    try {
+      const db = window.firebase.firestore();
+      const programsRef = db.collection('users').doc(user.uid).collection('programs');
+      const ts = window.firebase.firestore.FieldValue.serverTimestamp();
+      const data = {
+        name: `${program.name} (copy)`,
+        date: pType === 'program' ? getTodayKey() : '',
+        venue: pType === 'program' ? (program.venue || '') : '',
+        purpose: pType === 'program' ? '' : (program.purpose || ''),
+        type: program.type || pType,
+        bhajanIds: [...(program.bhajanIds || [])],
+        ownerId: user.uid,
+        ownerName: userProfile.displayName,
+        bhajanCount: (program.bhajanIds || []).length,
+        createdAt: ts,
+        updatedAt: ts,
+        lastActive: ts
+      };
+      const ref = await programsRef.add(data);
+      setSelectedProgram({ ...data, id: ref.id, createdAt: null, updatedAt: null, lastActive: null });
+      setCurrentView('program-detail');
+      showToast(`✅ ${label} copied — rename it from ✎ Edit details`);
+    } catch (error) {
+      console.error('Error duplicating program:', error);
+      showToast('Could not copy: ' + error.message, 'error');
+    }
+  };
+
   const deleteProgram = (program) => {
     // SESSION 32/36: label matches the program's actual type
     const pType = getProgramType(program);
@@ -6825,6 +7001,35 @@ const App = () => {
             >
               A+
             </button>
+            <span className={`mx-1 h-5 w-px ${darkMode ? 'bg-white/15' : 'bg-[#0B5A70]/15'}`} aria-hidden="true" />
+            <button
+              onClick={() => setLiveAutoScroll(a => !a)}
+              className={`h-8 px-3 rounded-lg text-xs font-bold flex items-center gap-1 ${liveAutoScroll ? 'bg-[#E65100] text-white' : liveBtnMuted}`}
+              title={liveAutoScroll ? 'Pause auto-scroll' : 'Auto-scroll lyrics'}
+              aria-label={liveAutoScroll ? 'Pause auto-scroll' : 'Start auto-scroll'}
+              aria-pressed={liveAutoScroll}
+            >
+              {liveAutoScroll ? '⏸ Scroll' : '▶ Scroll'}
+            </button>
+            <button
+              onClick={() => setLiveScrollSpeed(v => Math.max(1, v - 1))}
+              className={`w-8 h-8 rounded-lg font-bold ${liveBtnMuted}`}
+              title="Slower"
+              aria-label="Slower auto-scroll"
+              disabled={liveScrollSpeed <= 1}
+            >
+              −
+            </button>
+            <span className={`text-xs min-w-[28px] text-center ${liveMutedGray}`} title="Scroll speed">{liveScrollSpeed}×</span>
+            <button
+              onClick={() => setLiveScrollSpeed(v => Math.min(5, v + 1))}
+              className={`w-8 h-8 rounded-lg font-bold ${liveBtnMuted}`}
+              title="Faster"
+              aria-label="Faster auto-scroll"
+              disabled={liveScrollSpeed >= 5}
+            >
+              +
+            </button>
             {liveWakeLock && (
               <span className={`ml-2 text-xs px-2 py-0.5 rounded-full ${darkMode ? 'bg-green-900/40 text-green-300' : 'bg-green-50 text-green-700'}`}>
                 🔦 Screen On
@@ -6878,7 +7083,7 @@ const App = () => {
                 textAlign: readingSettings.textAlign
               }}
             >
-              {currentBhajan.lyrics}
+              <LyricsBody bhajan={currentBhajan} darkMode={darkMode} />
             </pre>
           </div>
 
@@ -8372,7 +8577,7 @@ const App = () => {
                       textAlign: readingSettings.textAlign
                     }}
                   >
-                    {selectedBhajan.lyrics}
+                    <LyricsBody bhajan={selectedBhajan} darkMode={darkMode} />
                   </pre>
                 </div>
 
@@ -9341,7 +9546,19 @@ const App = () => {
                     {showDeleteMenu === 'program' && (
                       <>
                         <div className="fixed inset-0 z-40" onClick={() => setShowDeleteMenu(null)} />
-                        <div className={`absolute right-0 mt-2 w-48 rounded-xl shadow-lg border z-50 overflow-hidden ${darkMode ? 'bg-[#162226] border-[#0B5A70]/25' : 'bg-white border-[#0B5A70]/12'}`}>
+                        <div className={`absolute right-0 mt-2 w-52 rounded-xl shadow-lg border z-50 overflow-hidden ${darkMode ? 'bg-[#162226] border-[#0B5A70]/25' : 'bg-white border-[#0B5A70]/12'}`}>
+                          <button
+                            onClick={() => { setShowDeleteMenu(null); shareProgramText(selectedProgram); }}
+                            className={`w-full text-left px-4 py-2.5 text-sm flex items-center gap-2 transition-colors ${darkMode ? 'hover:bg-[#0B5A70]/20 text-gray-200' : 'hover:bg-[#0B5A70]/8 text-gray-800'}`}
+                          >
+                            📤 <span>Share setlist as text</span>
+                          </button>
+                          <button
+                            onClick={() => { setShowDeleteMenu(null); duplicateProgram(selectedProgram); }}
+                            className={`w-full text-left px-4 py-2.5 text-sm flex items-center gap-2 transition-colors border-b ${darkMode ? 'hover:bg-[#0B5A70]/20 text-gray-200 border-[#0B5A70]/20' : 'hover:bg-[#0B5A70]/8 text-gray-800 border-[#0B5A70]/10'}`}
+                          >
+                            📋 <span>Duplicate {getProgramType(selectedProgram) === 'parody' ? 'medley' : getProgramType(selectedProgram) === 'playlist' ? 'playlist' : 'program'}</span>
+                          </button>
                           <button
                             onClick={() => { setShowDeleteMenu(null); deleteProgram(selectedProgram); }}
                             className={`w-full text-left px-4 py-2.5 text-sm flex items-center gap-2 transition-colors ${darkMode ? 'hover:bg-red-900/20 text-red-300' : 'hover:bg-red-50 text-red-600'}`}
@@ -10942,7 +11159,7 @@ const App = () => {
                       textAlign: readingSettings.textAlign
                     }}
                   >
-                    {selectedPublicBhajan.lyrics}
+                    <LyricsBody bhajan={selectedPublicBhajan} darkMode={darkMode} />
                   </pre>
                 </div>
 
