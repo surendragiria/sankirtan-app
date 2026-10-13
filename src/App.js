@@ -1083,7 +1083,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.10.13.s73';
+const APP_VERSION = '2026.10.13.s74';
 const LIVE_SCROLL_STEPS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 
 // SESSION 30: log at startup so admin can verify which build is
@@ -2388,6 +2388,13 @@ const App = () => {
   // Refresh button. Dismissible per-session (banner won't reappear
   // until the next detected update).
   const [updateAvailable, setUpdateAvailable] = useState(false);
+  // SESSION 74: index.js also fires 'sankirtan:update' the moment a new
+  // service worker takes over the page — faster than the 5-minute poll.
+  useEffect(() => {
+    const on = () => setUpdateAvailable(true);
+    window.addEventListener('sankirtan:update', on);
+    return () => window.removeEventListener('sankirtan:update', on);
+  }, []);
   const [updateBannerDismissed, setUpdateBannerDismissed] = useState(false);
   // SESSION 41: which discovery pill is currently expanded on the
   // Public Library home. null | 'popular' | 'recent'. Only one
@@ -2443,8 +2450,15 @@ const App = () => {
 
   // Live Program Mode states
   const [liveProgramIndex, setLiveProgramIndex] = useState(0);
-  // SESSION 70: moving to another bhajan (or leaving Live) stops auto-scroll.
-  useEffect(() => { setLiveAutoScroll(false); }, [liveProgramIndex, currentView]);
+  // SESSION 70/74: moving to another bhajan pauses, then resumes from the
+  // top after a short breath if ▶ was on; leaving Live mode clears it.
+  useEffect(() => {
+    setLiveAutoScroll(false);
+    if (currentView !== 'live-program') { liveScrollWantedRef.current = false; return; }
+    if (!liveScrollWantedRef.current) return;
+    const t = setTimeout(() => { if (liveScrollWantedRef.current) setLiveAutoScroll(true); }, 1500);
+    return () => clearTimeout(t);
+  }, [liveProgramIndex, currentView]);
   // SESSION 69: Live mode has its own font size, remembered across
   // sessions. Defaults to the reading size + 4 (stage distance).
   const [liveFontSize, setLiveFontSize] = useState(() => {
@@ -2462,6 +2476,13 @@ const App = () => {
   // scaled); any touch / wheel / key pauses it so the singer can grab the
   // page; it stops by itself at the bottom.
   const [liveAutoScroll, setLiveAutoScroll] = useState(false);
+  // SESSION 74: what the singer *asked for* (▶ pressed, not yet ⏸).
+  // Reaching the bottom pauses the loop but leaves this true, so the
+  // next bhajan resumes scrolling from the top automatically.
+  const liveScrollWantedRef = useRef(false);
+  const toggleLiveAutoScroll = useCallback(() => {
+    setLiveAutoScroll(v => { liveScrollWantedRef.current = !v; return !v; });
+  }, []);
   // SESSION 73: speed steps now go below 1× (0.25× ≈ 7 px/s for slow
   // bhajans). Stored as the multiplier; unknown values snap to nearest.
   const [liveScrollSpeed, setLiveScrollSpeed] = useState(() => {
@@ -2500,17 +2521,22 @@ const App = () => {
     raf = requestAnimationFrame(step);
     // Touching the Scroll/speed buttons themselves must not pause
     // (otherwise ⏸ would pause on touchstart and re-start on click).
-    const pause = (e) => {
-      if (e && e.target && e.target.closest && e.target.closest('[data-live-controls]')) return;
-      setLiveAutoScroll(false);
-    };
+    // A tap on the lyrics card toggles (handled by its onClick), so a
+    // touch *starting* there must not pause; a drag anywhere does.
+    const inControls = (e) => e && e.target && e.target.closest && e.target.closest('[data-live-controls]');
+    const inLyrics = (e) => e && e.target && e.target.closest && e.target.closest('[data-live-lyrics]');
+    const pauseUser = () => { liveScrollWantedRef.current = false; setLiveAutoScroll(false); };
+    const pause = (e) => { if (inControls(e) || inLyrics(e)) return; pauseUser(); };
+    const pauseMove = (e) => { if (inControls(e)) return; pauseUser(); };
     window.addEventListener('touchstart', pause, { passive: true });
+    window.addEventListener('touchmove', pauseMove, { passive: true });
     window.addEventListener('wheel', pause, { passive: true });
     window.addEventListener('keydown', pause);
     return () => {
       cancelAnimationFrame(raf);
       htmlStyle.scrollBehavior = prevBehavior;
       window.removeEventListener('touchstart', pause);
+      window.removeEventListener('touchmove', pauseMove);
       window.removeEventListener('wheel', pause);
       window.removeEventListener('keydown', pause);
     };
@@ -6571,6 +6597,8 @@ const App = () => {
     () => navigateBhajan('prev', false),
     { enabled: currentView === 'bhajan-detail' }
   );
+  // SESSION 74: swipe between bhajans in Live mode too.
+  const liveSwipe = useSwipe(liveNext, livePrev, { enabled: currentView === 'live-program', threshold: 80 });
 
   // Share handler with toast feedback
   // SESSION 13: isPublic flag determines whether we include a
@@ -7041,8 +7069,9 @@ const App = () => {
       );
     }
 
+    const nextBhajan = liveProgramIndex < totalBhajans - 1 ? getBhajanById(selectedProgram.bhajanIds[liveProgramIndex + 1]) : null;
     return (
-      <div className={`min-h-screen ${liveBg}`}>
+      <div className={`min-h-screen ${liveBg}`} onTouchStart={liveSwipe.onTouchStart} onTouchEnd={liveSwipe.onTouchEnd}>
         {confirmDialogJsx}
         {toastJsx}
         {/* Live Header */}
@@ -7088,7 +7117,7 @@ const App = () => {
             </button>
             <span className={`mx-1 h-5 w-px ${darkMode ? 'bg-white/15' : 'bg-[#0B5A70]/15'}`} aria-hidden="true" />
             <button
-              onClick={() => setLiveAutoScroll(a => !a)}
+              onClick={toggleLiveAutoScroll}
               className={`h-8 px-3 rounded-lg text-xs font-bold flex items-center gap-1 ${liveAutoScroll ? 'bg-[#E65100] text-white' : liveBtnMuted}`}
               title={liveAutoScroll ? 'Pause auto-scroll' : 'Auto-scroll lyrics'}
               aria-label={liveAutoScroll ? 'Pause auto-scroll' : 'Start auto-scroll'}
@@ -7124,7 +7153,7 @@ const App = () => {
         </div>
 
         {/* Bhajan Content */}
-        <div className="max-w-4xl mx-auto px-4 py-6 pb-24">
+        <div className="max-w-4xl mx-auto px-4 py-6 pb-32">
           <h1 className={`text-3xl md:text-4xl font-bold mb-3 ${liveTitleColor}`}>
             {currentBhajan.title}
           </h1>
@@ -7148,8 +7177,13 @@ const App = () => {
             )}
           </div>
 
-          <div className={`rounded-2xl shadow-[0_2px_12px_rgba(11,90,112,0.06)] p-6 md:p-8 ${darkMode ? 'bg-[#162226] border border-[#0B5A70]/15' : 'bg-[#FFFCF8] border border-[#0B5A70]/8'}`}>
-            <div className="flex justify-end mb-2">
+          <div
+            data-live-lyrics
+            onClick={(e) => { if (e.target.closest('button')) return; toggleLiveAutoScroll(); }}
+            className={`rounded-2xl shadow-[0_2px_12px_rgba(11,90,112,0.06)] p-6 md:p-8 ${darkMode ? 'bg-[#162226] border border-[#0B5A70]/15' : 'bg-[#FFFCF8] border border-[#0B5A70]/8'}`}
+          >
+            <div className="flex justify-between items-center mb-2">
+              <span className={`text-[11px] ${liveMutedGray}`}>{liveAutoScroll ? 'Tap lyrics to pause' : 'Tap lyrics to auto-scroll'}</span>
               <button
                 onClick={() => setShowReadingSettings(true)}
                 className={`p-2 rounded-lg text-sm font-semibold flex items-center gap-1 transition-colors ${darkMode ? 'bg-[#1e2e33] text-gray-300 hover:bg-[#0B5A70]/20' : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15'}`}
@@ -7229,6 +7263,22 @@ const App = () => {
 
         {/* Bottom Navigation Bar (live mode) — SESSION 6: dark-mode aware */}
         <div className={`fixed bottom-0 left-0 right-0 border-t shadow-2xl z-40 ${liveHeaderBg}`}>
+          {/* SESSION 74: up-next strip so the lead singer can announce
+              the next bhajan without scrolling down. */}
+          {nextBhajan && (
+            <button
+              onClick={liveNext}
+              className={`w-full text-left max-w-4xl mx-auto block px-4 pt-2 pb-1 ${darkMode ? 'text-gray-300' : 'text-[#0B5A70]'}`}
+              aria-label="Go to next bhajan"
+            >
+              <p className="text-xs truncate">
+                <span className={`font-semibold ${darkMode ? 'text-orange-300' : 'text-[#E65100]'}`}>Up next · </span>
+                <span className="font-semibold">{nextBhajan.title}</span>
+                {nextBhajan.dhun && <span className={liveMutedGray}> · तर्ज़: {nextBhajan.dhun}</span>}
+                {nextBhajan.scale && <span className={liveMutedGray}> · 🎵 {nextBhajan.scale}</span>}
+              </p>
+            </button>
+          )}
           <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
             <button
               onClick={livePrev}
