@@ -1084,7 +1084,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.10.13.s77';
+const APP_VERSION = '2026.10.13.s78';
 const LIVE_SCROLL_STEPS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 
 // SESSION 30: log at startup so admin can verify which build is
@@ -1925,9 +1925,9 @@ const IconMusic = (p) => <Icon {...p} path={<><path d="M9 18V5l12-2v13" /><circl
 const IconLock = (p) => <Icon {...p} path={<><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V7a4 4 0 018 0v4" /></>} />;
 const IconFlame = (p) => <Icon {...p} path={<path d="M12 3s3 4 3 8a3 3 0 01-6 0c0-1 .5-2 1-3-2 1-4 3-4 6a6 6 0 0012 0c0-4-3-7-6-11z" />} />;
 const IconSparkle = (p) => <Icon {...p} path={<><path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3z" /><path d="M19 15l.75 2.25L22 18l-2.25.75L19 21l-.75-2.25L16 18l2.25-.75L19 15z" /></>} />;
-const IconClipboardList = (p) => <Icon {...p} path={<><rect x="6" y="4" width="12" height="18" rx="2" /><path d="M9 4V3a1 1 0 011-1h4a1 1 0 011 1v1M9 10h6M9 14h6M9 18h4" /></>} />;
 const IconShare = (p) => <Icon {...p} path={<><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><path d="M8.6 10.5l6.8-3.9M8.6 13.5l6.8 3.9" /></>} />;
-const IconEye = (p) => <Icon {...p} path={<><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" /><circle cx="12" cy="12" r="3" /></>} />;
+const IconListPlus = (p) => <Icon {...p} path={<><path d="M4 6h12M4 12h12M4 18h7" /><path d="M18 14v6M15 17h6" /></>} />;
+const IconStar = ({ filled, ...p }) => <Icon {...p} path={<path fill={filled ? 'currentColor' : 'none'} d="M12 3l2.8 5.9 6.4.8-4.7 4.5 1.2 6.4L12 17.5 6.3 20.6l1.2-6.4L2.8 9.7l6.4-.8L12 3z" />} />;
 const IconPencil = (p) => <Icon {...p} path={<path d="M4 20h4l10-10a2.83 2.83 0 00-4-4L4 16v4zm9-13l4 4" />} />;
 
 // SESSION 48: BhajanTitle renders a title stored as
@@ -2630,12 +2630,6 @@ const App = () => {
   const [savedBhajanIds, setSavedBhajanIds] = useState(new Set());
 
   // Admin Panel states
-  const [importJsonText, setImportJsonText] = useState('');
-  const [importPreview, setImportPreview] = useState(null);
-  const [importing, setImporting] = useState(false);
-  const [importProgress, setImportProgress] = useState({ current: 0, total: 0, message: '' });
-  const [importError, setImportError] = useState('');
-  const [importSuccess, setImportSuccess] = useState('');
 
   // SESSION 16: admin state for Bhajan of the Day scheduling
   const [dailyEditDate, setDailyEditDate] = useState(() => getTodayKey());
@@ -2719,7 +2713,7 @@ const App = () => {
 
   // Reading view settings
   const [readingSettings, setReadingSettings] = useState(() => {
-    const defaults = { fontSize: 18, fontFamily: LYRICS_FONT, lineHeight: 1.8, textAlign: 'center', readingMode: false, keepScreenOn: false };
+    const defaults = { fontSize: 18, fontFamily: LYRICS_FONT, lineHeight: 1.8, textAlign: 'center', readingMode: false, keepScreenOn: true };
     try {
       const saved = localStorage.getItem('sankirtan-reading-settings');
       if (saved) {
@@ -2733,7 +2727,8 @@ const App = () => {
       return defaults;
     }
   });
-  const [showReadingSettings, setShowReadingSettings] = useState(false);
+  // SESSION 78: notes panel open/closed on the bhajan page and in Live mode
+  const [notesOpen, setNotesOpen] = useState(false);
   // SESSION 54: expanded inline YouTube player on reading views.
   // Reset to false when a different bhajan is opened.
   const [showAudioPlayer, setShowAudioPlayer] = useState(false);
@@ -2794,15 +2789,9 @@ const App = () => {
   // users (was full). Compact shows more bhajans per screen, which
   // is what first-time visitors browsing the library want. Anyone
   // who has already chosen a view keeps their choice via localStorage.
-  const [compactView, setCompactView] = useState(() => {
-    try {
-      const saved = localStorage.getItem('sankirtan-compact-view');
-      if (saved === null) return true;   // no prior choice → compact
-      return saved === 'true';
-    } catch {
-      return true;
-    }
-  });
+  // SESSION 78: libraries always open in compact view; the toggle lasts
+  // for the session only.
+  const [compactView, setCompactView] = useState(true);
   useEffect(() => {
     try { localStorage.setItem('sankirtan-compact-view', compactView.toString()); } catch (e) {}
   }, [compactView]);
@@ -2898,13 +2887,12 @@ const App = () => {
       if (confirmDialog) { setConfirmDialog(null); return; }
       if (addToProgramFor) { setAddToProgramFor(null); return; }
       if (showBhajanPicker) { setShowBhajanPicker(false); return; }
-      if (showReadingSettings) { setShowReadingSettings(false); return; }
       if (showOnboarding) { setShowOnboarding(false); return; }
       if (showPhoneLogin) { setShowPhoneLogin(false); return; }
     };
     document.addEventListener('keydown', handleEsc);
     return () => document.removeEventListener('keydown', handleEsc);
-  }, [confirmDialog, showBhajanPicker, showReadingSettings, showOnboarding, showPhoneLogin, addToProgramFor]);
+  }, [confirmDialog, showBhajanPicker, showOnboarding, showPhoneLogin, addToProgramFor]);
 
   const PAGE_SIZE = 20;
   const [publicVisibleCount, setPublicVisibleCount] = useState(PAGE_SIZE);
@@ -3031,8 +3019,9 @@ const App = () => {
 
   // Reading wake lock
   useEffect(() => {
-    const isReadingView = currentView === 'public-bhajan-detail' || currentView === 'bhajan-detail';
-    const shouldHoldLock = readingSettings.keepScreenOn && isReadingView;
+    // SESSION 78: the screen stays on everywhere in the app (singers keep
+    // it open on a stand); the lock releases itself when the tab is hidden.
+    const shouldHoldLock = true;
 
     let currentLock = readingWakeLock;
 
@@ -3067,7 +3056,7 @@ const App = () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [readingSettings.keepScreenOn, currentView]);
+  }, [currentView]);
 
   // Save dark mode
   useEffect(() => {
@@ -5670,10 +5659,9 @@ const App = () => {
   // Now they only recompute when the selected bhajan or the source
   // list actually changes.
   // ==============================================
-  // SESSION 46: Related bhajans go by DEITY first, then by mood
-  // similarity within the same deity. Non-same-deity bhajans only
-  // appear if there aren't enough same-deity ones to fill the six
-  // slots — and even then, only if they share at least one mood.
+  // SESSION 78: Related bhajans go by MOOD first (shared keywords, more
+  // shared = higher), same deity as the tie-break; then same-deity
+  // bhajans with no shared mood fill the remaining slots.
   const computeRelated = (current, pool) => {
     if (!current) return [];
     const relKws = new Set(current.keywords || []);
@@ -5685,13 +5673,13 @@ const App = () => {
         const sameDeity = !!deity && (b.deity || '').trim().toLowerCase() === deity;
         return { ...b, matchedKws, sameDeity };
       });
-    const sameDeity = scored
-      .filter(b => b.sameDeity)
-      .sort((a, b) => b.matchedKws.length - a.matchedKws.length || (a.title || '').localeCompare(b.title || ''));
-    const moodOnly = scored
-      .filter(b => !b.sameDeity && b.matchedKws.length > 0)
-      .sort((a, b) => b.matchedKws.length - a.matchedKws.length || (a.title || '').localeCompare(b.title || ''));
-    return [...sameDeity, ...moodOnly].slice(0, 6);
+    const byMood = scored
+      .filter(b => b.matchedKws.length > 0)
+      .sort((a, b) => b.matchedKws.length - a.matchedKws.length || (b.sameDeity - a.sameDeity) || (a.title || '').localeCompare(b.title || ''));
+    const deityOnly = scored
+      .filter(b => b.matchedKws.length === 0 && b.sameDeity)
+      .sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+    return [...byMood, ...deityOnly].slice(0, 6);
   };
 
   const relatedMyBhajans = useMemo(() => computeRelated(selectedBhajan, bhajans), [selectedBhajan, bhajans]);
@@ -5730,207 +5718,8 @@ const App = () => {
       return;
     }
     setCurrentView('admin-panel');
-    setImportJsonText('');
-    setImportPreview(null);
-    setImportError('');
-    setImportSuccess('');
     loadFeedbackList();
     loadConfigLists();
-  };
-
-  const previewImport = () => {
-    setImportError('');
-    setImportSuccess('');
-
-    if (!importJsonText.trim()) {
-      setImportError('Please paste JSON content first');
-      return;
-    }
-
-    try {
-      const parsed = JSON.parse(importJsonText);
-
-      let bhajanArray = [];
-
-      if (Array.isArray(parsed)) {
-        bhajanArray = parsed;
-      } else if (parsed.bhajans && Array.isArray(parsed.bhajans)) {
-        bhajanArray = parsed.bhajans;
-      } else if (parsed.data && Array.isArray(parsed.data)) {
-        bhajanArray = parsed.data;
-      } else if (typeof parsed === 'object') {
-        bhajanArray = Object.values(parsed).filter(v =>
-          v && typeof v === 'object' && (v.title || v.lyrics)
-        );
-      }
-
-      if (bhajanArray.length === 0) {
-        setImportError('No bhajans found in the JSON. Please check the format.');
-        return;
-      }
-
-      const parseKeywords = (kw) => {
-        if (!kw) return [];
-        if (Array.isArray(kw)) return kw.filter(k => k && typeof k === 'string').map(k => k.trim()).filter(k => k);
-        if (typeof kw === 'string') {
-          return kw.split(',').map(k => k.trim()).filter(k => k);
-        }
-        return [];
-      };
-
-      const normalized = bhajanArray.map((b, idx) => {
-        return {
-          _originalIndex: idx,
-          title: (b.title || b.name || `Bhajan ${idx + 1}`).toString().trim(),
-          lyrics: (b.lyrics || b.body || b.text || b.content || '').toString().trim(),
-          deity: normalizeDeity(b.deity || b.god || 'Others'),
-          category: normalizeCategory(b.category || b.type || 'Bhajan'),
-          dhun: (b.dhun || b.tune || b.tarz || b.tarj || '').toString().trim(),
-          scale: (b.scale || b.raag || b.raga || '').toString().trim(),
-          keywords: parseKeywords(b.keywords || b.tags),
-          source: (b.source || b.sourceUrl || b.url || b.link || '').toString().trim()
-        };
-      }).filter(b => b.title && b.lyrics);
-
-      setImportPreview({
-        total: bhajanArray.length,
-        valid: normalized.length,
-        skipped: bhajanArray.length - normalized.length,
-        bhajans: normalized
-      });
-    } catch (error) {
-      setImportError('Invalid JSON format: ' + error.message);
-    }
-  };
-
-  const normalizeDeity = (deity) => {
-    if (!deity) return 'Others';
-    const d = deity.toString().toLowerCase().trim();
-
-    if (d.includes('babos')) return 'Babosa';
-    if (d.includes('krishn') || d.includes('kanhaiy') || d.includes('kanha')) return 'Krishna';
-    if (d.includes('mata') || d.includes('devi') || d.includes('amba') || d.includes('durg')) return 'Mata Ji';
-    if (d.includes('hanuman') || d.includes('bajrang')) return 'Hanuman';
-    if (d.includes('ramdev')) return 'Ramdev';
-    if (d.includes('ram')) return 'Rama';
-    if (d.includes('shiv') || d.includes('mahadev') || d.includes('bhole')) return 'Shiv';
-    if (d.includes('ganesh') || d.includes('ganpat')) return 'Ganesh';
-    if (d.includes('bhairav')) return 'Bhairav';
-    if (d.includes('sai')) return 'Saibaba';
-    if (d.includes('vishnu') || d.includes('narayan')) return 'Vishnu';
-    if (d.includes('buddh')) return 'Buddha';
-    if (d.includes('mahavir') || d.includes('mahaveer')) return 'Mahavir';
-    if (d.includes('nanak') || d.includes('guru nanak')) return 'Guru Nanak';
-    if (d.includes('jain')) return 'Jain';
-    if (d.includes('nirgun')) return 'Nirgun';
-    if (d.includes('desh')) return 'Deshbhakti';
-
-    const validOptions = ['Babosa', 'Krishna', 'Mata Ji', 'Hanuman', 'Rama', 'Shiv', 'Ramdev', 'Ganesh', 'Bhairav', 'Saibaba', 'Vishnu', 'Buddha', 'Mahavir', 'Guru Nanak', 'Jain', 'Nirgun', 'Deshbhakti', 'Others'];
-    const found = validOptions.find(o => o.toLowerCase() === d);
-    if (found) return found;
-
-    return 'Others';
-  };
-
-  const normalizeCategory = (cat) => {
-    if (!cat) return 'Bhajan';
-    const c = cat.toString().toLowerCase().trim();
-
-    if (c.includes('arti') || c.includes('aarti')) return 'Arti';
-    if (c.includes('parody')) return 'Parody';
-    if (c.includes('quwal') || c.includes('qawwal')) return 'Quwali';
-    if (c.includes('folk')) return 'Folk Song';
-    if (c.includes('katha')) return 'Katha';
-    if (c.includes('dohe') || c.includes('doha')) return 'Dohe';
-    if (c.includes('stotra')) return 'Stotra';
-    if (c.includes('mantra')) return 'Mantra';
-    if (c.includes('chalisa')) return 'Chalisa';
-    if (c.includes('bhajan')) return 'Bhajan';
-
-    return 'Bhajan';
-  };
-
-  const executeImport = () => {
-    if (!importPreview || !importPreview.bhajans) return;
-    if (!isAdmin) {
-      showToast('Access denied. Admin only.', 'error');
-      return;
-    }
-
-    askConfirm(
-      {
-        title: 'Import Bhajans?',
-        message: `${importPreview.valid} bhajans will be added to the Public Library for all users. This cannot be easily undone.`,
-        confirmLabel: `✅ Import ${importPreview.valid}`,
-        danger: false
-      },
-      async () => {
-        try {
-          setImporting(true);
-          setImportError('');
-          setImportSuccess('');
-          setImportProgress({ current: 0, total: importPreview.valid, message: 'Starting import...' });
-
-          const db = window.firebase.firestore();
-          const batchSize = 25;
-          let successCount = 0;
-          let errorCount = 0;
-
-          for (let i = 0; i < importPreview.bhajans.length; i += batchSize) {
-            const batch = db.batch();
-            const chunk = importPreview.bhajans.slice(i, i + batchSize);
-
-            chunk.forEach((bhajan) => {
-              const docRef = db.collection('publicBhajans').doc();
-              batch.set(docRef, {
-                title: bhajan.title,
-                lyrics: bhajan.lyrics,
-                deity: bhajan.deity,
-                category: bhajan.category,
-                dhun: bhajan.dhun,
-                scale: bhajan.scale,
-                keywords: bhajan.keywords || [],
-                source: bhajan.source,
-                saveCount: 0,
-                viewCount: 0,
-                addedByUid: user.uid,
-                createdAt: window.firebase.firestore.FieldValue.serverTimestamp(),
-                updatedAt: window.firebase.firestore.FieldValue.serverTimestamp()
-              });
-            });
-
-            try {
-              await batch.commit();
-              successCount += chunk.length;
-              setImportProgress({
-                current: successCount,
-                total: importPreview.valid,
-                message: `Imported ${successCount} of ${importPreview.valid}...`
-              });
-            } catch (error) {
-              console.error('Batch error:', error);
-              errorCount += chunk.length;
-            }
-          }
-
-          if (errorCount === 0) {
-            setImportSuccess(`✅ Successfully imported ${successCount} bhajans to Public Library!`);
-          } else {
-            setImportSuccess(`⚠️ Imported ${successCount} bhajans. ${errorCount} failed.`);
-          }
-
-          setImportProgress({ current: 0, total: 0, message: '' });
-          setImportJsonText('');
-          setImportPreview(null);
-
-        } catch (error) {
-          console.error('Import error:', error);
-          setImportError('Import failed: ' + error.message);
-        } finally {
-          setImporting(false);
-        }
-      }
-    );
   };
 
   const deletePublicBhajan = (bhajan) => {
@@ -6727,7 +6516,7 @@ const App = () => {
   );
   // SESSION 74: swipe between bhajans in Live mode too.
   const liveSwipe = useSwipe(liveNext, livePrev, { enabled: currentView === 'live-program', threshold: 80 });
-  useEffect(() => { setNotesDraft(null); }, [selectedBhajan?.id, currentView]);
+  useEffect(() => { setNotesDraft(null); setNotesOpen(false); }, [selectedBhajan?.id, currentView, liveProgramIndex]);
 
   // Share handler with toast feedback
   // SESSION 13: isPublic flag determines whether we include a
@@ -7256,7 +7045,7 @@ const App = () => {
               className={`font-semibold flex items-center gap-1 text-sm ${darkMode ? 'text-red-400 hover:text-red-300' : 'text-red-600 hover:text-red-800'}`}
               aria-label="Exit live mode"
             >
-              ✕ Exit Live
+              Exit Live
             </button>
             <div className="text-center flex-1 mx-4">
               <p className={`text-xs font-semibold ${liveMutedColor}`}>🎤 LIVE PROGRAM</p>
@@ -7295,12 +7084,12 @@ const App = () => {
             <span className={`mx-1 h-5 w-px ${darkMode ? 'bg-white/15' : 'bg-[#0B5A70]/15'}`} aria-hidden="true" />
             <button
               onClick={toggleLiveAutoScroll}
-              className={`h-8 px-3 rounded-lg text-xs font-bold flex items-center gap-1 ${liveAutoScroll ? 'bg-[#E65100] text-white' : liveBtnMuted}`}
+              className={`w-9 h-8 rounded-lg text-sm font-bold flex items-center justify-center ${liveAutoScroll ? 'bg-[#E65100] text-white' : liveBtnMuted}`}
               title={liveAutoScroll ? 'Pause auto-scroll' : 'Auto-scroll lyrics'}
               aria-label={liveAutoScroll ? 'Pause auto-scroll' : 'Start auto-scroll'}
               aria-pressed={liveAutoScroll}
             >
-              {liveAutoScroll ? '⏸ Scroll' : '▶ Scroll'}
+              {liveAutoScroll ? '⏸' : '▶'}
             </button>
             <button
               onClick={() => setLiveScrollSpeed(v => LIVE_SCROLL_STEPS[Math.max(0, LIVE_SCROLL_STEPS.indexOf(v) - 1)])}
@@ -7321,11 +7110,6 @@ const App = () => {
             >
               +
             </button>
-            {liveWakeLock && (
-              <span className={`ml-2 text-xs px-2 py-0.5 rounded-full ${darkMode ? 'bg-green-900/40 text-green-300' : 'bg-green-50 text-green-700'}`}>
-                🔦 Screen On
-              </span>
-            )}
           </div>
         </div>
 
@@ -7342,13 +7126,7 @@ const App = () => {
               </p>
             </div>
           )}
-          {currentBhajan.notes && (
-            <div className={`border-l-4 border-amber-400/60 p-3 rounded-r-lg mb-4 ${darkMode ? 'bg-[#1e2e33]' : 'bg-amber-50'}`}>
-              <p className={`text-sm whitespace-pre-wrap ${darkMode ? 'text-amber-100' : 'text-amber-900'}`}>
-                <span className="font-semibold">📝 </span>{currentBhajan.notes}
-              </p>
-            </div>
-          )}
+
 
           <div className="flex flex-wrap gap-2 mb-6">
             <span className={`px-3 py-1 rounded-full text-sm font-semibold ${darkMode ? 'bg-[#0B5A70]/25 text-teal-200' : 'bg-[#0B5A70]/8 text-[#0B5A70]'}`}>
@@ -7359,23 +7137,31 @@ const App = () => {
                 🎵 {currentBhajan.scale}
               </span>
             )}
+            {currentBhajan.notes && (
+              <button
+                onClick={() => setNotesOpen(v => !v)}
+                aria-expanded={notesOpen}
+                className={`px-3 py-1 rounded-full text-sm font-semibold transition-colors ${notesOpen ? 'bg-amber-400 text-amber-950' : (darkMode ? 'bg-amber-900/40 text-amber-200' : 'bg-amber-100 text-amber-800')}`}
+                title="My notes"
+                aria-label="Show my notes"
+              >
+                📝
+              </button>
+            )}
           </div>
+          {currentBhajan.notes && notesOpen && (
+            <div className={`border-l-4 border-amber-400/60 p-3 rounded-r-lg mb-4 -mt-3 ${darkMode ? 'bg-[#1e2e33]' : 'bg-amber-50'}`}>
+              <p className={`text-base whitespace-pre-wrap ${darkMode ? 'text-amber-100' : 'text-amber-900'}`}>{currentBhajan.notes}</p>
+            </div>
+          )}
 
           <div
             data-live-lyrics
             onClick={(e) => { if (e.target.closest('button')) return; toggleLiveAutoScroll(); }}
             className={`rounded-2xl shadow-[0_2px_12px_rgba(11,90,112,0.06)] p-6 md:p-8 ${darkMode ? 'bg-[#162226] border border-[#0B5A70]/15' : 'bg-[#FFFCF8] border border-[#0B5A70]/8'}`}
           >
-            <div className="flex justify-between items-center mb-2">
+            <div className="flex justify-end mb-2">
               <span className={`text-[11px] ${liveMutedGray}`}>{liveAutoScroll ? 'Tap lyrics to pause' : 'Tap lyrics to auto-scroll'}</span>
-              <button
-                onClick={() => setShowReadingSettings(true)}
-                className={`p-2 rounded-lg text-sm font-semibold flex items-center gap-1 transition-colors ${darkMode ? 'bg-[#1e2e33] text-gray-300 hover:bg-[#0B5A70]/20' : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15'}`}
-                title="Reading view options"
-                aria-label="Reading view options"
-              >
-                ⚙️ View
-              </button>
             </div>
             <pre
               className={`whitespace-pre-wrap leading-relaxed ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}
@@ -7490,40 +7276,6 @@ const App = () => {
           </div>
         </div>
 
-        {/* Reading settings modal is reachable from live mode too */}
-        {showReadingSettings && (
-          <div onClick={() => setShowReadingSettings(false)} className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4">
-            <div onClick={(e) => e.stopPropagation()} className={`rounded-3xl shadow-[0_8px_40px_rgba(11,90,112,0.15)] max-w-sm w-full overflow-hidden ${darkMode ? 'bg-[#162226] text-gray-100' : 'bg-[#FFFCF8]'}`}>
-              <div className={`p-6 text-center ${darkMode ? 'bg-[#1e2e33]' : 'bg-[#0B5A70]'} text-white`}>
-                <div className="text-5xl mb-2">📖</div>
-                <h3 className="text-2xl font-bold">Reading View</h3>
-              </div>
-              <div className="p-6 space-y-5">
-                <div>
-                  <div className="flex justify-between mb-1">
-                    <label className="text-sm font-semibold">Font Size</label>
-                    <span className="text-sm">{readingSettings.fontSize}px</span>
-                  </div>
-                  <input
-                    type="range"
-                    min="14"
-                    max="40"
-                    step="1"
-                    value={readingSettings.fontSize}
-                    onChange={(e) => setReadingSettings(prev => ({ ...prev, fontSize: parseInt(e.target.value) }))}
-                    className="w-full accent-[#0B5A70]"
-                  />
-                </div>
-                <button
-                  onClick={() => setShowReadingSettings(false)}
-                  className="w-full bg-[#0B5A70] hover:bg-[#094a5d] text-white font-bold py-3 rounded-xl shadow-lg"
-                >
-                  Done
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     );
   }
@@ -7635,7 +7387,7 @@ const App = () => {
                     onClick={handleShareApp}
                     className="w-full mb-3 bg-[#E65100]/10 hover:bg-[#E65100]/20 text-[#E65100] font-semibold py-3 rounded-xl text-sm flex items-center justify-center gap-2 transition-colors"
                   >
-                    📤 Share with a bhakt in your community
+                    Share with a bhakt in your community
                   </button>
                 )}
 
@@ -7756,84 +7508,6 @@ const App = () => {
           </div>
         )}
 
-        {/* READING SETTINGS MODAL */}
-        {showReadingSettings && (
-          <div onClick={() => setShowReadingSettings(false)} className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4">
-            <div onClick={(e) => e.stopPropagation()} className={`rounded-3xl shadow-[0_8px_40px_rgba(11,90,112,0.15)] max-w-sm w-full overflow-hidden ${darkMode ? 'bg-[#162226] text-gray-100' : 'bg-[#FFFCF8]'}`}>
-              <div className={`p-6 text-center ${darkMode ? 'bg-[#1e2e33]' : 'bg-[#0B5A70]'} text-white`}>
-                <div className="text-5xl mb-2">📖</div>
-                <h3 className="text-2xl font-bold">Reading View</h3>
-                <p className="text-sm opacity-90 mt-1">Comfortable lyrics reading</p>
-              </div>
-              <div className="p-6 space-y-5">
-                <div>
-                  <div className="flex justify-between mb-1">
-                    <label className="text-sm font-semibold">Font Size</label>
-                    <span className="text-sm">{readingSettings.fontSize}px</span>
-                  </div>
-                  <input
-                    type="range"
-                    min="14"
-                    max="40"
-                    step="1"
-                    value={readingSettings.fontSize}
-                    onChange={(e) => setReadingSettings(prev => ({ ...prev, fontSize: parseInt(e.target.value) }))}
-                    className="w-full accent-[#0B5A70]"
-                  />
-                </div>
-
-                <div className={`flex items-center justify-between p-3 rounded-xl ${darkMode ? 'bg-[#1e2e33]' : 'bg-[#0B5A70]/5'}`}>
-                  <div>
-                    <div className="text-sm font-semibold">Reading Mode</div>
-                    <div className="text-xs opacity-75">Larger, centered text for focused singing</div>
-                  </div>
-                  <button
-                    onClick={() => setReadingSettings(prev => {
-                      const on = !prev.readingMode;
-                      return on
-                        ? { ...prev, readingMode: true, fontSize: Math.max(prev.fontSize, 24), textAlign: 'center', lineHeight: 2.0 }
-                        : { ...prev, readingMode: false };
-                    })}
-                    className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ml-3 ${readingSettings.readingMode ? 'bg-[#0B5A70]' : 'bg-gray-300'}`}
-                    aria-label="Toggle reading mode"
-                  >
-                    <span
-                      className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${readingSettings.readingMode ? 'translate-x-6' : ''}`}
-                    ></span>
-                  </button>
-                </div>
-
-                <div className={`flex items-center justify-between p-3 rounded-xl ${darkMode ? 'bg-[#1e2e33]' : 'bg-[#0B5A70]/5'}`}>
-                  <div>
-                    <div className="text-sm font-semibold">Keep Screen On</div>
-                    <div className="text-xs opacity-75">
-                      {'wakeLock' in navigator
-                        ? 'Prevents screen from sleeping while reading'
-                        : 'Not supported on this browser'}
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => setReadingSettings(prev => ({ ...prev, keepScreenOn: !prev.keepScreenOn }))}
-                    disabled={!('wakeLock' in navigator)}
-                    className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ml-3 ${readingSettings.keepScreenOn ? 'bg-[#0B5A70]' : 'bg-gray-300'} disabled:opacity-40 disabled:cursor-not-allowed`}
-                    aria-label="Toggle keep screen on"
-                  >
-                    <span
-                      className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${readingSettings.keepScreenOn ? 'translate-x-6' : ''}`}
-                    ></span>
-                  </button>
-                </div>
-
-                <button
-                  onClick={() => setShowReadingSettings(false)}
-                  className="w-full bg-[#0B5A70] hover:bg-[#094a5d] text-white font-bold py-3 rounded-xl shadow-lg"
-                >
-                  Done
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* SESSION 38: ADD-TO PROGRAM/PLAYLIST/PARODY PICKER */}
         {addToProgramFor && (
@@ -8149,7 +7823,7 @@ const App = () => {
                       onClick={handleInstallApp}
                       className="bg-[#0B5A70] hover:bg-[#094a5d] text-white font-semibold px-4 py-2 rounded-lg text-sm shadow-md flex-1"
                     >
-                      📱 Install App
+                      Install App
                     </button>
                     <button
                       onClick={dismissInstallPrompt}
@@ -8698,7 +8372,7 @@ const App = () => {
                         title="Full card view"
                         aria-label="Full card view"
                       >
-                        ▤ Full
+                        ▤
                       </button>
                       <button
                         onClick={() => setCompactView(true)}
@@ -8706,7 +8380,7 @@ const App = () => {
                         title="Compact list view"
                         aria-label="Compact list view"
                       >
-                        ☰ Compact
+                        ☰
                       </button>
                     </div>
                   </div>
@@ -8788,13 +8462,23 @@ const App = () => {
                       })()}`
                     : 'Back'}
                 </button>
-                <div className="flex gap-1.5 flex-wrap">
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => toggleStarred(selectedBhajan)}
+                    className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors ${selectedBhajan.starred ? 'bg-[#E65100]/15 text-[#E65100]' : (darkMode ? 'bg-[#1e2e33] text-gray-300 hover:bg-[#0B5A70]/20' : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15')}`}
+                    aria-label={selectedBhajan.starred ? 'Unstar' : 'Star'}
+                    aria-pressed={!!selectedBhajan.starred}
+                    title={selectedBhajan.starred ? 'Remove from Starred' : 'Add to Starred'}
+                  >
+<IconStar size={18} filled={!!selectedBhajan.starred} />
+                  </button>
                   <button
                     onClick={() => handleShareBhajan(selectedBhajan)}
-                    className={`px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 transition-colors ${darkMode ? 'bg-[#1e2e33] text-gray-300 hover:bg-[#0B5A70]/20' : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15'}`}
+                    className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors ${darkMode ? 'bg-[#1e2e33] text-gray-300 hover:bg-[#0B5A70]/20' : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15'}`}
                     title="Share this bhajan"
+                    aria-label="Share this bhajan"
                   >
-<IconShare size={14} /> Share
+<IconShare size={16} />
                   </button>
                   {/* SESSION 38: Add-to picker — surface the bhajan
                       into any playlist/program/parody without
@@ -8803,24 +8487,16 @@ const App = () => {
                   {user && (
                     <button
                       onClick={() => setAddToProgramFor(selectedBhajan)}
-                      className={`px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 transition-colors ${darkMode ? 'bg-[#1e2e33] text-gray-300 hover:bg-[#0B5A70]/20' : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15'}`}
-                      title="Add to a playlist, program, or parody"
+                      className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors ${darkMode ? 'bg-[#1e2e33] text-gray-300 hover:bg-[#0B5A70]/20' : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15'}`}
+                      title="Add to a playlist, program, or medley"
                       aria-label="Add to a playlist, program, or medley"
                     >
-<IconClipboardList size={16} />
+<IconListPlus size={18} />
                     </button>
                   )}
                   <button
-                    onClick={() => setShowReadingSettings(true)}
-                    className={`px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 transition-colors ${darkMode ? 'bg-[#1e2e33] text-gray-300 hover:bg-[#0B5A70]/20' : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15'}`}
-                    title="Reading view options"
-                    aria-label="Reading view options"
-                  >
-<IconEye size={16} />
-                  </button>
-                  <button
                     onClick={() => openEditBhajan(selectedBhajan)}
-                    className="bg-[#0B5A70]/8 hover:bg-[#0B5A70]/15 text-[#0B5A70] font-semibold px-2.5 py-1 rounded-full text-xs flex items-center gap-1"
+                    className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors ${darkMode ? 'bg-[#1e2e33] text-gray-300 hover:bg-[#0B5A70]/20' : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15'}`}
                     title="Edit bhajan"
                     aria-label="Edit bhajan"
                   >
@@ -8832,17 +8508,8 @@ const App = () => {
                       Edit/View/Add-to buttons. */}
                   <div className="relative">
                     <button
-                      onClick={() => toggleStarred(selectedBhajan)}
-                      className={`px-2.5 py-1 mr-1 rounded-full text-xs font-semibold transition-colors ${selectedBhajan.starred ? 'bg-[#E65100]/15 text-[#E65100]' : (darkMode ? 'bg-[#1e2e33] text-gray-400 hover:text-gray-200' : 'bg-[#0B5A70]/8 text-[#0B5A70]/70 hover:text-[#0B5A70]')}`}
-                      aria-label={selectedBhajan.starred ? 'Unstar' : 'Star'}
-                      aria-pressed={!!selectedBhajan.starred}
-                      title={selectedBhajan.starred ? 'Remove from Starred' : 'Add to Starred'}
-                    >
-                      {selectedBhajan.starred ? '⭐' : '☆'}
-                    </button>
-                    <button
                       onClick={() => setShowDeleteMenu(showDeleteMenu === 'library' ? null : 'library')}
-                      className={`px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 transition-colors ${darkMode ? 'bg-[#1e2e33] text-gray-400 hover:text-gray-200 hover:bg-[#0B5A70]/20' : 'bg-[#0B5A70]/8 text-[#0B5A70]/70 hover:text-[#0B5A70] hover:bg-[#0B5A70]/15'}`}
+                      className={`w-9 h-9 rounded-full flex items-center justify-center text-lg leading-none transition-colors ${darkMode ? 'bg-[#1e2e33] text-gray-300 hover:bg-[#0B5A70]/20' : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15'}`}
                       aria-label="More options"
                       title="More options"
                     >
@@ -8890,38 +8557,6 @@ const App = () => {
                   </div>
                 )}
 
-                {/* SESSION 75: private singer notes — starting sur, who
-                    sings which stanza, tempo. Stored on the library copy. */}
-                <div className={`rounded-xl mb-4 border ${darkMode ? 'bg-[#1e2e33]/60 border-[#0B5A70]/20' : 'bg-amber-50/60 border-amber-200/60'}`}>
-                  {notesDraft === null ? (
-                    <button
-                      onClick={() => setNotesDraft(selectedBhajan.notes || '')}
-                      className="w-full text-left px-3 py-2.5"
-                      aria-label="Edit my notes"
-                    >
-                      <p className={`text-xs font-semibold ${darkMode ? 'text-amber-200' : 'text-amber-800'}`}>📝 My notes {selectedBhajan.notes ? '' : <span className="font-normal opacity-70">· tap to add (sur, who sings what, tempo…)</span>}</p>
-                      {selectedBhajan.notes && (
-                        <p className={`text-sm mt-1 whitespace-pre-wrap ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>{selectedBhajan.notes}</p>
-                      )}
-                    </button>
-                  ) : (
-                    <div className="p-3">
-                      <textarea
-                        value={notesDraft}
-                        onChange={(e) => setNotesDraft(e.target.value)}
-                        rows={3}
-                        autoFocus
-                        placeholder="e.g. Start from C#, Ramesh ji sings 2nd antara, slow tempo"
-                        className={`w-full text-sm p-2 rounded-lg border outline-none ${darkMode ? 'bg-[#162226] border-[#0B5A70]/30 text-gray-100' : 'bg-white border-amber-300 text-gray-800'}`}
-                      />
-                      <div className="flex justify-end gap-2 mt-2">
-                        <button onClick={() => setNotesDraft(null)} className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>Cancel</button>
-                        <button onClick={() => saveBhajanNotes(selectedBhajan, notesDraft)} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-[#E65100] text-white">Save</button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
                 {/* SESSION 11: Singer + Lyricist credits (blank for
                     traditional/anonymous bhajans; shown when known) */}
                 {(selectedBhajan.singer || selectedBhajan.lyricist) && (
@@ -8957,7 +8592,50 @@ const App = () => {
                       + Add Scale
                     </button>
                   )}
+                  {/* SESSION 78: notes chip — opens the notes panel below */}
+                  <button
+                    onClick={() => { setNotesOpen(v => !v); setNotesDraft(null); }}
+                    aria-expanded={notesOpen}
+                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold transition-colors ${notesOpen ? 'bg-amber-400 text-amber-950' : selectedBhajan.notes ? (darkMode ? 'bg-amber-900/40 text-amber-200' : 'bg-amber-100 text-amber-800') : (darkMode ? 'bg-transparent text-gray-400 border border-dashed border-[#0B5A70]/20' : 'bg-transparent text-gray-500 border border-dashed border-gray-400')}`}
+                    title={selectedBhajan.notes ? 'My notes' : 'Add my notes (sur, who sings what, tempo…)'}
+                    aria-label="My notes"
+                  >
+                    📝{selectedBhajan.notes ? '' : ' Notes'}
+                  </button>
                 </div>
+                {notesOpen && (
+                  <div className={`rounded-xl mb-4 border ${darkMode ? 'bg-[#1e2e33]/60 border-[#0B5A70]/20' : 'bg-amber-50/60 border-amber-200/60'}`}>
+                    {notesDraft === null ? (
+                      <button
+                        onClick={() => setNotesDraft(selectedBhajan.notes || '')}
+                        className="w-full text-left px-3 py-2.5"
+                        aria-label="Edit my notes"
+                      >
+                        {selectedBhajan.notes ? (
+                          <p className={`text-sm whitespace-pre-wrap ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>{selectedBhajan.notes}</p>
+                        ) : (
+                          <p className={`text-sm ${darkMode ? 'text-amber-200/80' : 'text-amber-800/80'}`}>Tap to add notes — starting sur, who sings which antara, tempo…</p>
+                        )}
+                        <p className={`text-[11px] mt-1 ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>Private · tap to edit</p>
+                      </button>
+                    ) : (
+                      <div className="p-3">
+                        <textarea
+                          value={notesDraft}
+                          onChange={(e) => setNotesDraft(e.target.value)}
+                          rows={3}
+                          autoFocus
+                          placeholder="e.g. Start from C#, Ramesh ji sings 2nd antara, slow tempo"
+                          className={`w-full text-sm p-2 rounded-lg border outline-none ${darkMode ? 'bg-[#162226] border-[#0B5A70]/30 text-gray-100' : 'bg-white border-amber-300 text-gray-800'}`}
+                        />
+                        <div className="flex justify-end gap-2 mt-2">
+                          <button onClick={() => setNotesDraft(null)} className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>Cancel</button>
+                          <button onClick={() => saveBhajanNotes(selectedBhajan, notesDraft)} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-[#E65100] text-white">Save</button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <div className={`border-t pt-4 ${darkMode ? 'border-[#0B5A70]/15' : 'border-[#0B5A70]/8'}`}>
                   <div className="flex items-center justify-end gap-1 mb-2">
@@ -10085,7 +9763,7 @@ const App = () => {
                         : (darkMode ? 'bg-[#1e2e33] text-gray-300 hover:bg-[#0B5A70]/20' : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15')}`}
                       aria-pressed={setlistEditMode}
                     >
-                      {setlistEditMode ? '✓ Done' : '⇅ Reorder · 🎤'}
+                      {setlistEditMode ? 'Done' : 'Edit list'}
                     </button>
                   )}
                 </div>
@@ -10103,7 +9781,7 @@ const App = () => {
                       onClick={() => openPickerFromProgramPage(selectedProgram)}
                       className="text-[#0B5A70] hover:text-[#0B5A70]/80 font-semibold text-sm"
                     >
-                      + Add bhajans
+                      Add bhajans
                     </button>
                   </div>
                 ) : getProgramType(selectedProgram) === 'parody' ? (
@@ -11149,7 +10827,7 @@ const App = () => {
                           onClick={openAdminPanel}
                           className="bg-purple-500 hover:bg-purple-600 text-white font-semibold px-6 py-3 rounded-xl shadow-md inline-flex items-center gap-2"
                         >
-                          🔧 Open Admin Panel
+                          Open Admin Panel
                         </button>
                       )}
                     </>
@@ -11357,7 +11035,7 @@ const App = () => {
                         title="Full card view"
                         aria-label="Full card view"
                       >
-                        ▤ Full
+                        ▤
                       </button>
                       <button
                         onClick={() => setCompactView(true)}
@@ -11365,7 +11043,7 @@ const App = () => {
                         title="Compact list view"
                         aria-label="Compact list view"
                       >
-                        ☰ Compact
+                        ☰
                       </button>
                     </div>
                   </div>
@@ -11436,7 +11114,7 @@ const App = () => {
                     onClick={handleShareApp}
                     className={`text-xs underline hover:no-underline transition-colors ${darkMode ? 'text-blue-400 hover:text-blue-300' : 'text-[#0B5A70] hover:text-[#0B5A70]/80'}`}
                   >
-                    📤 Share this app with a bhakt
+                    Share this app with a bhakt
                   </button>
                 </div>
                 <div className={`flex items-center justify-center gap-3 mt-2 text-xs ${darkMode ? 'text-gray-600' : 'text-[#0B5A70]/50'}`}>
@@ -11463,21 +11141,21 @@ const App = () => {
                 >
                   ← Back
                 </button>
-                <div className="flex gap-1.5 flex-wrap">
+                <div className="flex items-center gap-1.5">
                   {savedBhajanIds.has(selectedPublicBhajan.id) ? (
                     <span
-                      className="bg-green-50 text-green-700 font-semibold px-2.5 py-1 rounded-full text-xs flex items-center gap-1"
+                      className="h-9 bg-green-50 text-green-700 font-semibold px-3 rounded-full text-xs flex items-center"
                       title="Already in your library"
                     >
-                      ✓ In Library
+                      In Library
                     </span>
                   ) : (
                     <button
                       onClick={() => saveToMyLibrary(selectedPublicBhajan)}
                       disabled={savingToLibrary}
-                      className="bg-green-100 hover:bg-green-200 text-green-700 font-semibold px-2.5 py-1 rounded-full text-xs disabled:opacity-50 flex items-center gap-1"
+                      className="h-9 bg-green-100 hover:bg-green-200 text-green-700 font-semibold px-3 rounded-full text-xs disabled:opacity-50 flex items-center"
                     >
-                      {savingToLibrary ? '...' : '💾 Save'}
+                      {savingToLibrary ? '…' : 'Save'}
                     </button>
                   )}
 
@@ -11501,35 +11179,28 @@ const App = () => {
                       if (saved && saved.id) setAddToProgramFor(saved);
                     }}
                     disabled={savingToLibrary}
-                    className={`px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 transition-colors disabled:opacity-50 ${darkMode ? 'bg-[#1e2e33] text-gray-300 hover:bg-[#0B5A70]/20' : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15'}`}
+                    className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors disabled:opacity-50 ${darkMode ? 'bg-[#1e2e33] text-gray-300 hover:bg-[#0B5A70]/20' : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15'}`}
                     title="Add to a playlist, program, or medley (saves to your library first)"
                     aria-label="Add to a playlist, program, or medley"
                   >
-<IconClipboardList size={16} />
+<IconListPlus size={18} />
                   </button>
 
                   <button
                     onClick={() => handleShareBhajan(selectedPublicBhajan, true)}
-                    className={`px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 transition-colors ${darkMode ? 'bg-[#1e2e33] text-gray-300 hover:bg-[#0B5A70]/20' : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15'}`}
+                    className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors ${darkMode ? 'bg-[#1e2e33] text-gray-300 hover:bg-[#0B5A70]/20' : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15'}`}
                     title="Share this bhajan"
+                    aria-label="Share this bhajan"
                   >
-<IconShare size={14} /> Share
+<IconShare size={16} />
                   </button>
 
-                  <button
-                    onClick={() => setShowReadingSettings(true)}
-                    className={`px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 transition-colors ${darkMode ? 'bg-[#1e2e33] text-gray-300 hover:bg-[#0B5A70]/20' : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15'}`}
-                    title="Reading view options"
-                    aria-label="Reading view options"
-                  >
-<IconEye size={16} />
-                  </button>
 
                   {isAdmin && (
                     <>
                       <button
                         onClick={() => openEditPublicBhajan(selectedPublicBhajan)}
-                        className="bg-[#0B5A70]/8 hover:bg-[#0B5A70]/15 text-[#0B5A70] font-semibold px-2.5 py-1 rounded-full text-xs flex items-center gap-1"
+                        className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors ${darkMode ? 'bg-[#1e2e33] text-gray-300 hover:bg-[#0B5A70]/20' : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15'}`}
                         title="Edit public bhajan"
                         aria-label="Edit public bhajan"
                       >
@@ -11538,7 +11209,7 @@ const App = () => {
                       <div className="relative">
                         <button
                           onClick={() => setShowDeleteMenu(showDeleteMenu === 'public' ? null : 'public')}
-                          className={`px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 transition-colors ${darkMode ? 'bg-[#1e2e33] text-gray-400 hover:text-gray-200 hover:bg-[#0B5A70]/20' : 'bg-[#0B5A70]/8 text-[#0B5A70]/70 hover:text-[#0B5A70] hover:bg-[#0B5A70]/15'}`}
+                          className={`w-9 h-9 rounded-full flex items-center justify-center text-lg leading-none transition-colors ${darkMode ? 'bg-[#1e2e33] text-gray-300 hover:bg-[#0B5A70]/20' : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15'}`}
                           aria-label="More options"
                           title="More options"
                         >
@@ -11747,27 +11418,107 @@ const App = () => {
                 <p className="text-sm text-[#0B5A70]/70">Manage the Public Library</p>
               </div>
 
-              <div className="bg-[#0B5A70] rounded-2xl p-6 text-white mb-6">
-                <h3 className="text-lg font-bold mb-3">📊 Public Library Stats</h3>
-                <div className="grid grid-cols-3 gap-4">
+              {(() => {
+                // SESSION 78: richer admin statistics, all computed client-side
+                // from the public library already in memory.
+                const total = publicBhajans.length;
+                const sum = (f) => publicBhajans.reduce((a, b) => a + (Number(b[f]) || 0), 0);
+                const totalSaves = sum('saveCount');
+                const totalReads = sum('readCount');
+                const count = (f) => {
+                  const m = {};
+                  publicBhajans.forEach(b => { const k = b[f] || '—'; m[k] = (m[k] || 0) + 1; });
+                  return Object.entries(m).sort((a, b) => b[1] - a[1]);
+                };
+                const byDeity = count('deity');
+                const byType = count('category');
+                const topRead = [...publicBhajans].sort((a, b) => (b.readCount || 0) - (a.readCount || 0)).slice(0, 10);
+                const topSaved = [...publicBhajans].sort((a, b) => (b.saveCount || 0) - (a.saveCount || 0)).slice(0, 10);
+                const noVideo = publicBhajans.filter(b => !getYouTubeVideoId(b.source)).length;
+                const noDhun = publicBhajans.filter(b => !b.dhun).length;
+                const noScale = publicBhajans.filter(b => !b.scale).length;
+                const noMood = publicBhajans.filter(b => !b.keywords || b.keywords.length === 0).length;
+                const shortLyrics = publicBhajans.filter(b => !b.lyrics || b.lyrics.trim().length < 80).length;
+                const neverRead = publicBhajans.filter(b => !(b.readCount > 0)).length;
+                const ms30 = Date.now() - 30 * 86400000;
+                const toMs = (t) => (t && t.toMillis) ? t.toMillis() : (t && t.seconds ? t.seconds * 1000 : 0);
+                const added30 = publicBhajans.filter(b => toMs(b.createdAt) >= ms30).length;
+                const Stat = ({ n, label }) => (
                   <div className="bg-white/20 rounded-xl p-3 text-center">
-                    <div className="text-2xl font-bold">{publicBhajans.length}</div>
-                    <div className="text-xs">Total Bhajans</div>
+                    <div className="text-2xl font-bold">{n}</div>
+                    <div className="text-[11px] leading-tight">{label}</div>
                   </div>
-                  <div className="bg-white/20 rounded-xl p-3 text-center">
-                    <div className="text-2xl font-bold">
-                      {publicBhajans.reduce((sum, b) => sum + (b.saveCount || 0), 0)}
+                );
+                const Bar = ({ rows, max }) => (
+                  <div className="space-y-1">
+                    {rows.map(([k, v]) => (
+                      <div key={k} className="flex items-center gap-2 text-xs">
+                        <span className="w-28 truncate text-[#0B5A70]">{k}</span>
+                        <div className="flex-1 h-2.5 rounded-full bg-[#0B5A70]/10 overflow-hidden"><div className="h-full bg-[#0B5A70]/60" style={{ width: `${Math.max(2, (v / max) * 100)}%` }} /></div>
+                        <span className="w-8 text-right text-gray-600">{v}</span>
+                      </div>
+                    ))}
+                  </div>
+                );
+                const TopList = ({ rows, field, label }) => (
+                  <ol className="space-y-1 text-xs">
+                    {rows.map((b, i) => (
+                      <li key={b.id} className="flex items-center gap-2">
+                        <span className="w-5 text-right font-bold text-[#E65100]">{i + 1}</span>
+                        <button onClick={() => openPublicBhajanDetail(b)} className="flex-1 min-w-0 truncate text-left text-[#0B5A70] hover:underline">{b.title}</button>
+                        <span className="text-gray-600 flex-shrink-0">{b[field] || 0} {label}</span>
+                      </li>
+                    ))}
+                  </ol>
+                );
+                return (
+                  <>
+                    <div className="bg-[#0B5A70] rounded-2xl p-5 text-white mb-6">
+                      <h3 className="text-lg font-bold mb-3">📊 Public Library Stats</h3>
+                      <div className="grid grid-cols-3 gap-3">
+                        <Stat n={total} label="Bhajans" />
+                        <Stat n={totalReads} label="Total reads" />
+                        <Stat n={totalSaves} label="Total saves" />
+                        <Stat n={byDeity.length} label="Deities" />
+                        <Stat n={byType.length} label="Types" />
+                        <Stat n={added30} label="Added · 30 days" />
+                      </div>
                     </div>
-                    <div className="text-xs">Total Saves</div>
-                  </div>
-                  <div className="bg-white/20 rounded-xl p-3 text-center">
-                    <div className="text-2xl font-bold">
-                      {new Set(publicBhajans.map(b => b.deity)).size}
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                      <div className="bg-[#FFFCF8] rounded-2xl p-5 border border-[#0B5A70]/8">
+                        <h4 className="font-bold text-[#0B5A70] mb-3">By deity</h4>
+                        <Bar rows={byDeity.slice(0, 12)} max={byDeity[0] ? byDeity[0][1] : 1} />
+                      </div>
+                      <div className="bg-[#FFFCF8] rounded-2xl p-5 border border-[#0B5A70]/8">
+                        <h4 className="font-bold text-[#0B5A70] mb-3">By type</h4>
+                        <Bar rows={byType} max={byType[0] ? byType[0][1] : 1} />
+                      </div>
+                      <div className="bg-[#FFFCF8] rounded-2xl p-5 border border-[#0B5A70]/8">
+                        <h4 className="font-bold text-[#0B5A70] mb-3">Most read</h4>
+                        <TopList rows={topRead} field="readCount" label="reads" />
+                      </div>
+                      <div className="bg-[#FFFCF8] rounded-2xl p-5 border border-[#0B5A70]/8">
+                        <h4 className="font-bold text-[#0B5A70] mb-3">Most saved</h4>
+                        <TopList rows={topSaved} field="saveCount" label="saves" />
+                      </div>
                     </div>
-                    <div className="text-xs">Deities</div>
-                  </div>
-                </div>
-              </div>
+
+                    <div className="bg-[#FFFCF8] rounded-2xl p-5 border border-amber-200/70 mb-6">
+                      <h4 className="font-bold text-[#0B5A70] mb-1">Content gaps</h4>
+                      <p className="text-xs text-gray-500 mb-3">Bhajans missing something — worth filling in.</p>
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-sm">
+                        {[['No YouTube link', noVideo], ['No तर्ज़ / dhun', noDhun], ['No scale', noScale], ['No mood tags', noMood], ['Very short lyrics', shortLyrics], ['Never read', neverRead]].map(([k, v]) => (
+                          <div key={k} className="flex items-center justify-between rounded-lg px-3 py-2 bg-amber-50 border border-amber-200/60">
+                            <span className="text-gray-700">{k}</span>
+                            <span className="font-bold text-amber-800">{v}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
 
               {/* SESSION 16: Bhajan of the Day scheduler */}
               <div className="bg-[#FFFCF8] rounded-2xl shadow-[0_2px_12px_rgba(11,90,112,0.06)] p-6 mb-6 border-2 border-[#E65100]/40">
@@ -11961,7 +11712,7 @@ const App = () => {
                       className="px-4 bg-[#0B5A70] hover:bg-[#094a5d] disabled:opacity-50 text-white font-semibold py-2 rounded-xl"
                       title="Share this bhajan (uses current selection + note)"
                     >
-                      ↗ Share
+                      Share
                     </button>
                     <button
                       onClick={clearDailyBhajan}
@@ -11976,19 +11727,6 @@ const App = () => {
                     Tip: batch-curate a week at a time — pick tomorrow, then use the arrow to jump ahead.
                   </div>
                 </div>
-              </div>
-
-              <div className="bg-[#FFFCF8] rounded-2xl shadow-[0_2px_12px_rgba(11,90,112,0.06)] p-6 mb-6 border border-green-200/60">
-                <h3 className="text-lg font-bold text-[#0B5A70] mb-3">➕ Add Bhajan Manually</h3>
-                <p className="text-sm text-gray-600 mb-4">
-                  Add a single bhajan to the Public Library using a form.
-                </p>
-                <button
-                  onClick={openAddPublicBhajan}
-                  className="w-full bg-[#0B5A70] hover:bg-[#094a5d] text-white font-bold py-3 rounded-xl shadow-lg"
-                >
-                  + Add New Public Bhajan
-                </button>
               </div>
 
               {/* MANAGE LISTS */}
@@ -12301,129 +12039,6 @@ const App = () => {
                 )}
               </div>
 
-              {/* JSON Import Section */}
-              <div className="bg-[#FFFCF8] rounded-2xl shadow-[0_2px_12px_rgba(11,90,112,0.06)] p-6 mb-6 border border-purple-200/60">
-                <h3 className="text-lg font-bold text-[#0B5A70] mb-3">📥 Import Bhajans from JSON</h3>
-                <p className="text-sm text-gray-600 mb-4">
-                  Paste JSON exported from your personal Babosa Sankirtan app. Bhajans will be added to the Public Library.
-                </p>
-
-                {!importPreview ? (
-                  <>
-                    <textarea
-                      value={importJsonText}
-                      onChange={(e) => setImportJsonText(e.target.value)}
-                      className="w-full h-40 px-4 py-3 border border-purple-200/40 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none font-mono text-sm"
-                      placeholder='Paste JSON here... e.g., [{"title": "...", "lyrics": "..."}, ...]'
-                    />
-
-                    {importError && (
-                      <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
-                        ⚠️ {importError}
-                      </div>
-                    )}
-
-                    {importSuccess && (
-                      <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg text-green-700 text-sm">
-                        {importSuccess}
-                      </div>
-                    )}
-
-                    <button
-                      onClick={previewImport}
-                      disabled={!importJsonText.trim()}
-                      className="mt-3 w-full bg-purple-500 hover:bg-purple-600 text-white font-semibold py-3 rounded-xl disabled:opacity-50"
-                    >
-                      Preview Import
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <div className="bg-purple-50/50 border border-purple-200/60 rounded-xl p-4 mb-4">
-                      <h4 className="font-bold text-[#0B5A70] mb-2">Ready to import:</h4>
-                      <div className="grid grid-cols-3 gap-3 text-center text-sm">
-                        <div>
-                          <div className="text-2xl font-bold text-purple-700">{importPreview.total}</div>
-                          <div className="text-xs text-purple-600">Total in JSON</div>
-                        </div>
-                        <div>
-                          <div className="text-2xl font-bold text-green-600">{importPreview.valid}</div>
-                          <div className="text-xs text-purple-600">Will Import</div>
-                        </div>
-                        <div>
-                          <div className="text-2xl font-bold text-red-600">{importPreview.skipped}</div>
-                          <div className="text-xs text-purple-600">Skipped (invalid)</div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="max-h-60 overflow-y-auto bg-gray-50 rounded-xl p-3 mb-4">
-                      <p className="text-xs text-gray-500 mb-2">Preview (first 10):</p>
-                      {importPreview.bhajans.slice(0, 10).map((b, idx) => (
-                        <div key={idx} className="mb-2 p-2 bg-white rounded-lg text-sm border border-gray-200">
-                          <p className="font-semibold text-[#0B5A70] truncate">{b.title}</p>
-                          <p className="text-xs text-gray-600">
-                            {b.deity} • {b.category}
-                          </p>
-                        </div>
-                      ))}
-                      {importPreview.bhajans.length > 10 && (
-                        <p className="text-xs text-gray-500 text-center mt-2">
-                          ...and {importPreview.bhajans.length - 10} more
-                        </p>
-                      )}
-                    </div>
-
-                    {importing && importProgress.total > 0 && (
-                      <div className="mb-4 p-3 bg-[#0B5A70]/5 border border-[#0B5A70]/12 rounded-lg">
-                        <p className="text-sm text-[#0B5A70] font-semibold">
-                          {importProgress.message}
-                        </p>
-                        <div className="mt-2 bg-[#0B5A70]/15 rounded-full h-3 overflow-hidden">
-                          <div
-                            className="bg-[#0B5A70] h-full transition-all"
-                            style={{ width: `${(importProgress.current / importProgress.total) * 100}%` }}
-                          ></div>
-                        </div>
-                        <p className="text-xs text-[#0B5A70] mt-1">
-                          {importProgress.current} of {importProgress.total}
-                        </p>
-                      </div>
-                    )}
-
-                    <div className="flex gap-2">
-                      <button
-                        onClick={executeImport}
-                        disabled={importing}
-                        className="flex-1 bg-[#0B5A70] hover:bg-[#094a5d] text-white font-bold py-3 rounded-xl shadow-lg disabled:opacity-50"
-                      >
-                        {importing ? 'Importing...' : `✅ Import ${importPreview.valid} Bhajans`}
-                      </button>
-                      <button
-                        onClick={() => {
-                          setImportPreview(null);
-                          setImportJsonText('');
-                        }}
-                        disabled={importing}
-                        className="px-6 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 font-semibold disabled:opacity-50"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </>
-                )}
-              </div>
-
-              <div className="bg-[#0B5A70]/5 border border-[#0B5A70]/12 rounded-xl p-4">
-                <h4 className="font-bold text-[#0B5A70] mb-2">💡 JSON Format Support:</h4>
-                <p className="text-xs text-[#0B5A70]/80 mb-2">The importer accepts:</p>
-                <ul className="text-xs text-[#0B5A70]/80 space-y-1 ml-4">
-                  <li>• Array of bhajans: <code className="bg-white px-1 rounded">[{`{"title": "...", "lyrics": "..."}`}]</code></li>
-                  <li>• Object with bhajans property</li>
-                  <li>• Fields: title, lyrics, deity, category, dhun, scale, keywords, source</li>
-                  <li>• Automatically maps common field variations</li>
-                </ul>
-              </div>
             </>
           )}
         </main>
@@ -13280,13 +12895,13 @@ class ErrorBoundary extends React.Component {
                 onClick={this.handleReset}
                 className="w-full bg-[#0B5A70] hover:bg-[#094a5d] text-white font-semibold py-3 rounded-xl shadow-md"
               >
-                🔄 Try Again
+                Try Again
               </button>
               <button
                 onClick={this.handleHardReload}
                 className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold py-3 rounded-xl"
               >
-                🧹 Reload App (clears cache)
+                Reload App (clears cache)
               </button>
             </div>
 
