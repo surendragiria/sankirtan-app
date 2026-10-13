@@ -1084,7 +1084,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.10.13.s79';
+const APP_VERSION = '2026.10.13.s80';
 const LIVE_SCROLL_STEPS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 
 // SESSION 30: log at startup so admin can verify which build is
@@ -2394,7 +2394,7 @@ const App = () => {
   // My Library states
   const [currentView, setCurrentView] = useState('public-library');
   const [scrollPositions, setScrollPositions] = useState({});
-  const [bhajans, setBhajans] = useState([]);
+  const [rawBhajans, setBhajans] = useState([]);
   const [selectedBhajan, setSelectedBhajan] = useState(null);
   const [editingBhajan, setEditingBhajan] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -2597,6 +2597,29 @@ const App = () => {
 
   // Public Library states
   const [publicBhajans, setPublicBhajans] = useState([]);
+  // SESSION 80: a bhajan saved from the Public Library is a snapshot copy.
+  // Fields the admin fills in later (YouTube link, तर्ज़, scale, singer,
+  // lyricist, moods) flow through to the personal copy as long as the
+  // user hasn't set that field themselves. Lyrics and title are never
+  // overridden — those are the user's to edit.
+  const bhajans = useMemo(() => {
+    if (rawBhajans.length === 0 || publicBhajans.length === 0) return rawBhajans;
+    const pub = new Map(publicBhajans.map(b => [b.id, b]));
+    const INHERIT = ['source', 'dhun', 'scale', 'singer', 'lyricist'];
+    let changed = false;
+    const out = rawBhajans.map(b => {
+      const src = b.savedFromPublicId ? pub.get(b.savedFromPublicId) : null;
+      if (!src) return b;
+      let m = null;
+      for (const f of INHERIT) {
+        if (!b[f] && src[f]) { m = m || { ...b }; m[f] = src[f]; }
+      }
+      if ((!b.keywords || b.keywords.length === 0) && src.keywords && src.keywords.length) { m = m || { ...b }; m.keywords = src.keywords; }
+      if (m) changed = true;
+      return m || b;
+    });
+    return changed ? out : rawBhajans;
+  }, [rawBhajans, publicBhajans]);
   const [publicLoading, setPublicLoading] = useState(false);
   // SESSION 12: session-scoped seed drives seededShuffle in the
   // filteredPublicBhajans memo. Set once per browsing session so
