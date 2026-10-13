@@ -1083,7 +1083,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.10.13.s74';
+const APP_VERSION = '2026.10.13.s75';
 const LIVE_SCROLL_STEPS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 
 // SESSION 30: log at startup so admin can verify which build is
@@ -2568,6 +2568,9 @@ const App = () => {
   const [debouncedPublicSearch, setDebouncedPublicSearch] = useState('');
   const [publicFilterKeyword, setPublicFilterKeyword] = useState('');
   const [libraryFilterKeyword, setLibraryFilterKeyword] = useState('');
+  // SESSION 75: ⭐ Starred filter in My Library, and the notes editor.
+  const [libraryStarredOnly, setLibraryStarredOnly] = useState(false);
+  const [notesDraft, setNotesDraft] = useState(null); // null = not editing
   const [publicFilterDeity, setPublicFilterDeity] = useState('');
   const [publicFilterCategory, setPublicFilterCategory] = useState('');
   const [selectedPublicBhajan, setSelectedPublicBhajan] = useState(null);
@@ -5563,6 +5566,7 @@ const App = () => {
   const filteredBhajans = useMemo(() => {
     const q = foldSearchKey(debouncedSearchQuery);
     const filtered = bhajans.filter(bhajan => {
+      if (libraryStarredOnly && !bhajan.starred) return false;
       if (q && searchTier(bhajan, q) < 0) return false;
       if (filterDeity && bhajan.deity !== filterDeity) return false;
       if (filterCategory && bhajan.category !== filterCategory) return false;
@@ -5584,7 +5588,7 @@ const App = () => {
     });
     // SESSION 71: when searching, title matches come first.
     return rankByTier(sorted, q);
-  }, [bhajans, debouncedSearchQuery, filterDeity, filterCategory, libraryFilterKeyword]);
+  }, [bhajans, libraryStarredOnly, debouncedSearchQuery, filterDeity, filterCategory, libraryFilterKeyword]);
 
   const filteredPrograms = useMemo(() => {
     if (!programSearchQuery) return programs;
@@ -6293,6 +6297,33 @@ const App = () => {
     }
   };
 
+  // SESSION 75: ⭐ star / unstar a library bhajan.
+  const toggleStarred = async (bhajan) => {
+    if (!user || !bhajan) return;
+    const next = !bhajan.starred;
+    try {
+      await window.firebase.firestore().collection('users').doc(user.uid).collection('bhajans').doc(bhajan.id).update({ starred: next });
+      setSelectedBhajan(prev => (prev && prev.id === bhajan.id ? { ...prev, starred: next } : prev));
+      showToast(next ? '⭐ Starred' : 'Removed from Starred');
+    } catch (error) {
+      showToast('Could not update: ' + error.message, 'error');
+    }
+  };
+
+  // SESSION 75: private singer notes on a library bhajan.
+  const saveBhajanNotes = async (bhajan, text) => {
+    if (!user || !bhajan) return;
+    const notes = (text || '').trim();
+    try {
+      await window.firebase.firestore().collection('users').doc(user.uid).collection('bhajans').doc(bhajan.id).update({ notes });
+      setSelectedBhajan(prev => (prev && prev.id === bhajan.id ? { ...prev, notes } : prev));
+      setNotesDraft(null);
+      showToast(notes ? '📝 Notes saved' : 'Notes cleared');
+    } catch (error) {
+      showToast('Could not save notes: ' + error.message, 'error');
+    }
+  };
+
   // SESSION 70: share the setlist as plain text (WhatsApp-friendly).
   const shareProgramText = async (program) => {
     const pType = getProgramType(program);
@@ -6599,6 +6630,7 @@ const App = () => {
   );
   // SESSION 74: swipe between bhajans in Live mode too.
   const liveSwipe = useSwipe(liveNext, livePrev, { enabled: currentView === 'live-program', threshold: 80 });
+  useEffect(() => { setNotesDraft(null); }, [selectedBhajan?.id, currentView]);
 
   // Share handler with toast feedback
   // SESSION 13: isPublic flag determines whether we include a
@@ -7162,6 +7194,13 @@ const App = () => {
             <div className={`border-l-4 border-[#E65100]/40 p-3 rounded-r-lg mb-4 ${darkMode ? 'bg-[#1e2e33]' : 'bg-[#0B5A70]/5'}`}>
               <p className={`text-sm ${darkMode ? 'text-orange-200' : 'text-[#E65100]'}`}>
                 <span className="font-semibold">तर्ज़ / धुन:</span> {currentBhajan.dhun}
+              </p>
+            </div>
+          )}
+          {currentBhajan.notes && (
+            <div className={`border-l-4 border-amber-400/60 p-3 rounded-r-lg mb-4 ${darkMode ? 'bg-[#1e2e33]' : 'bg-amber-50'}`}>
+              <p className={`text-sm whitespace-pre-wrap ${darkMode ? 'text-amber-100' : 'text-amber-900'}`}>
+                <span className="font-semibold">📝 </span>{currentBhajan.notes}
               </p>
             </div>
           )}
@@ -8215,7 +8254,7 @@ const App = () => {
 
                     {/* SESSION 43: PARODIES SECTION — collapsible, sits above the
                         bhajan list. Hidden while searching/filtering. */}
-                    {myParodies.length > 0 && !searchQuery && !filterDeity && !filterCategory && !libraryFilterKeyword && (
+                    {myParodies.length > 0 && !searchQuery && !filterDeity && !filterCategory && !libraryFilterKeyword && !libraryStarredOnly && (
                       <div className="mb-4">
                         <button
                           onClick={() => setLibraryParodiesOpen(v => !v)}
@@ -8257,7 +8296,7 @@ const App = () => {
               })()}
 
               {/* Recently Read */}
-              {recentlyRead.length > 0 && !searchQuery && !filterDeity && !filterCategory && !libraryFilterKeyword && (
+              {recentlyRead.length > 0 && !searchQuery && !filterDeity && !filterCategory && !libraryFilterKeyword && !libraryStarredOnly && (
                 <div className="mb-4">
                   <p className={`text-xs font-semibold uppercase tracking-wide mb-2 ${darkMode ? 'text-gray-500' : 'text-[#0B5A70]/60'}`}>
                     🕐 Recently Read
@@ -8337,7 +8376,7 @@ const App = () => {
                 </div>
               </div>
 
-              {(searchQuery || filterDeity || filterCategory || libraryFilterKeyword) && (
+              {(searchQuery || filterDeity || filterCategory || libraryFilterKeyword || libraryStarredOnly) && (
                 <div className="flex justify-end mb-1">
                   <button
                     onClick={() => {
@@ -8345,6 +8384,7 @@ const App = () => {
                       setFilterDeity('');
                       setFilterCategory('');
                       setLibraryFilterKeyword('');
+                      setLibraryStarredOnly(false);
                     }}
                     className="text-xs text-red-600 hover:text-red-800 underline hover:no-underline"
                   >
@@ -8382,6 +8422,18 @@ const App = () => {
               {/* SESSION 51: all moods, horizontally scrollable. */}
               <div className="mb-6 -mx-4 px-4 overflow-x-auto [&::-webkit-scrollbar]:hidden" style={{scrollbarWidth: 'none'}}>
                 <div className="flex flex-nowrap gap-2 items-center">
+                  {/* SESSION 75: Starred filter */}
+                  <button
+                    onClick={() => setLibraryStarredOnly(v => !v)}
+                    aria-pressed={libraryStarredOnly}
+                    className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all border flex-shrink-0 ${
+                      libraryStarredOnly
+                        ? 'bg-[#E65100] text-white border-[#E65100] shadow-md'
+                        : `${darkMode ? 'bg-transparent text-orange-200 border-[#E65100]/40 hover:border-[#E65100]/70' : 'bg-white text-[#E65100] border-[#E65100]/30 hover:border-[#E65100]/50'}`
+                    }`}
+                  >
+                    ⭐ Starred
+                  </button>
                   {allKeywordOptions.map(kw => (
                     <button
                       key={kw}
@@ -8597,6 +8649,15 @@ const App = () => {
                       Edit/View/Add-to buttons. */}
                   <div className="relative">
                     <button
+                      onClick={() => toggleStarred(selectedBhajan)}
+                      className={`px-2.5 py-1 mr-1 rounded-full text-xs font-semibold transition-colors ${selectedBhajan.starred ? 'bg-[#E65100]/15 text-[#E65100]' : (darkMode ? 'bg-[#1e2e33] text-gray-400 hover:text-gray-200' : 'bg-[#0B5A70]/8 text-[#0B5A70]/70 hover:text-[#0B5A70]')}`}
+                      aria-label={selectedBhajan.starred ? 'Unstar' : 'Star'}
+                      aria-pressed={!!selectedBhajan.starred}
+                      title={selectedBhajan.starred ? 'Remove from Starred' : 'Add to Starred'}
+                    >
+                      {selectedBhajan.starred ? '⭐' : '☆'}
+                    </button>
+                    <button
                       onClick={() => setShowDeleteMenu(showDeleteMenu === 'library' ? null : 'library')}
                       className={`px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 transition-colors ${darkMode ? 'bg-[#1e2e33] text-gray-400 hover:text-gray-200 hover:bg-[#0B5A70]/20' : 'bg-[#0B5A70]/8 text-[#0B5A70]/70 hover:text-[#0B5A70] hover:bg-[#0B5A70]/15'}`}
                       aria-label="More options"
@@ -8645,6 +8706,38 @@ const App = () => {
                     </p>
                   </div>
                 )}
+
+                {/* SESSION 75: private singer notes — starting sur, who
+                    sings which stanza, tempo. Stored on the library copy. */}
+                <div className={`rounded-xl mb-4 border ${darkMode ? 'bg-[#1e2e33]/60 border-[#0B5A70]/20' : 'bg-amber-50/60 border-amber-200/60'}`}>
+                  {notesDraft === null ? (
+                    <button
+                      onClick={() => setNotesDraft(selectedBhajan.notes || '')}
+                      className="w-full text-left px-3 py-2.5"
+                      aria-label="Edit my notes"
+                    >
+                      <p className={`text-xs font-semibold ${darkMode ? 'text-amber-200' : 'text-amber-800'}`}>📝 My notes {selectedBhajan.notes ? '' : <span className="font-normal opacity-70">· tap to add (sur, who sings what, tempo…)</span>}</p>
+                      {selectedBhajan.notes && (
+                        <p className={`text-sm mt-1 whitespace-pre-wrap ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>{selectedBhajan.notes}</p>
+                      )}
+                    </button>
+                  ) : (
+                    <div className="p-3">
+                      <textarea
+                        value={notesDraft}
+                        onChange={(e) => setNotesDraft(e.target.value)}
+                        rows={3}
+                        autoFocus
+                        placeholder="e.g. Start from C#, Ramesh ji sings 2nd antara, slow tempo"
+                        className={`w-full text-sm p-2 rounded-lg border outline-none ${darkMode ? 'bg-[#162226] border-[#0B5A70]/30 text-gray-100' : 'bg-white border-amber-300 text-gray-800'}`}
+                      />
+                      <div className="flex justify-end gap-2 mt-2">
+                        <button onClick={() => setNotesDraft(null)} className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>Cancel</button>
+                        <button onClick={() => saveBhajanNotes(selectedBhajan, notesDraft)} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-[#E65100] text-white">Save</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
 
                 {/* SESSION 11: Singer + Lyricist credits (blank for
                     traditional/anonymous bhajans; shown when known) */}
