@@ -1084,7 +1084,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.10.13.s78';
+const APP_VERSION = '2026.10.13.s79';
 const LIVE_SCROLL_STEPS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 
 // SESSION 30: log at startup so admin can verify which build is
@@ -9394,7 +9394,7 @@ const App = () => {
             return (
             <>
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-2xl font-bold text-[#0B5A70]">{isPlaylistView ? '🎵 Playlists' : '📅 Programs'}</h2>
+                <h2 className="text-2xl font-bold text-[#0B5A70]">{isPlaylistView ? '🎵 Playlists' : 'Programs'}</h2>
                 <button
                   onClick={openCreateProgram}
                   className="bg-[#0B5A70] hover:bg-[#094a5d] text-white font-semibold px-4 py-2 rounded-xl shadow-md flex items-center gap-2 text-sm"
@@ -9431,7 +9431,7 @@ const App = () => {
                       : 'text-[#0B5A70]/70 hover:text-[#0B5A70]'
                   }`}
                 >
-                  📅 Programs{events.length > 0 ? ` (${events.length})` : ''}
+                  Programs{events.length > 0 ? ` (${events.length})` : ''}
                 </button>
                 {/* SESSION 43: Parodies pill removed — parodies now live in
                     My Library alongside bhajans (they're performance units,
@@ -9532,26 +9532,26 @@ const App = () => {
                     const pType = getProgramType(program);
                     const isPl = pType === 'playlist';
                     const isPar = pType === 'parody';
-                    const cardEmoji = isPar ? '🎭' : (isPl ? '🎵' : '📅');
+                    const cardEmoji = isPar ? '🎭' : (isPl ? '🎵' : '');
                     const count = program.bhajanCount || 0;
                     const noun = isPar ? 'mukhda' : 'bhajan';
                     return (
                       <button
                         key={program.id}
                         onClick={() => openProgramDetail(program)}
-                        className={`bg-[#FFFCF8] rounded-xl shadow-[0_1px_4px_rgba(11,90,112,0.04)] p-3 border border-[#0B5A70]/8 hover:border-[#0B5A70]/25 hover:shadow-[0_2px_8px_rgba(11,90,112,0.08)] transition-all text-left`}
+                        className={`bg-[#FFFCF8] rounded-lg shadow-[0_1px_4px_rgba(11,90,112,0.04)] px-3 py-2 border border-[#0B5A70]/8 hover:border-[#0B5A70]/25 hover:shadow-[0_2px_8px_rgba(11,90,112,0.08)] transition-all text-left`}
                       >
-                        <div className="flex items-center gap-3">
-                          <div className="text-xl flex-shrink-0" aria-hidden="true">{cardEmoji}</div>
+                        <div className="flex items-center gap-2.5">
+                          {cardEmoji && <div className="text-base flex-shrink-0" aria-hidden="true">{cardEmoji}</div>}
                           <div className="flex-1 min-w-0">
-                            <h3 className="text-sm font-bold text-[#0B5A70] truncate">{program.name}</h3>
-                            <p className="text-xs text-gray-500 truncate">
+                            <h3 className="text-sm font-semibold text-[#0B5A70] truncate leading-tight">{program.name}</h3>
+                            <p className="text-[11px] text-gray-500 truncate">
                               {count} {noun}{count === 1 ? '' : 's'}
                               {isPl || isPar ? (program.purpose ? ` · ${program.purpose}` : '') : (program.venue ? ` · 📍 ${program.venue}` : '')}
                             </p>
                           </div>
                           {!isPl && !isPar && program.date && (
-                            <span className={`flex-shrink-0 text-[11px] font-semibold px-2 py-1 rounded-lg ${isPast ? 'bg-gray-100 text-gray-500' : 'bg-[#E65100]/10 text-[#E65100]'}`}>
+                            <span className={`flex-shrink-0 text-[11px] font-semibold px-2 py-0.5 rounded-md ${isPast ? 'bg-gray-100 text-gray-500' : 'bg-[#E65100]/10 text-[#E65100]'}`}>
                               {formatProgramDate(program.date)}
                             </span>
                           )}
@@ -9561,7 +9561,7 @@ const App = () => {
                   };
                   if (isPlaylistView) {
                     return (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                         {visibleItems.map(p => renderCard(p, false))}
                       </div>
                     );
@@ -9571,7 +9571,7 @@ const App = () => {
                   return (
                     <>
                       {upcoming.length > 0 && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                           {upcoming.map(p => renderCard(p, false))}
                         </div>
                       )}
@@ -9580,7 +9580,7 @@ const App = () => {
                           <p className={`text-[11px] font-semibold uppercase tracking-wide mt-6 mb-2 ${darkMode ? 'text-gray-500' : 'text-[#0B5A70]/50'}`}>
                             Past programs
                           </p>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                             {past.map(p => renderCard(p, true))}
                           </div>
                         </>
@@ -9707,14 +9707,14 @@ const App = () => {
                   // single meta line. Live button still prominent.
                   <div className="bg-[#FFFCF8] rounded-xl shadow-[0_1px_6px_rgba(11,90,112,0.05)] p-4 md:p-5 border border-[#0B5A70]/8 mb-4">
                     <div className="flex items-center gap-3">
-                      <div className="text-2xl flex-shrink-0" aria-hidden="true">{t === 'playlist' ? '🎵' : '📅'}</div>
+                      {t === 'playlist' && <div className="text-2xl flex-shrink-0" aria-hidden="true">🎵</div>}
                       <div className="flex-1 min-w-0">
                         <h1 className="text-xl md:text-2xl font-bold text-[#0B5A70] truncate">
                           {selectedProgram.name}
                         </h1>
                         <p className="text-xs text-gray-500 mt-0.5">
                           {selectedProgram.bhajanIds?.length || 0} bhajan{(selectedProgram.bhajanIds?.length || 0) === 1 ? '' : 's'}
-                          {selectedProgram.date ? ` · ${isPastProgramDate(selectedProgram.date) ? 'Completed' : '📅'} ${formatProgramDate(selectedProgram.date)}` : ''}
+                          {selectedProgram.date ? ` · ${isPastProgramDate(selectedProgram.date) ? 'Completed · ' : ''}${formatProgramDate(selectedProgram.date)}` : ''}
                           {selectedProgram.venue ? ` · 📍 ${selectedProgram.venue}` : ''}
                         </p>
                       </div>
@@ -9726,9 +9726,9 @@ const App = () => {
                     {selectedProgram.bhajanIds && selectedProgram.bhajanIds.length > 0 && t === 'program' && (
                       <button
                         onClick={() => startLiveProgram(selectedProgram)}
-                        className="w-full mt-5 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-bold py-3.5 rounded-xl shadow-lg text-base flex items-center justify-center gap-2"
+                        className="w-full mt-3 font-semibold py-2.5 rounded-xl text-sm flex items-center justify-center gap-2 border transition-colors border-[#E65100]/50 text-[#E65100] hover:bg-[#E65100]/8"
                       >
-                        🎤 START LIVE PERFORMANCE
+                        🎤 Start live performance
                       </button>
                     )}
                     {/* SESSION 66: playlists get Live mode too (full-screen
@@ -9736,7 +9736,7 @@ const App = () => {
                     {selectedProgram.bhajanIds && selectedProgram.bhajanIds.length > 0 && t === 'playlist' && (
                       <button
                         onClick={() => startLiveProgram(selectedProgram)}
-                        className={`w-full mt-4 font-semibold py-2.5 rounded-xl text-sm flex items-center justify-center gap-2 border transition-colors ${darkMode ? 'border-[#0B5A70]/40 text-teal-200 hover:bg-[#0B5A70]/20' : 'border-[#0B5A70]/25 text-[#0B5A70] hover:bg-[#0B5A70]/5'}`}
+                        className={`w-full mt-3 font-semibold py-2.5 rounded-xl text-sm flex items-center justify-center gap-2 border transition-colors ${darkMode ? 'border-[#0B5A70]/40 text-teal-200 hover:bg-[#0B5A70]/20' : 'border-[#0B5A70]/25 text-[#0B5A70] hover:bg-[#0B5A70]/5'}`}
                       >
                         🎤 Sing in Live mode
                       </button>
