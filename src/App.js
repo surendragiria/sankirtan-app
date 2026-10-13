@@ -1084,7 +1084,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.10.13.s80';
+const APP_VERSION = '2026.10.13.s81';
 const LIVE_SCROLL_STEPS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 
 // SESSION 30: log at startup so admin can verify which build is
@@ -8027,6 +8027,15 @@ const App = () => {
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                         <span>Singer's Guide</span>
                       </a>
+                      {/* SESSION 81: build number, so stale installs are easy to spot */}
+                      <button
+                        onClick={() => window.location.reload()}
+                        className={`w-full text-left px-4 py-2 text-[11px] flex items-center justify-between ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}
+                        title="Tap to reload the app"
+                      >
+                        <span>Version {APP_VERSION.replace(/^2026\./, '')}</span>
+                        <span>Reload ↻</span>
+                      </button>
                       {user && (
                         <button
                           onClick={() => {
