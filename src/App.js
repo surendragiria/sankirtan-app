@@ -1084,7 +1084,8 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.10.13.s81';
+const APP_VERSION = '2026.10.13.s82';
+const AUTO_SCROLL_VIEWS = ['live-program', 'bhajan-detail', 'public-bhajan-detail'];
 const LIVE_SCROLL_STEPS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 
 // SESSION 30: log at startup so admin can verify which build is
@@ -2502,15 +2503,6 @@ const App = () => {
 
   // Live Program Mode states
   const [liveProgramIndex, setLiveProgramIndex] = useState(0);
-  // SESSION 70/74: moving to another bhajan pauses, then resumes from the
-  // top after a short breath if ▶ was on; leaving Live mode clears it.
-  useEffect(() => {
-    setLiveAutoScroll(false);
-    if (currentView !== 'live-program') { liveScrollWantedRef.current = false; return; }
-    if (!liveScrollWantedRef.current) return;
-    const t = setTimeout(() => { if (liveScrollWantedRef.current) setLiveAutoScroll(true); }, 1500);
-    return () => clearTimeout(t);
-  }, [liveProgramIndex, currentView]);
   // SESSION 69: Live mode has its own font size, remembered across
   // sessions. Defaults to the reading size + 4 (stage distance).
   const [liveFontSize, setLiveFontSize] = useState(() => {
@@ -2546,7 +2538,7 @@ const App = () => {
   });
   useEffect(() => { try { localStorage.setItem('sankirtan-live-scroll-speed', String(liveScrollSpeed)); } catch {} }, [liveScrollSpeed]);
   useEffect(() => {
-    if (!liveAutoScroll || currentView !== 'live-program') return;
+    if (!liveAutoScroll || !AUTO_SCROLL_VIEWS.includes(currentView)) return;
     let raf = 0;
     let acc = 0;
     let last = performance.now();
@@ -2649,6 +2641,16 @@ const App = () => {
   const [publicFilterDeity, setPublicFilterDeity] = useState('');
   const [publicFilterCategory, setPublicFilterCategory] = useState('');
   const [selectedPublicBhajan, setSelectedPublicBhajan] = useState(null);
+  // SESSION 70/74: moving to another bhajan pauses, then resumes from the
+  // top after a short breath if ▶ was on; leaving Live mode clears it.
+  useEffect(() => {
+    setLiveAutoScroll(false);
+    if (!AUTO_SCROLL_VIEWS.includes(currentView)) { liveScrollWantedRef.current = false; return; }
+    if (!liveScrollWantedRef.current) return;
+    const t = setTimeout(() => { if (liveScrollWantedRef.current) setLiveAutoScroll(true); }, 1500);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveProgramIndex, currentView, selectedBhajan?.id, selectedPublicBhajan?.id]);
   const [savingToLibrary, setSavingToLibrary] = useState(false);
   const [savedBhajanIds, setSavedBhajanIds] = useState(new Set());
 
@@ -8670,7 +8672,7 @@ const App = () => {
                 )}
 
                 <div className={`border-t pt-4 ${darkMode ? 'border-[#0B5A70]/15' : 'border-[#0B5A70]/8'}`}>
-                  <div className="flex items-center justify-end gap-1 mb-2">
+                  <div className="flex items-center justify-end gap-1 mb-2 flex-wrap" data-live-controls>
                     <button
                       onClick={() => setReadingSettings(prev => ({ ...prev, fontSize: Math.max(14, prev.fontSize - 2) }))}
                       className={`px-2 py-1 rounded-md text-xs font-semibold transition-colors ${darkMode ? 'bg-[#1e2e33] hover:bg-[#0B5A70]/20 text-gray-200' : 'bg-[#0B5A70]/5 hover:bg-[#0B5A70]/10 text-[#0B5A70] border border-[#0B5A70]/12'}`}
@@ -8688,8 +8690,37 @@ const App = () => {
                     >
                       Aa+
                     </button>
+                    <span className={`mx-1 h-5 w-px ${darkMode ? 'bg-white/15' : 'bg-[#0B5A70]/15'}`} aria-hidden="true" />
+                    <button
+                      onClick={toggleLiveAutoScroll}
+                      className={`w-8 h-7 rounded-md text-xs font-bold flex items-center justify-center transition-colors ${liveAutoScroll ? 'bg-[#E65100] text-white' : (darkMode ? 'bg-[#1e2e33] hover:bg-[#0B5A70]/20 text-gray-200' : 'bg-[#0B5A70]/5 hover:bg-[#0B5A70]/10 text-[#0B5A70] border border-[#0B5A70]/12')}`}
+                      title={liveAutoScroll ? 'Pause auto-scroll' : 'Auto-scroll lyrics'}
+                      aria-label={liveAutoScroll ? 'Pause auto-scroll' : 'Start auto-scroll'}
+                      aria-pressed={liveAutoScroll}
+                    >
+                      {liveAutoScroll ? '⏸' : '▶'}
+                    </button>
+                    <button
+                      onClick={() => setLiveScrollSpeed(v => LIVE_SCROLL_STEPS[Math.max(0, LIVE_SCROLL_STEPS.indexOf(v) - 1)])}
+                      disabled={LIVE_SCROLL_STEPS.indexOf(liveScrollSpeed) <= 0}
+                      className={`px-2 py-1 rounded-md text-xs font-semibold transition-colors disabled:opacity-40 ${darkMode ? 'bg-[#1e2e33] hover:bg-[#0B5A70]/20 text-gray-200' : 'bg-[#0B5A70]/5 hover:bg-[#0B5A70]/10 text-[#0B5A70] border border-[#0B5A70]/12'}`}
+                      title="Slower" aria-label="Slower auto-scroll"
+                    >
+                      −
+                    </button>
+                    <span className={`text-xs w-9 text-center ${darkMode ? 'text-gray-400' : 'text-gray-500'}`} title="Scroll speed">{liveScrollSpeed}×</span>
+                    <button
+                      onClick={() => setLiveScrollSpeed(v => LIVE_SCROLL_STEPS[Math.min(LIVE_SCROLL_STEPS.length - 1, LIVE_SCROLL_STEPS.indexOf(v) + 1)])}
+                      disabled={LIVE_SCROLL_STEPS.indexOf(liveScrollSpeed) >= LIVE_SCROLL_STEPS.length - 1}
+                      className={`px-2 py-1 rounded-md text-xs font-semibold transition-colors disabled:opacity-40 ${darkMode ? 'bg-[#1e2e33] hover:bg-[#0B5A70]/20 text-gray-200' : 'bg-[#0B5A70]/5 hover:bg-[#0B5A70]/10 text-[#0B5A70] border border-[#0B5A70]/12'}`}
+                      title="Faster" aria-label="Faster auto-scroll"
+                    >
+                      +
+                    </button>
                   </div>
                   <pre
+                    onClick={toggleLiveAutoScroll}
+                    data-live-lyrics
                     className={`whitespace-pre-wrap text-lg leading-relaxed ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}
                     style={{
                       fontSize: `${readingSettings.fontSize}px`,
@@ -11308,7 +11339,7 @@ const App = () => {
                 )}
 
                 <div className={`border-t pt-4 ${darkMode ? 'border-[#0B5A70]/15' : 'border-[#0B5A70]/8'}`}>
-                  <div className="flex items-center justify-end gap-1 mb-2">
+                  <div className="flex items-center justify-end gap-1 mb-2 flex-wrap" data-live-controls>
                     <button
                       onClick={() => setReadingSettings(prev => ({ ...prev, fontSize: Math.max(14, prev.fontSize - 2) }))}
                       className={`px-2 py-1 rounded-md text-xs font-semibold transition-colors ${darkMode ? 'bg-[#1e2e33] hover:bg-[#0B5A70]/20 text-gray-200' : 'bg-[#0B5A70]/5 hover:bg-[#0B5A70]/10 text-[#0B5A70] border border-[#0B5A70]/12'}`}
@@ -11326,8 +11357,37 @@ const App = () => {
                     >
                       Aa+
                     </button>
+                    <span className={`mx-1 h-5 w-px ${darkMode ? 'bg-white/15' : 'bg-[#0B5A70]/15'}`} aria-hidden="true" />
+                    <button
+                      onClick={toggleLiveAutoScroll}
+                      className={`w-8 h-7 rounded-md text-xs font-bold flex items-center justify-center transition-colors ${liveAutoScroll ? 'bg-[#E65100] text-white' : (darkMode ? 'bg-[#1e2e33] hover:bg-[#0B5A70]/20 text-gray-200' : 'bg-[#0B5A70]/5 hover:bg-[#0B5A70]/10 text-[#0B5A70] border border-[#0B5A70]/12')}`}
+                      title={liveAutoScroll ? 'Pause auto-scroll' : 'Auto-scroll lyrics'}
+                      aria-label={liveAutoScroll ? 'Pause auto-scroll' : 'Start auto-scroll'}
+                      aria-pressed={liveAutoScroll}
+                    >
+                      {liveAutoScroll ? '⏸' : '▶'}
+                    </button>
+                    <button
+                      onClick={() => setLiveScrollSpeed(v => LIVE_SCROLL_STEPS[Math.max(0, LIVE_SCROLL_STEPS.indexOf(v) - 1)])}
+                      disabled={LIVE_SCROLL_STEPS.indexOf(liveScrollSpeed) <= 0}
+                      className={`px-2 py-1 rounded-md text-xs font-semibold transition-colors disabled:opacity-40 ${darkMode ? 'bg-[#1e2e33] hover:bg-[#0B5A70]/20 text-gray-200' : 'bg-[#0B5A70]/5 hover:bg-[#0B5A70]/10 text-[#0B5A70] border border-[#0B5A70]/12'}`}
+                      title="Slower" aria-label="Slower auto-scroll"
+                    >
+                      −
+                    </button>
+                    <span className={`text-xs w-9 text-center ${darkMode ? 'text-gray-400' : 'text-gray-500'}`} title="Scroll speed">{liveScrollSpeed}×</span>
+                    <button
+                      onClick={() => setLiveScrollSpeed(v => LIVE_SCROLL_STEPS[Math.min(LIVE_SCROLL_STEPS.length - 1, LIVE_SCROLL_STEPS.indexOf(v) + 1)])}
+                      disabled={LIVE_SCROLL_STEPS.indexOf(liveScrollSpeed) >= LIVE_SCROLL_STEPS.length - 1}
+                      className={`px-2 py-1 rounded-md text-xs font-semibold transition-colors disabled:opacity-40 ${darkMode ? 'bg-[#1e2e33] hover:bg-[#0B5A70]/20 text-gray-200' : 'bg-[#0B5A70]/5 hover:bg-[#0B5A70]/10 text-[#0B5A70] border border-[#0B5A70]/12'}`}
+                      title="Faster" aria-label="Faster auto-scroll"
+                    >
+                      +
+                    </button>
                   </div>
                   <pre
+                    onClick={toggleLiveAutoScroll}
+                    data-live-lyrics
                     className={`whitespace-pre-wrap text-lg leading-relaxed ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}
                     style={{
                       fontSize: `${readingSettings.fontSize}px`,
