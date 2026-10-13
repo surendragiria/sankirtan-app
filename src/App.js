@@ -1084,7 +1084,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.10.13.s76';
+const APP_VERSION = '2026.10.13.s77';
 const LIVE_SCROLL_STEPS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 
 // SESSION 30: log at startup so admin can verify which build is
@@ -1198,6 +1198,57 @@ const rankByTier = (list, foldedQuery) => {
     .map((b, i) => ({ b, i, t: searchTier(b, foldedQuery) }))
     .sort((x, y) => x.t - y.t || x.i - y.i)
     .map(x => x.b);
+};
+
+// SESSION 77: top-N title matches for the search dropdown.
+const titleSuggestions = (list, rawQuery, n = 5) => {
+  const q = foldSearchKey(rawQuery);
+  if (!q || q.length < 2) return [];
+  const out = [];
+  for (const b of list) {
+    if (searchTier(b, q) === 0) { out.push(b); if (out.length >= n) break; }
+  }
+  return out;
+};
+
+// SESSION 77: "Did you mean" — nearest titles by edit distance on the
+// folded key, for the zero-results state.
+const editDistance = (a, b) => {
+  if (a === b) return 0;
+  const m = a.length, n = b.length;
+  if (!m) return n; if (!n) return m;
+  let prev = Array.from({ length: n + 1 }, (_, j) => j);
+  for (let i = 1; i <= m; i++) {
+    const cur = [i];
+    for (let j = 1; j <= n; j++) {
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    }
+    prev = cur;
+  }
+  return prev[n];
+};
+const didYouMean = (list, rawQuery, n = 3) => {
+  const q = foldSearchKey(rawQuery);
+  if (!q || q.length < 3) return [];
+  const qWords = q.split(' ');
+  const scored = [];
+  for (const b of list) {
+    const idx = getSearchIndex(b);
+    if (!idx.title) continue;
+    // best word-level distance: each query word vs each title word
+    const tWords = idx.title.split(' ');
+    let total = 0;
+    for (const qw of qWords) {
+      let best = Infinity;
+      for (const tw of tWords) best = Math.min(best, editDistance(qw, tw));
+      total += best;
+    }
+    const budget = Math.max(1, Math.floor(q.replace(/ /g, '').length * 0.4));
+    if (total <= budget) scored.push({ b, d: total });
+  }
+  scored.sort((x, y) => x.d - y.d);
+  const seen = new Set();
+  return scored.filter(x => { const k = x.b.title; if (seen.has(k)) return false; seen.add(k); return true; }).slice(0, n).map(x => x.b);
 };
 
 const seededShuffle = (arr, seed) => {
@@ -3676,6 +3727,17 @@ const App = () => {
     : DEITY_OPTIONS;
   const allCategoryOptions = customCategories.length > 0 ? customCategories : CATEGORY_OPTIONS;
   const allKeywordOptions = customKeywords.length > 0 ? customKeywords : DEFAULT_KEYWORDS;
+  // SESSION 77: counts shown in the deity/type dropdowns ("Krishna (42)")
+  const countBy = (list, field) => {
+    const m = {};
+    for (const b of list) { const k = b[field]; if (k) m[k] = (m[k] || 0) + 1; }
+    return m;
+  };
+  const publicDeityCounts = useMemo(() => countBy(publicBhajans, 'deity'), [publicBhajans]);
+  const publicCategoryCounts = useMemo(() => countBy(publicBhajans, 'category'), [publicBhajans]);
+  const myDeityCounts = useMemo(() => countBy(bhajans, 'deity'), [bhajans]);
+  const myCategoryCounts = useMemo(() => countBy(bhajans, 'category'), [bhajans]);
+  const [searchFocus, setSearchFocus] = useState(null); // 'public' | 'library' | null
 
   // ==============================================
   // ONBOARDING TOUR FUNCTIONS
@@ -8421,6 +8483,8 @@ const App = () => {
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
+                    onFocus={() => setSearchFocus('library')}
+                    onBlur={() => setTimeout(() => setSearchFocus(f => (f === 'library' ? null : f)), 150)}
                     placeholder="Search bhajans…"
                     aria-label="Search my library"
                     className={`w-full pl-10 pr-24 py-3 border rounded-xl focus:ring-4 outline-none ${
@@ -8429,6 +8493,27 @@ const App = () => {
                         : 'bg-white border-[#0B5A70]/12 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30'
                     }`}
                   />
+                  {searchFocus === 'library' && searchQuery.trim().length >= 2 && (() => {
+                    const sug = titleSuggestions(bhajans, searchQuery);
+                    if (sug.length === 0) return null;
+                    return (
+                      <div
+                        onPointerDown={(e) => e.preventDefault()}
+                        className={`absolute left-0 right-0 top-full mt-1 rounded-xl border shadow-lg z-30 overflow-hidden ${darkMode ? 'bg-[#162226] border-[#0B5A70]/25' : 'bg-white border-[#0B5A70]/15'}`}
+                      >
+                        {sug.map(b => (
+                          <button
+                            key={b.id}
+                            onClick={() => { setSearchFocus(null); openBhajanDetail(b); }}
+                            className={`w-full text-left px-3 py-2 text-sm flex items-center gap-2 ${darkMode ? 'hover:bg-[#0B5A70]/20 text-gray-100' : 'hover:bg-[#0B5A70]/8 text-gray-900'}`}
+                          >
+                            <span className="truncate flex-1">{b.title}</span>
+                            <span className={`text-[11px] flex-shrink-0 ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>{b.deity}</span>
+                          </button>
+                        ))}
+                      </div>
+                    );
+                  })()}
                   <button
                     onClick={() => setSpeechLang(speechLang === 'en-IN' ? 'hi-IN' : 'en-IN')}
                     className={`absolute right-11 top-1/2 -translate-y-1/2 px-1.5 py-0.5 rounded text-[10px] font-bold border transition-colors ${
@@ -8487,7 +8572,7 @@ const App = () => {
                 >
                   <option value="">All deities</option>
                   {allDeityOptions.map(d => (
-                    <option key={d.value} value={d.value}>{d.value}</option>
+                    <option key={d.value} value={d.value}>{d.value}{myDeityCounts[d.value] ? ` (${myDeityCounts[d.value]})` : ''}</option>
                   ))}
                 </select>
                 <select
@@ -8498,7 +8583,7 @@ const App = () => {
                 >
                   <option value="">All types</option>
                   {allCategoryOptions.map(c => (
-                    <option key={c} value={c}>{c}</option>
+                    <option key={c} value={c}>{c}{myCategoryCounts[c] ? ` (${myCategoryCounts[c]})` : ''}</option>
                   ))}
                 </select>
               </div>
@@ -8586,6 +8671,20 @@ const App = () => {
                       <div className="text-4xl mb-3">🔍</div>
                       <p className="text-[#0B5A70] font-semibold">No bhajans match your filters</p>
                       <p className="text-sm text-gray-600 mt-1">Try adjusting your search or filters</p>
+                      {(() => {
+                        const dym = didYouMean(bhajans, searchQuery);
+                        if (dym.length === 0) return null;
+                        return (
+                          <div className="mt-3 flex flex-wrap justify-center gap-2 items-center">
+                            <span className="text-sm text-gray-600">Did you mean</span>
+                            {dym.map(b => (
+                              <button key={b.id} onClick={() => setSearchQuery((b.title || '').split(' / ')[0])} className="px-3 py-1 rounded-full text-sm font-semibold bg-[#E65100]/10 text-[#E65100] hover:bg-[#E65100]/20">
+                                {(b.title || '').split(' / ')[0]}
+                              </button>
+                            ))}
+                          </div>
+                        );
+                      })()}
                     </>
                   )}
                 </div>
@@ -10841,6 +10940,8 @@ const App = () => {
                     type="text"
                     value={publicSearchQuery}
                     onChange={(e) => setPublicSearchQuery(e.target.value)}
+                    onFocus={() => setSearchFocus('public')}
+                    onBlur={() => setTimeout(() => setSearchFocus(f => (f === 'public' ? null : f)), 150)}
                     placeholder="Search bhajans…"
                     aria-label="Search public library"
                     className={`w-full pl-10 pr-24 py-3 border rounded-xl focus:ring-4 outline-none ${
@@ -10849,6 +10950,27 @@ const App = () => {
                         : 'bg-white border-[#0B5A70]/12 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30'
                     }`}
                   />
+                  {searchFocus === 'public' && publicSearchQuery.trim().length >= 2 && (() => {
+                    const sug = titleSuggestions(publicBhajans, publicSearchQuery);
+                    if (sug.length === 0) return null;
+                    return (
+                      <div
+                        onPointerDown={(e) => e.preventDefault()}
+                        className={`absolute left-0 right-0 top-full mt-1 rounded-xl border shadow-lg z-30 overflow-hidden ${darkMode ? 'bg-[#162226] border-[#0B5A70]/25' : 'bg-white border-[#0B5A70]/15'}`}
+                      >
+                        {sug.map(b => (
+                          <button
+                            key={b.id}
+                            onClick={() => { setSearchFocus(null); openPublicBhajanDetail(b); }}
+                            className={`w-full text-left px-3 py-2 text-sm flex items-center gap-2 ${darkMode ? 'hover:bg-[#0B5A70]/20 text-gray-100' : 'hover:bg-[#0B5A70]/8 text-gray-900'}`}
+                          >
+                            <span className="truncate flex-1">{b.title}</span>
+                            <span className={`text-[11px] flex-shrink-0 ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>{b.deity}</span>
+                          </button>
+                        ))}
+                      </div>
+                    );
+                  })()}
                   <button
                     onClick={() => setSpeechLang(speechLang === 'en-IN' ? 'hi-IN' : 'en-IN')}
                     className={`absolute right-11 top-1/2 -translate-y-1/2 px-1.5 py-0.5 rounded text-[10px] font-bold border transition-colors ${
@@ -10917,7 +11039,7 @@ const App = () => {
                 >
                   <option value="">All deities</option>
                   {allDeityOptions.map(d => (
-                    <option key={d.value} value={d.value}>{d.value}</option>
+                    <option key={d.value} value={d.value}>{d.value}{publicDeityCounts[d.value] ? ` (${publicDeityCounts[d.value]})` : ''}</option>
                   ))}
                 </select>
                 <select
@@ -10928,7 +11050,7 @@ const App = () => {
                 >
                   <option value="">All types</option>
                   {allCategoryOptions.map(c => (
-                    <option key={c} value={c}>{c}</option>
+                    <option key={c} value={c}>{c}{publicCategoryCounts[c] ? ` (${publicCategoryCounts[c]})` : ''}</option>
                   ))}
                 </select>
               </div>
@@ -11035,6 +11157,20 @@ const App = () => {
                     <>
                       <div className="text-4xl mb-3">🔍</div>
                       <p className="text-[#0B5A70] font-semibold">No bhajans match your filters</p>
+                      {(() => {
+                        const dym = didYouMean(publicBhajans, publicSearchQuery);
+                        if (dym.length === 0) return null;
+                        return (
+                          <div className="mt-3 flex flex-wrap justify-center gap-2 items-center">
+                            <span className="text-sm text-gray-600">Did you mean</span>
+                            {dym.map(b => (
+                              <button key={b.id} onClick={() => setPublicSearchQuery((b.title || '').split(' / ')[0])} className="px-3 py-1 rounded-full text-sm font-semibold bg-[#E65100]/10 text-[#E65100] hover:bg-[#E65100]/20">
+                                {(b.title || '').split(' / ')[0]}
+                              </button>
+                            ))}
+                          </div>
+                        );
+                      })()}
                     </>
                   )}
                 </div>
