@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 
 // ==============================================
 // SANKIRTAN SAAS - SESSION 58
@@ -1083,7 +1084,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.10.13.s75';
+const APP_VERSION = '2026.10.13.s76';
 const LIVE_SCROLL_STEPS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 
 // SESSION 30: log at startup so admin can verify which build is
@@ -6344,6 +6345,7 @@ const App = () => {
       let row = `${i + 1}. ${b.title}`;
       if (b.dhun) row += `  (तर्ज़: ${b.dhun})`;
       if (b.scale) row += `  [${b.scale}]`;
+      if (program.singers && program.singers[id]) row += `  — 🎤 ${program.singers[id]}`;
       lines.push(row);
     });
     lines.push('', `${ids.length} bhajan${ids.length === 1 ? '' : 's'} · via sankirtan.app`);
@@ -6367,6 +6369,7 @@ const App = () => {
         purpose: pType === 'program' ? '' : (program.purpose || ''),
         type: program.type || pType,
         bhajanIds: [...(program.bhajanIds || [])],
+        singers: { ...(program.singers || {}) },
         ownerId: user.uid,
         ownerName: userProfile.displayName,
         bhajanCount: (program.bhajanIds || []).length,
@@ -6432,7 +6435,39 @@ const App = () => {
   // Edit form needed. Writes the new setlist immediately; the programs
   // onSnapshot listener keeps the list view in sync.
   const [setlistEditMode, setSetlistEditMode] = useState(false);
+  // SESSION 76: print/PDF job, singer-assignment editor
+  const [printJob, setPrintJob] = useState(null); // { program, withLyrics }
+  const [singerEditId, setSingerEditId] = useState(null);
+  const [singerDraft, setSingerDraft] = useState('');
+  useEffect(() => {
+    if (!printJob) return;
+    const t = setTimeout(() => { try { window.print(); } catch {} }, 400);
+    const done = () => setPrintJob(null);
+    window.addEventListener('afterprint', done);
+    return () => { clearTimeout(t); window.removeEventListener('afterprint', done); };
+  }, [printJob]);
   useEffect(() => { if (currentView !== 'program-detail') setSetlistEditMode(false); }, [currentView]);
+  // SESSION 76: who sings which bhajan — { [bhajanId]: name } on the program.
+  const persistSingers = async (program, singers) => {
+    if (!user || !program) return;
+    const updated = { ...program, singers };
+    setSelectedProgram(updated);
+    try {
+      await window.firebase.firestore()
+        .collection('users').doc(user.uid).collection('programs').doc(program.id)
+        .update({ singers, updatedAt: window.firebase.firestore.FieldValue.serverTimestamp() });
+    } catch (e) {
+      showToast('Could not save singer — check your connection', 'error');
+    }
+  };
+  const setSingerFor = (program, bhajanId, name) => {
+    const singers = { ...(program.singers || {}) };
+    const n = (name || '').trim();
+    if (n) singers[bhajanId] = n; else delete singers[bhajanId];
+    setSingerEditId(null);
+    persistSingers(program, singers);
+  };
+
   const persistSetlist = async (program, newIds) => {
     if (!user || !program) return;
     const updated = { ...program, bhajanIds: newIds, bhajanCount: newIds.length };
@@ -6844,6 +6879,51 @@ const App = () => {
   );
 
   // Toast — success (teal) / error (red)
+  // SESSION 76: print sheet — rendered into <body> and shown only in
+  // @media print (index.css). The browser's own Devanagari shaping and
+  // "Save as PDF" do the rest; no PDF library needed.
+  const printJsx = printJob && createPortal(
+    <div id="sk-print">
+      <h1>{printJob.program.name}</h1>
+      <p className="sk-print-meta">
+        {[printJob.program.date ? formatProgramDate(printJob.program.date) : '', printJob.program.venue, printJob.program.purpose].filter(Boolean).join(' · ')}
+        {(printJob.program.bhajanIds || []).length ? ` · ${(printJob.program.bhajanIds || []).length} bhajans` : ''}
+      </p>
+      {printJob.withLyrics ? (
+        (printJob.program.bhajanIds || []).map((id, i) => {
+          const b = getBhajanById(id);
+          if (!b) return null;
+          return (
+            <section key={id} className="sk-print-bhajan">
+              <h2>{i + 1}. {b.title}</h2>
+              <p className="sk-print-sub">
+                {[b.dhun ? `तर्ज़: ${b.dhun}` : '', b.scale ? `🎵 ${b.scale}` : '', printJob.program.singers && printJob.program.singers[id] ? `🎤 ${printJob.program.singers[id]}` : ''].filter(Boolean).join('  ·  ')}
+              </p>
+              <pre>{b.lyrics}</pre>
+            </section>
+          );
+        })
+      ) : (
+        <ol>
+          {(printJob.program.bhajanIds || []).map((id) => {
+            const b = getBhajanById(id);
+            if (!b) return null;
+            return (
+              <li key={id}>
+                <span className="sk-print-title">{b.title}</span>
+                <span className="sk-print-sub">
+                  {[b.dhun ? `तर्ज़: ${b.dhun}` : '', b.scale ? `🎵 ${b.scale}` : '', printJob.program.singers && printJob.program.singers[id] ? `🎤 ${printJob.program.singers[id]}` : ''].filter(Boolean).join('  ·  ')}
+                </span>
+              </li>
+            );
+          })}
+        </ol>
+      )}
+      <p className="sk-print-foot">संकीर्तन · sankirtan.app</p>
+    </div>,
+    document.body
+  );
+
   const toastJsx = toast && (
     <div
       className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[105] pointer-events-none px-4 max-w-full"
@@ -7105,7 +7185,7 @@ const App = () => {
     return (
       <div className={`min-h-screen ${liveBg}`} onTouchStart={liveSwipe.onTouchStart} onTouchEnd={liveSwipe.onTouchEnd}>
         {confirmDialogJsx}
-        {toastJsx}
+        {toastJsx}{printJsx}
         {/* Live Header */}
         <div className={`sticky top-0 z-40 border-b ${liveHeaderBg}`}>
           <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
@@ -7119,6 +7199,9 @@ const App = () => {
             <div className="text-center flex-1 mx-4">
               <p className={`text-xs font-semibold ${liveMutedColor}`}>🎤 LIVE PROGRAM</p>
               <p className={`text-sm font-bold truncate ${liveTitleColor}`}>{selectedProgram.name}</p>
+              {selectedProgram.singers && selectedProgram.singers[currentBhajanId] && (
+                <p className={`text-xs font-semibold truncate ${darkMode ? 'text-orange-300' : 'text-[#E65100]'}`}>🎤 {selectedProgram.singers[currentBhajanId]}</p>
+              )}
             </div>
             <div className="text-right">
               <p className={`text-xs ${liveMutedGray}`}>Bhajan</p>
@@ -7313,6 +7396,7 @@ const App = () => {
               <p className="text-xs truncate">
                 <span className={`font-semibold ${darkMode ? 'text-orange-300' : 'text-[#E65100]'}`}>Up next · </span>
                 <span className="font-semibold">{nextBhajan.title}</span>
+                {selectedProgram.singers && selectedProgram.singers[nextBhajan.id] && <span className={liveMutedGray}> · 🎤 {selectedProgram.singers[nextBhajan.id]}</span>}
                 {nextBhajan.dhun && <span className={liveMutedGray}> · तर्ज़: {nextBhajan.dhun}</span>}
                 {nextBhajan.scale && <span className={liveMutedGray}> · 🎵 {nextBhajan.scale}</span>}
               </p>
@@ -7401,7 +7485,7 @@ const App = () => {
     if (deepLinkResolving) {
       return (
         <div className={`min-h-screen flex items-center justify-center p-6 ${darkMode ? 'bg-[#0f1a1c] text-gray-100' : 'bg-[#FFF8F0]'}`}>
-          {toastJsx}
+          {toastJsx}{printJsx}
           <div className="max-w-sm w-full text-center">
             <SankirtanWordmark className="h-14 mb-6 justify-center" />
             <div className={`inline-block w-10 h-10 border-3 rounded-full animate-spin mb-4 ${darkMode ? 'border-[#0B5A70]/30 border-t-[#E65100]' : 'border-[#0B5A70]/20 border-t-[#E65100]'}`}
@@ -7434,7 +7518,7 @@ const App = () => {
     return (
       <div className={`min-h-screen ${darkMode ? 'bg-[#0f1a1c] text-gray-100' : 'bg-[#FFF8F0]'}`}>
         {confirmDialogJsx}
-        {toastJsx}
+        {toastJsx}{printJsx}
 
         {/* ONBOARDING TOUR MODAL */}
         {showOnboarding && currentStep && (
@@ -9783,9 +9867,21 @@ const App = () => {
                           </button>
                           <button
                             onClick={() => { setShowDeleteMenu(null); duplicateProgram(selectedProgram); }}
-                            className={`w-full text-left px-4 py-2.5 text-sm flex items-center gap-2 transition-colors border-b ${darkMode ? 'hover:bg-[#0B5A70]/20 text-gray-200 border-[#0B5A70]/20' : 'hover:bg-[#0B5A70]/8 text-gray-800 border-[#0B5A70]/10'}`}
+                            className={`w-full text-left px-4 py-2.5 text-sm flex items-center gap-2 transition-colors ${darkMode ? 'hover:bg-[#0B5A70]/20 text-gray-200' : 'hover:bg-[#0B5A70]/8 text-gray-800'}`}
                           >
                             📋 <span>Duplicate {getProgramType(selectedProgram) === 'parody' ? 'medley' : getProgramType(selectedProgram) === 'playlist' ? 'playlist' : 'program'}</span>
+                          </button>
+                          <button
+                            onClick={() => { setShowDeleteMenu(null); setPrintJob({ program: selectedProgram, withLyrics: false }); }}
+                            className={`w-full text-left px-4 py-2.5 text-sm flex items-center gap-2 transition-colors ${darkMode ? 'hover:bg-[#0B5A70]/20 text-gray-200' : 'hover:bg-[#0B5A70]/8 text-gray-800'}`}
+                          >
+                            🖨️ <span>Print / PDF — list</span>
+                          </button>
+                          <button
+                            onClick={() => { setShowDeleteMenu(null); setPrintJob({ program: selectedProgram, withLyrics: true }); }}
+                            className={`w-full text-left px-4 py-2.5 text-sm flex items-center gap-2 transition-colors border-b ${darkMode ? 'hover:bg-[#0B5A70]/20 text-gray-200 border-[#0B5A70]/20' : 'hover:bg-[#0B5A70]/8 text-gray-800 border-[#0B5A70]/10'}`}
+                          >
+                            🖨️ <span>Print / PDF — with lyrics</span>
                           </button>
                           <button
                             onClick={() => { setShowDeleteMenu(null); deleteProgram(selectedProgram); }}
@@ -9890,7 +9986,7 @@ const App = () => {
                         : (darkMode ? 'bg-[#1e2e33] text-gray-300 hover:bg-[#0B5A70]/20' : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15')}`}
                       aria-pressed={setlistEditMode}
                     >
-                      {setlistEditMode ? '✓ Done' : '⇅ Reorder'}
+                      {setlistEditMode ? '✓ Done' : '⇅ Reorder · 🎤'}
                     </button>
                   )}
                 </div>
@@ -9989,15 +10085,38 @@ const App = () => {
                             {bhajan.dhun && (
                               <p className="text-xs text-[#0B5A70]/60 truncate">तर्ज़: {bhajan.dhun}</p>
                             )}
-                            <div className="flex gap-1 mt-1">
+                            <div className="flex gap-1 mt-1 flex-wrap">
                               <span className="text-xs bg-[#0B5A70]/8 text-[#0B5A70] px-2 py-0.5 rounded-full">
                                 {bhajan.deity}
                               </span>
+                              {selectedProgram.singers && selectedProgram.singers[bhajanId] && (
+                                <span className="text-xs bg-[#E65100]/10 text-[#E65100] px-2 py-0.5 rounded-full">
+                                  🎤 {selectedProgram.singers[bhajanId]}
+                                </span>
+                              )}
                             </div>
                           </div>
                         </>
                       );
                       if (setlistEditMode) {
+                        // SESSION 76: singer assignment editor
+                        if (singerEditId === bhajanId) {
+                          return (
+                            <div key={bhajanId} className="w-full bg-[#FFFCF8] rounded-xl p-3 border border-[#E65100]/30 flex items-center gap-2">
+                              <span className="text-lg">🎤</span>
+                              <input
+                                autoFocus
+                                value={singerDraft}
+                                onChange={(e) => setSingerDraft(e.target.value)}
+                                onKeyDown={(e) => { if (e.key === 'Enter') setSingerFor(selectedProgram, bhajanId, singerDraft); if (e.key === 'Escape') setSingerEditId(null); }}
+                                placeholder={`Who sings "${(bhajan.title || '').split(' / ')[0]}"?`}
+                                className="flex-1 min-w-0 px-3 py-2 rounded-lg border border-[#0B5A70]/20 text-sm outline-none bg-white text-gray-900"
+                              />
+                              <button type="button" onClick={() => setSingerFor(selectedProgram, bhajanId, singerDraft)} className="px-3 py-2 rounded-lg text-xs font-bold bg-[#E65100] text-white">Save</button>
+                              <button type="button" onClick={() => setSingerEditId(null)} className="px-2 py-2 text-xs text-gray-500">✕</button>
+                            </div>
+                          );
+                        }
                         // SESSION 67: reorder/remove controls, saved instantly
                         const ctl = 'w-9 h-9 rounded-lg flex items-center justify-center text-base font-bold transition-colors disabled:opacity-25';
                         return (
@@ -10007,6 +10126,7 @@ const App = () => {
                           >
                             {rowBody}
                             <div className="flex items-center gap-1 flex-shrink-0">
+                              <button type="button" onClick={() => { setSingerDraft((selectedProgram.singers || {})[bhajanId] || ''); setSingerEditId(bhajanId); }} className={`${ctl} bg-[#E65100]/10 text-[#E65100] hover:bg-[#E65100]/20`} aria-label={`Assign singer for ${bhajan.title}`} title="Assign singer">🎤</button>
                               <button type="button" onClick={() => moveInSetlist(selectedProgram, index, -1)} disabled={index === 0} className={`${ctl} bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15`} aria-label={`Move ${bhajan.title} up`}>↑</button>
                               <button type="button" onClick={() => moveInSetlist(selectedProgram, index, 1)} disabled={index === total - 1} className={`${ctl} bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15`} aria-label={`Move ${bhajan.title} down`}>↓</button>
                               <button type="button" onClick={() => removeFromSetlist(selectedProgram, bhajanId)} className={`${ctl} bg-red-50 text-red-600 hover:bg-red-100`} aria-label={`Remove ${bhajan.title}`}>✕</button>
@@ -10085,6 +10205,36 @@ const App = () => {
                     return editing ? `✏️ Edit ${noun}` : `➕ Create New ${noun}`;
                   })()}
                 </h2>
+
+                {/* SESSION 76: start from a past program/playlist — copies
+                    its setlist (and venue) into the new form. */}
+                {currentView === 'create-program' && programForm.type !== 'parody' && programs.some(pr => getProgramType(pr) !== 'parody' && (pr.bhajanIds || []).length > 0) && (
+                  <div className="mb-5">
+                    <label className={fLabel}>Start from a past program (optional)</label>
+                    <select
+                      defaultValue=""
+                      onChange={(e) => {
+                        const src = programs.find(pr => pr.id === e.target.value);
+                        if (!src) return;
+                        setProgramForm(f => ({
+                          ...f,
+                          bhajanIds: [...(src.bhajanIds || [])],
+                          venue: f.venue || src.venue || '',
+                          name: f.name || src.name
+                        }));
+                        showToast(`📋 ${(src.bhajanIds || []).length} bhajans copied from "${src.name}"`);
+                      }}
+                      className={fInput}
+                    >
+                      <option value="">— choose to copy its bhajans —</option>
+                      {programs.filter(pr => getProgramType(pr) !== 'parody' && (pr.bhajanIds || []).length > 0).map(pr => (
+                        <option key={pr.id} value={pr.id}>
+                          {pr.name}{pr.date ? ` · ${formatProgramDate(pr.date)}` : ''} · {(pr.bhajanIds || []).length} bhajans
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
 
                 {/* SESSION 32/36: type toggle. Three options — Playlist,
                     Program, Parody. Switching type doesn't clear the
@@ -12724,7 +12874,7 @@ const App = () => {
   return (
     <div className="min-h-screen bg-[#FFF8F0] flex items-center justify-center p-4">
       {confirmDialogJsx}
-      {toastJsx}
+      {toastJsx}{printJsx}
       {isOffline && (
         <div className="fixed top-0 left-0 right-0 bg-red-500 text-white px-4 py-2 text-center text-sm font-semibold z-50 shadow-md">
           <span className="inline-flex items-center gap-2">

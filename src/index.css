@@ -14,3 +14,22 @@ body {
 html {
   scroll-behavior: smooth;
 }
+
+/* SESSION 76: program print sheet (Print / PDF from the program menu) */
+#sk-print { display: none; }
+@media print {
+  #root { display: none !important; }
+  body { background: #fff !important; overscroll-behavior: auto; }
+  #sk-print { display: block; color: #111; font-family: 'Noto Sans Devanagari', 'Inter', system-ui, sans-serif; padding: 0; }
+  #sk-print h1 { font-size: 22pt; margin: 0 0 4pt; color: #0B5A70; }
+  #sk-print .sk-print-meta { font-size: 11pt; color: #444; margin: 0 0 14pt; }
+  #sk-print ol { padding-left: 22pt; margin: 0; }
+  #sk-print li { margin: 0 0 8pt; font-size: 13pt; break-inside: avoid; }
+  #sk-print .sk-print-title { font-weight: 700; display: block; }
+  #sk-print .sk-print-sub { font-size: 10pt; color: #555; display: block; }
+  #sk-print .sk-print-bhajan { break-inside: avoid; page-break-inside: avoid; margin: 0 0 18pt; }
+  #sk-print .sk-print-bhajan h2 { font-size: 15pt; margin: 0 0 2pt; color: #0B5A70; }
+  #sk-print pre { white-space: pre-wrap; font: 12pt/1.6 'Noto Sans Devanagari', 'Inter', system-ui, sans-serif; margin: 6pt 0 0; }
+  #sk-print .sk-print-foot { font-size: 9pt; color: #888; margin-top: 18pt; }
+  @page { margin: 16mm; }
+}
