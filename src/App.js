@@ -1083,7 +1083,8 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.10.12.s72';
+const APP_VERSION = '2026.10.13.s73';
+const LIVE_SCROLL_STEPS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 
 // SESSION 30: log at startup so admin can verify which build is
 // running via the browser console (helps diagnose "is my new
@@ -2461,8 +2462,14 @@ const App = () => {
   // scaled); any touch / wheel / key pauses it so the singer can grab the
   // page; it stops by itself at the bottom.
   const [liveAutoScroll, setLiveAutoScroll] = useState(false);
+  // SESSION 73: speed steps now go below 1× (0.25× ≈ 7 px/s for slow
+  // bhajans). Stored as the multiplier; unknown values snap to nearest.
   const [liveScrollSpeed, setLiveScrollSpeed] = useState(() => {
-    try { const v = Number(localStorage.getItem('sankirtan-live-scroll-speed')); return v >= 1 && v <= 5 ? v : 2; } catch { return 2; }
+    try {
+      const v = Number(localStorage.getItem('sankirtan-live-scroll-speed'));
+      if (!(v > 0)) return 1;
+      return LIVE_SCROLL_STEPS.reduce((best, x) => Math.abs(x - v) < Math.abs(best - v) ? x : best, 1);
+    } catch { return 1; }
   });
   useEffect(() => { try { localStorage.setItem('sankirtan-live-scroll-speed', String(liveScrollSpeed)); } catch {} }, [liveScrollSpeed]);
   useEffect(() => {
@@ -2476,7 +2483,7 @@ const App = () => {
     const htmlStyle = document.documentElement.style;
     const prevBehavior = htmlStyle.scrollBehavior;
     htmlStyle.scrollBehavior = 'auto';
-    const pxPerSec = 12 + liveScrollSpeed * 12; // 24 … 72 px/s
+    const pxPerSec = 28 * liveScrollSpeed; // 0.25× = 7 px/s … 4× = 112 px/s
     const step = (now) => {
       const dt = Math.min(100, now - last);
       last = now;
@@ -2484,7 +2491,7 @@ const App = () => {
       const whole = Math.floor(acc);
       if (whole >= 1) {
         acc -= whole;
-        window.scrollBy({ top: whole, left: 0, behavior: 'instant' });
+        window.scrollTo(0, window.scrollY + whole);
       }
       const atBottom = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2;
       if (atBottom) { setLiveAutoScroll(false); return; }
@@ -7090,21 +7097,21 @@ const App = () => {
               {liveAutoScroll ? '⏸ Scroll' : '▶ Scroll'}
             </button>
             <button
-              onClick={() => setLiveScrollSpeed(v => Math.max(1, v - 1))}
-              className={`w-8 h-8 rounded-lg font-bold ${liveBtnMuted}`}
+              onClick={() => setLiveScrollSpeed(v => LIVE_SCROLL_STEPS[Math.max(0, LIVE_SCROLL_STEPS.indexOf(v) - 1)])}
+              className={`w-8 h-8 rounded-lg font-bold ${liveBtnMuted} disabled:opacity-40`}
               title="Slower"
               aria-label="Slower auto-scroll"
-              disabled={liveScrollSpeed <= 1}
+              disabled={LIVE_SCROLL_STEPS.indexOf(liveScrollSpeed) <= 0}
             >
               −
             </button>
-            <span className={`text-xs min-w-[28px] text-center ${liveMutedGray}`} title="Scroll speed">{liveScrollSpeed}×</span>
+            <span className={`text-xs min-w-[34px] text-center ${liveMutedGray}`} title="Scroll speed">{liveScrollSpeed}×</span>
             <button
-              onClick={() => setLiveScrollSpeed(v => Math.min(5, v + 1))}
-              className={`w-8 h-8 rounded-lg font-bold ${liveBtnMuted}`}
+              onClick={() => setLiveScrollSpeed(v => LIVE_SCROLL_STEPS[Math.min(LIVE_SCROLL_STEPS.length - 1, LIVE_SCROLL_STEPS.indexOf(v) + 1)])}
+              className={`w-8 h-8 rounded-lg font-bold ${liveBtnMuted} disabled:opacity-40`}
               title="Faster"
               aria-label="Faster auto-scroll"
-              disabled={liveScrollSpeed >= 5}
+              disabled={LIVE_SCROLL_STEPS.indexOf(liveScrollSpeed) >= LIVE_SCROLL_STEPS.length - 1}
             >
               +
             </button>
@@ -10529,38 +10536,6 @@ const App = () => {
                   </button>
                 </div>
               )}
-
-              {/* SESSION 62: Recently opened — the fastest route back to
-                  yesterday's bhajan. Hidden while searching/filtering. */}
-              {recentlyRead.length > 0 && !publicSearchQuery && !publicFilterDeity && !publicFilterCategory && !publicFilterKeyword && (() => {
-                const items = recentlyRead.map(r => {
-                  const pub = publicBhajans.find(b => b.id === r.id);
-                  if (pub) return { key: r.id, b: pub, open: () => openPublicBhajanDetail(pub) };
-                  const mine = user ? bhajans.find(b => b.id === r.id) : null;
-                  if (mine) return { key: r.id, b: mine, open: () => openBhajanDetail(mine) };
-                  return null;
-                }).filter(Boolean).slice(0, 5);
-                if (items.length === 0) return null;
-                return (
-                  <div className="mb-3">
-                    <p className={`text-[11px] font-semibold uppercase tracking-wide mb-1.5 ${darkMode ? 'text-gray-500' : 'text-[#0B5A70]/60'}`}>
-                      🕐 Recently opened
-                    </p>
-                    <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
-                      {items.map(({ key, b, open }) => (
-                        <button
-                          key={key}
-                          onClick={open}
-                          className={`flex-shrink-0 px-3 py-1.5 rounded-xl border text-left transition-colors max-w-[170px] ${darkMode ? 'bg-[#162226] border-[#0B5A70]/15 hover:border-[#0B5A70]/30' : 'bg-[#FFFCF8] border-[#0B5A70]/8 hover:border-[#0B5A70]/25'}`}
-                        >
-                          <p className={`text-xs font-bold truncate ${darkMode ? 'text-amber-100' : 'text-[#0B5A70]'}`}>{(b.title || '').split(' / ')[0]}</p>
-                          <p className="text-[10px] text-gray-500 truncate">{b.deity}{b.category ? ` · ${b.category}` : ''}</p>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })()}
 
               {/* SESSION 48: +Add (admin) merged into the search row — was
                   a standalone strip that sat empty for regular users. */}
