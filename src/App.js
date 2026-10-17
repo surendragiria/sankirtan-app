@@ -1084,7 +1084,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.10.17.s84';
+const APP_VERSION = '2026.10.17.s85';
 const AUTO_SCROLL_VIEWS = ['live-program', 'bhajan-detail', 'public-bhajan-detail'];
 const LIVE_SCROLL_STEPS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 
@@ -2596,13 +2596,20 @@ const App = () => {
     if (rawBhajans.length === 0 || publicBhajans.length === 0) return rawBhajans;
     const pub = new Map(publicBhajans.map(b => [b.id, b]));
     const INHERIT = ['source', 'dhun', 'scale', 'singer', 'lyricist'];
+    const FOLLOW = ['title', 'lyrics', 'deity', 'category', 'dhun', 'scale', 'singer', 'lyricist', 'keywords', 'source', 'language'];
     let changed = false;
     const out = rawBhajans.map(b => {
       const src = b.savedFromPublicId ? pub.get(b.savedFromPublicId) : null;
       if (!src) return b;
       let m = null;
+      // SESSION 85: public corrections flow into copies the user hasn't
+      // edited themselves (admin chose "apply to personal libraries").
+      if (!b.textEdited && (src.pushRev || 0) > (b.baseRev || 0)) {
+        m = { ...b, needsSync: true, baseRev: src.pushRev };
+        for (const f of FOLLOW) { if (src[f] !== undefined) m[f] = src[f]; }
+      }
       for (const f of INHERIT) {
-        if (!b[f] && src[f]) { m = m || { ...b }; m[f] = src[f]; }
+        if (!(m || b)[f] && src[f]) { m = m || { ...b }; m[f] = src[f]; }
       }
       if ((!b.keywords || b.keywords.length === 0) && src.keywords && src.keywords.length) { m = m || { ...b }; m.keywords = src.keywords; }
       if (m) changed = true;
@@ -2652,6 +2659,8 @@ const App = () => {
   const [libraryFilterKeyword, setLibraryFilterKeyword] = useState('');
   // SESSION 75: ⭐ Starred filter in My Library, and the notes editor.
   const [libraryStarredOnly, setLibraryStarredOnly] = useState(false);
+  // SESSION 85: admin review workflow
+  const [unreviewedOnly, setUnreviewedOnly] = useState(false);
   const [notesDraft, setNotesDraft] = useState(null); // null = not editing
   const [publicFilterDeity, setPublicFilterDeity] = useState('');
   const [publicFilterCategory, setPublicFilterCategory] = useState('');
@@ -2699,7 +2708,9 @@ const App = () => {
     singer: '',       // SESSION 11
     lyricist: '',     // SESSION 11
     keywords: [],
-    source: ''
+    source: '',
+    reviewed: false,
+    applyToCopies: true
   });
   const [publicBhajanFormError, setPublicBhajanFormError] = useState('');
   const [publicBhajanFormSaving, setPublicBhajanFormSaving] = useState(false);
@@ -4844,6 +4855,11 @@ const App = () => {
       const bhajansRef = db.collection('users').doc(user.uid).collection('bhajans');
 
       if (editingBhajan) {
+        // SESSION 85: a copy whose title/lyrics the user changed becomes a
+        // "fork" — public corrections no longer overwrite it.
+        if (editingBhajan.savedFromPublicId && (bhajanData.title !== (editingBhajan.title || '').trim() || bhajanData.lyrics !== (editingBhajan.lyrics || '').trim())) {
+          bhajanData.textEdited = true;
+        }
         await bhajansRef.doc(editingBhajan.id).update(bhajanData);
         setSelectedBhajan({ ...editingBhajan, ...bhajanData });
         setCurrentView('bhajan-detail');
@@ -4938,10 +4954,17 @@ const App = () => {
       const db = window.firebase.firestore();
       // Personal viewCount — only when the user owns a copy (SESSION 83)
       if (!bhajan.virtual) {
-        await db.collection('users').doc(user.uid).collection('bhajans').doc(bhajan.id).update({
+        const patch = {
           viewCount: window.firebase.firestore.FieldValue.increment(1),
           lastActive: window.firebase.firestore.FieldValue.serverTimestamp()
-        });
+        };
+        // SESSION 85: persist public corrections into the copy so the
+        // stored document matches what the user sees.
+        if (bhajan.needsSync) {
+          ['title', 'lyrics', 'deity', 'category', 'dhun', 'scale', 'singer', 'lyricist', 'keywords', 'source', 'language'].forEach(f => { if (bhajan[f] !== undefined) patch[f] = bhajan[f]; });
+          patch.baseRev = bhajan.baseRev || 0;
+        }
+        await db.collection('users').doc(user.uid).collection('bhajans').doc(bhajan.id).update(patch);
       }
 
       // SESSION 40: if this personal bhajan originated from a
@@ -5516,6 +5539,7 @@ const App = () => {
         visibility: 'private',
         viewCount: 0,
         savedFromPublicId: publicBhajan.id,
+        baseRev: publicBhajan.rev || 0,
         createdAt: window.firebase.firestore.FieldValue.serverTimestamp(),
         updatedAt: window.firebase.firestore.FieldValue.serverTimestamp(),
         lastActive: window.firebase.firestore.FieldValue.serverTimestamp()
@@ -5570,6 +5594,7 @@ const App = () => {
   const filteredPublicBhajans = useMemo(() => {
     const q = foldSearchKey(debouncedPublicSearch);
     const filtered = publicBhajans.filter(bhajan => {
+      if (unreviewedOnly && bhajan.reviewStatus === 'reviewed') return false;
       if (q && searchTier(bhajan, q) < 0) return false;
       if (publicFilterDeity && bhajan.deity !== publicFilterDeity) return false;
       if (publicFilterCategory && bhajan.category !== publicFilterCategory) return false;
@@ -5584,7 +5609,7 @@ const App = () => {
     // saveCount) — this shuffle only affects the main grid below it.
     // SESSION 71: when searching, title matches come first.
     return rankByTier(seededShuffle(filtered, shuffleSeed), q);
-  }, [publicBhajans, debouncedPublicSearch, publicFilterDeity, publicFilterCategory, publicFilterKeyword, shuffleSeed]);
+  }, [publicBhajans, debouncedPublicSearch, publicFilterDeity, publicFilterCategory, publicFilterKeyword, shuffleSeed, unreviewedOnly]);
 
 
 
@@ -5594,6 +5619,11 @@ const App = () => {
     const q = foldSearchKey(debouncedSearchQuery);
     const filtered = bhajans.filter(bhajan => {
       if (libraryStarredOnly && !bhajan.starred) return false;
+      if (unreviewedOnly) {
+        const pubId = bhajan.savedFromPublicId || bhajan.id;
+        const pb = publicBhajans.find(x => x.id === pubId);
+        if (!pb || pb.reviewStatus === 'reviewed') return false;
+      }
       if (q && searchTier(bhajan, q) < 0) return false;
       if (filterDeity && bhajan.deity !== filterDeity) return false;
       if (filterCategory && bhajan.category !== filterCategory) return false;
@@ -5615,7 +5645,7 @@ const App = () => {
     });
     // SESSION 71: when searching, title matches come first.
     return rankByTier(sorted, q);
-  }, [bhajans, libraryStarredOnly, debouncedSearchQuery, filterDeity, filterCategory, libraryFilterKeyword]);
+  }, [bhajans, libraryStarredOnly, unreviewedOnly, publicBhajans, debouncedSearchQuery, filterDeity, filterCategory, libraryFilterKeyword]);
 
   const filteredPrograms = useMemo(() => {
     if (!programSearchQuery) return programs;
@@ -5841,11 +5871,38 @@ const App = () => {
       singer: bhajan.singer || '',      // SESSION 11
       lyricist: bhajan.lyricist || '',  // SESSION 11
       keywords: bhajan.keywords || [],
-      source: bhajan.source || ''
+      source: bhajan.source || '',
+      reviewed: bhajan.reviewStatus === 'reviewed',
+      applyToCopies: true
     });
     setEditingPublicBhajan(bhajan);
     setPublicBhajanFormError('');
     setShowPublicBhajanForm(true);
+  };
+
+  // SESSION 85: one-tap review flag (admin). Works from any page that
+  // shows a public bhajan or a library entry backed by one.
+  const toggleReviewed = async (bhajan) => {
+    if (!isAdmin || !bhajan) return;
+    const pubId = bhajan.savedFromPublicId || bhajan.id;
+    const pub = publicBhajans.find(b => b.id === pubId);
+    if (!pub) { showToast('Not a public bhajan', 'error'); return; }
+    const next = pub.reviewStatus === 'reviewed' ? 'draft' : 'reviewed';
+    try {
+      await window.firebase.firestore().collection('publicBhajans').doc(pubId).update({
+        reviewStatus: next,
+        reviewedAt: next === 'reviewed' ? window.firebase.firestore.FieldValue.serverTimestamp() : null
+      });
+      if (selectedPublicBhajan && selectedPublicBhajan.id === pubId) setSelectedPublicBhajan(prev => ({ ...prev, reviewStatus: next }));
+      showToast(next === 'reviewed' ? '✓ Marked reviewed' : 'Marked as needs review');
+    } catch (e) {
+      showToast('Could not update: ' + e.message, 'error');
+    }
+  };
+  const isReviewed = (bhajan) => {
+    if (!bhajan) return false;
+    const pub = publicBhajans.find(b => b.id === (bhajan.savedFromPublicId || bhajan.id));
+    return !!pub && pub.reviewStatus === 'reviewed';
   };
 
   const savePublicBhajan = async () => {
@@ -5879,6 +5936,18 @@ const App = () => {
         addedByUid: user.uid,
         updatedAt: window.firebase.firestore.FieldValue.serverTimestamp()
       };
+      // SESSION 85: revision tracking. rev bumps on every save; pushRev is
+      // raised to rev only when the admin chooses "apply to personal
+      // libraries" — personal copies follow the public text while their
+      // baseRev < pushRev and the user hasn't edited the text themselves.
+      const prevRev = editingPublicBhajan ? (editingPublicBhajan.rev || 0) : 0;
+      const nextRev = prevRev + 1;
+      bhajanData.rev = nextRev;
+      bhajanData.pushRev = publicBhajanForm.applyToCopies ? nextRev : (editingPublicBhajan ? (editingPublicBhajan.pushRev || 0) : nextRev);
+      bhajanData.reviewStatus = publicBhajanForm.reviewed ? 'reviewed' : 'draft';
+      if (publicBhajanForm.reviewed && !(editingPublicBhajan && editingPublicBhajan.reviewStatus === 'reviewed')) {
+        bhajanData.reviewedAt = window.firebase.firestore.FieldValue.serverTimestamp();
+      }
 
       if (editingPublicBhajan) {
         await db.collection('publicBhajans').doc(editingPublicBhajan.id).update(bhajanData);
@@ -8237,6 +8306,20 @@ const App = () => {
               {/* SESSION 51: all moods, horizontally scrollable. */}
               <div className="mb-6 -mx-4 px-4 overflow-x-auto [&::-webkit-scrollbar]:hidden" style={{scrollbarWidth: 'none'}}>
                 <div className="flex flex-nowrap gap-2 items-center">
+                  {isAdmin && (
+                    <button
+                      onClick={() => setUnreviewedOnly(v => !v)}
+                      aria-pressed={unreviewedOnly}
+                      className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all border flex-shrink-0 ${
+                        unreviewedOnly
+                          ? 'bg-purple-700 text-white border-purple-700 shadow-md'
+                          : (darkMode ? 'bg-transparent text-purple-200 border-purple-400/40' : 'bg-white text-purple-700 border-purple-300')
+                      }`}
+                      title="Admin: show only bhajans not yet reviewed"
+                    >
+                      🔍 Unreviewed {publicBhajans.filter(b => b.reviewStatus !== 'reviewed').length}
+                    </button>
+                  )}
                   {/* SESSION 75: Starred filter */}
                   <button
                     onClick={() => setLibraryStarredOnly(v => !v)}
@@ -8435,6 +8518,16 @@ const App = () => {
                     : 'Back'}
                 </button>
                 <div className="flex items-center gap-1.5">
+                  {isAdmin && (
+                    <button
+                      onClick={() => toggleReviewed(selectedBhajan)}
+                      className={`h-9 px-3 rounded-full text-xs font-semibold flex items-center gap-1 transition-colors ${isReviewed(selectedBhajan) ? 'bg-green-100 text-green-800' : 'bg-purple-100 text-purple-800 hover:bg-purple-200'}`}
+                      title={isReviewed(selectedBhajan) ? 'Reviewed — tap to mark as needs review' : 'Mark as reviewed & finalised'}
+                      aria-pressed={isReviewed(selectedBhajan)}
+                    >
+                      {isReviewed(selectedBhajan) ? '✓ Reviewed' : 'Review ✓'}
+                    </button>
+                  )}
                   <button
                     onClick={() => toggleStarred(selectedBhajan)}
                     className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors ${selectedBhajan.starred ? 'bg-[#E65100]/15 text-[#E65100]' : (darkMode ? 'bg-[#1e2e33] text-gray-300 hover:bg-[#0B5A70]/20' : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15')}`}
@@ -8478,6 +8571,16 @@ const App = () => {
                       into an overflow menu. Same behavior; less visual weight
                       — destructive actions shouldn't share space with routine
                       Edit/View/Add-to buttons. */}
+                  {selectedBhajan.virtual && isAdmin && (
+                    <button
+                      onClick={() => openEditPublicBhajan(publicBhajans.find(b => b.id === selectedBhajan.id) || selectedBhajan)}
+                      className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors ${darkMode ? 'bg-purple-900/40 text-purple-200' : 'bg-purple-100 text-purple-800 hover:bg-purple-200'}`}
+                      title="Edit public bhajan"
+                      aria-label="Edit public bhajan"
+                    >
+                      🌐
+                    </button>
+                  )}
                   {!selectedBhajan.virtual && <div className="relative">
                     <button
                       onClick={() => setShowDeleteMenu(showDeleteMenu === 'library' ? null : 'library')}
@@ -8491,6 +8594,14 @@ const App = () => {
                       <>
                         <div className="fixed inset-0 z-40" onClick={() => setShowDeleteMenu(null)} />
                         <div className={`absolute right-0 mt-2 w-48 rounded-xl shadow-lg border z-50 overflow-hidden ${darkMode ? 'bg-[#162226] border-[#0B5A70]/25' : 'bg-white border-[#0B5A70]/12'}`}>
+                          {isAdmin && selectedBhajan.savedFromPublicId && publicBhajans.some(b => b.id === selectedBhajan.savedFromPublicId) && (
+                            <button
+                              onClick={() => { setShowDeleteMenu(null); openEditPublicBhajan(publicBhajans.find(b => b.id === selectedBhajan.savedFromPublicId)); }}
+                              className={`w-full text-left px-4 py-2.5 text-sm flex items-center gap-2 transition-colors border-b ${darkMode ? 'hover:bg-[#0B5A70]/20 text-gray-200 border-[#0B5A70]/20' : 'hover:bg-[#0B5A70]/8 text-gray-800 border-[#0B5A70]/10'}`}
+                            >
+                              🌐 <span>Edit public bhajan</span>
+                            </button>
+                          )}
                           <button
                             onClick={() => { setShowDeleteMenu(null); deleteBhajan(selectedBhajan); }}
                             className={`w-full text-left px-4 py-2.5 text-sm flex items-center gap-2 transition-colors ${darkMode ? 'hover:bg-red-900/20 text-red-300' : 'hover:bg-red-50 text-red-600'}`}
@@ -10740,6 +10851,20 @@ const App = () => {
                   more offscreen. scrollbar hidden on WebKit. */}
               <div className="mb-6 -mx-4 px-4 overflow-x-auto [&::-webkit-scrollbar]:hidden" style={{scrollbarWidth: 'none'}}>
                 <div className="flex flex-nowrap gap-2 items-center">
+                  {isAdmin && (
+                    <button
+                      onClick={() => setUnreviewedOnly(v => !v)}
+                      aria-pressed={unreviewedOnly}
+                      className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all border flex-shrink-0 ${
+                        unreviewedOnly
+                          ? 'bg-purple-700 text-white border-purple-700 shadow-md'
+                          : (darkMode ? 'bg-transparent text-purple-200 border-purple-400/40' : 'bg-white text-purple-700 border-purple-300')
+                      }`}
+                      title="Admin: show only bhajans not yet reviewed"
+                    >
+                      🔍 Unreviewed {publicBhajans.filter(b => b.reviewStatus !== 'reviewed').length}
+                    </button>
+                  )}
                   {allKeywordOptions.map(kw => (
                     <button
                       key={kw}
@@ -10970,6 +11095,16 @@ const App = () => {
                   ← Back
                 </button>
                 <div className="flex items-center gap-1.5">
+                  {isAdmin && (
+                    <button
+                      onClick={() => toggleReviewed(selectedPublicBhajan)}
+                      className={`h-9 px-3 rounded-full text-xs font-semibold flex items-center gap-1 transition-colors ${isReviewed(selectedPublicBhajan) ? 'bg-green-100 text-green-800' : 'bg-purple-100 text-purple-800 hover:bg-purple-200'}`}
+                      title={isReviewed(selectedPublicBhajan) ? 'Reviewed — tap to mark as needs review' : 'Mark as reviewed & finalised'}
+                      aria-pressed={isReviewed(selectedPublicBhajan)}
+                    >
+                      {isReviewed(selectedPublicBhajan) ? '✓ Reviewed' : 'Review ✓'}
+                    </button>
+                  )}
                   {!user && (
                     <button
                       onClick={() => saveToMyLibrary(selectedPublicBhajan)}
@@ -11332,6 +11467,27 @@ const App = () => {
                         <Stat n={byType.length} label="Types" />
                         <Stat n={added30} label="Added · 30 days" />
                       </div>
+                      {(() => {
+                        const reviewed = publicBhajans.filter(b => b.reviewStatus === 'reviewed').length;
+                        const pct = total ? Math.round((reviewed / total) * 100) : 0;
+                        return (
+                          <div className="mt-4">
+                            <div className="flex items-center justify-between text-xs mb-1">
+                              <span className="font-semibold">Review progress</span>
+                              <span>{reviewed} / {total} · {pct}%</span>
+                            </div>
+                            <div className="h-2.5 rounded-full bg-white/20 overflow-hidden"><div className="h-full bg-amber-300" style={{ width: `${pct}%` }} /></div>
+                            {reviewed < total && (
+                              <button
+                                onClick={() => { setUnreviewedOnly(true); setCurrentView('public-library'); }}
+                                className="mt-2 text-xs font-semibold underline underline-offset-2"
+                              >
+                                Open the {total - reviewed} unreviewed →
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
@@ -12346,6 +12502,42 @@ const App = () => {
                     className="w-full px-4 py-3 border border-[#0B5A70]/15 rounded-xl outline-none"
                     placeholder="https://youtube.com/... or reference URL"
                   />
+                </div>
+
+                {/* SESSION 85: review flag + propagation choice */}
+                <div className="rounded-xl border border-purple-200 bg-purple-50/60 p-3 space-y-2">
+                  <label className="flex items-start gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={!!publicBhajanForm.reviewed}
+                      onChange={(e) => setPublicBhajanForm({ ...publicBhajanForm, reviewed: e.target.checked })}
+                      className="mt-1 w-4 h-4 accent-purple-700"
+                    />
+                    <span>
+                      <span className="block text-sm font-semibold text-[#0B5A70]">Reviewed &amp; finalised</span>
+                      <span className="block text-xs text-gray-600">
+                        {editingPublicBhajan && editingPublicBhajan.reviewStatus === 'reviewed'
+                          ? `Reviewed${editingPublicBhajan.reviewedAt && editingPublicBhajan.reviewedAt.toDate ? ' on ' + editingPublicBhajan.reviewedAt.toDate().toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : ''} — untick to send it back for review`
+                          : 'Tick once typos and alignment are checked'}
+                      </span>
+                    </span>
+                  </label>
+                  {editingPublicBhajan && (
+                    <label className="flex items-start gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={!!publicBhajanForm.applyToCopies}
+                        onChange={(e) => setPublicBhajanForm({ ...publicBhajanForm, applyToCopies: e.target.checked })}
+                        className="mt-1 w-4 h-4 accent-purple-700"
+                      />
+                      <span>
+                        <span className="block text-sm font-semibold text-[#0B5A70]">Apply to personal libraries too</span>
+                        <span className="block text-xs text-gray-600">
+                          On: users' copies pick up this text (copies they edited themselves are never touched). Off: public library only; existing copies keep their current text.
+                        </span>
+                      </span>
+                    </label>
+                  )}
                 </div>
 
                 {publicBhajanFormError && (
