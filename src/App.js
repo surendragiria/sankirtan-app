@@ -1084,7 +1084,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.10.17.s87';
+const APP_VERSION = '2026.10.17.s88';
 const AUTO_SCROLL_VIEWS = ['live-program', 'bhajan-detail', 'public-bhajan-detail'];
 const LIVE_SCROLL_STEPS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 
@@ -2668,6 +2668,11 @@ const App = () => {
   const [libraryStarredOnly, setLibraryStarredOnly] = useState(false);
   // SESSION 85: admin review workflow
   const [unreviewedOnly, setUnreviewedOnly] = useState(false);
+  // SESSION 88: admin "fetch lyrics from a web page" utility
+  const [fetchUrl, setFetchUrl] = useState('');
+  const [fetchBusy, setFetchBusy] = useState(false);
+  const [fetchResult, setFetchResult] = useState(null); // { title, lyrics, text, host } | { error }
+  const [fetchShowFull, setFetchShowFull] = useState(false);
   const [notesDraft, setNotesDraft] = useState(null); // null = not editing
   const [publicFilterDeity, setPublicFilterDeity] = useState('');
   const [publicFilterCategory, setPublicFilterCategory] = useState('');
@@ -5845,7 +5850,7 @@ const App = () => {
     }
   };
 
-  const openAddPublicBhajan = () => {
+  const openAddPublicBhajan = (prefill = {}) => {
     if (!isAdmin) return;
     setPublicBhajanForm({
       title: '',
@@ -5858,7 +5863,10 @@ const App = () => {
       singer: '',       // SESSION 11
       lyricist: '',     // SESSION 11
       keywords: [],
-      source: ''
+      source: '',
+      reviewed: false,
+      applyToCopies: true,
+      ...(prefill && typeof prefill === 'object' && !prefill.nativeEvent ? prefill : {})
     });
     setEditingPublicBhajan(null);
     setPublicBhajanFormError('');
@@ -5910,6 +5918,24 @@ const App = () => {
     if (!bhajan) return false;
     const pub = publicBhajans.find(b => b.id === (bhajan.savedFromPublicId || bhajan.id));
     return !!pub && pub.reviewStatus === 'reviewed';
+  };
+
+  // SESSION 88: server-side fetch (api/fetch-lyrics.js) — browsers can't
+  // read other sites directly because of CORS.
+  const fetchLyricsFromWeb = async () => {
+    const u = fetchUrl.trim();
+    if (!u) return;
+    setFetchBusy(true); setFetchResult(null); setFetchShowFull(false);
+    try {
+      const r = await fetch('/api/fetch-lyrics?url=' + encodeURIComponent(u));
+      const j = await r.json();
+      if (!j.ok) setFetchResult({ error: j.error || 'Could not fetch' });
+      else setFetchResult({ title: j.title || '', lyrics: j.lyrics || '', text: j.text || '', host: j.host, url: u });
+    } catch (e) {
+      setFetchResult({ error: 'Could not reach the fetch service' });
+    } finally {
+      setFetchBusy(false);
+    }
   };
 
   const savePublicBhajan = async () => {
@@ -11746,6 +11772,74 @@ const App = () => {
                     Tip: batch-curate a week at a time — pick tomorrow, then use the arrow to jump ahead.
                   </div>
                 </div>
+              </div>
+
+              {/* SESSION 88: FETCH LYRICS FROM A WEB PAGE */}
+              <div className="bg-[#FFFCF8] rounded-2xl shadow-[0_2px_12px_rgba(11,90,112,0.06)] p-6 mb-6 border border-teal-200/60">
+                <h3 className="text-lg font-bold text-[#0B5A70] mb-1">🔗 Fetch lyrics from a web page</h3>
+                <p className="text-sm text-gray-600 mb-3">Paste a link; the Devanagari block is picked out for you to check, then opened in the Add Public Bhajan form.</p>
+                <div className="flex gap-2">
+                  <input
+                    type="url"
+                    value={fetchUrl}
+                    onChange={(e) => setFetchUrl(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') fetchLyricsFromWeb(); }}
+                    placeholder="https://…"
+                    className="flex-1 min-w-0 px-4 py-3 border border-[#0B5A70]/15 rounded-xl outline-none"
+                  />
+                  <button
+                    onClick={fetchLyricsFromWeb}
+                    disabled={fetchBusy || !fetchUrl.trim()}
+                    className="px-4 bg-[#0B5A70] hover:bg-[#094a5d] disabled:opacity-50 text-white font-semibold rounded-xl"
+                  >
+                    {fetchBusy ? 'Fetching…' : 'Fetch'}
+                  </button>
+                </div>
+                {fetchResult && fetchResult.error && (
+                  <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">⚠️ {fetchResult.error}</div>
+                )}
+                {fetchResult && !fetchResult.error && (
+                  <div className="mt-4 space-y-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-[#0B5A70] mb-1">Title</label>
+                      <input
+                        value={fetchResult.title}
+                        onChange={(e) => setFetchResult({ ...fetchResult, title: e.target.value })}
+                        className="w-full px-3 py-2 border border-[#0B5A70]/15 rounded-lg outline-none text-sm"
+                      />
+                    </div>
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-xs font-semibold text-[#0B5A70]">Lyrics {fetchResult.lyrics ? `· ${fetchResult.lyrics.split('\n').filter(Boolean).length} lines` : '· nothing recognised — use the full page text'}</label>
+                        <button onClick={() => setFetchShowFull(v => !v)} className="text-xs text-[#0B5A70] underline underline-offset-2">{fetchShowFull ? 'Hide full page text' : 'Show full page text'}</button>
+                      </div>
+                      <textarea
+                        value={fetchResult.lyrics}
+                        onChange={(e) => setFetchResult({ ...fetchResult, lyrics: e.target.value })}
+                        rows={12}
+                        className="w-full px-3 py-2 border border-[#0B5A70]/15 rounded-lg outline-none text-sm whitespace-pre-wrap"
+                        style={{ fontFamily: LYRICS_FONT }}
+                      />
+                    </div>
+                    {fetchShowFull && (
+                      <div>
+                        <label className="block text-xs font-semibold text-[#0B5A70] mb-1">Full page text (copy what you need into Lyrics)</label>
+                        <textarea readOnly value={fetchResult.text} rows={14} className="w-full px-3 py-2 border border-[#0B5A70]/15 rounded-lg outline-none text-xs bg-gray-50 whitespace-pre-wrap" style={{ fontFamily: LYRICS_FONT }} />
+                      </div>
+                    )}
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => openAddPublicBhajan({ title: fetchResult.title, lyrics: fetchResult.lyrics, source: /youtu\.?be/i.test(fetchResult.url) ? fetchResult.url : '' })}
+                        disabled={!fetchResult.lyrics.trim()}
+                        className="flex-1 bg-[#0B5A70] hover:bg-[#094a5d] disabled:opacity-50 text-white font-bold py-3 rounded-xl"
+                      >
+                        Use in new public bhajan →
+                      </button>
+                      <button onClick={() => { setFetchResult(null); setFetchUrl(''); }} className="px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold rounded-xl">Clear</button>
+                    </div>
+                    <p className="text-[11px] text-gray-500">From {fetchResult.host}. Please make sure you have the right to reproduce these lyrics.</p>
+                  </div>
+                )}
               </div>
 
               {/* MANAGE LISTS */}
