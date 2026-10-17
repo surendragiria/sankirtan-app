@@ -1084,7 +1084,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.10.17.s108';
+const APP_VERSION = '2026.10.17.s109';
 const AUTO_SCROLL_VIEWS = ['live-program', 'bhajan-detail', 'public-bhajan-detail'];
 const LIVE_SCROLL_STEPS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 
@@ -2927,6 +2927,9 @@ const App = () => {
       for (const f of INHERIT) {
         if (!(m || b)[f] && src[f]) { m = m || { ...b }; m[f] = src[f]; }
       }
+      // SESSION 109: a YouTube link on the public bhajan beats a non-YouTube
+      // reference URL left on the copy by the original import.
+      if (src.source && getYouTubeVideoId(src.source) && !getYouTubeVideoId((m || b).source)) { m = m || { ...b }; m.source = src.source; }
       if ((!b.keywords || b.keywords.length === 0) && src.keywords && src.keywords.length) { m = m || { ...b }; m.keywords = src.keywords; }
       if (m) changed = true;
       return m || b;
