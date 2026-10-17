@@ -1084,7 +1084,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.10.17.s88';
+const APP_VERSION = '2026.10.17.s89';
 const AUTO_SCROLL_VIEWS = ['live-program', 'bhajan-detail', 'public-bhajan-detail'];
 const LIVE_SCROLL_STEPS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 
@@ -1181,15 +1181,31 @@ const getSearchIndex = (b) => {
 
 // Returns 0 (title), 1 (dhun/singer/keywords), 2 (lyrics) or -1 (no match).
 // Multi-word queries match when every word is found somewhere in that field.
+//
+// SESSION 89: partial matches. Voice search hands back a whole phrase, and
+// one mis-heard word used to give zero results. A query of 3+ words now
+// also matches when at least half its words hit one field; those land in
+// tiers 10+ (after every full match) and sort by how many words missed.
 const searchTier = (b, foldedQuery) => {
   if (!foldedQuery) return 0;
   const idx = getSearchIndex(b);
-  const words = foldedQuery.split(' ');
+  const words = foldedQuery.split(' ').filter(Boolean);
   const hit = (field) => field && words.every(w => field.includes(w));
   if (hit(idx.title)) return 0;
   if (hit(idx.meta)) return 1;
   if (hit(idx.lyrics)) return 2;
-  return -1;
+  if (words.length < 3) return -1;
+  const need = Math.ceil(words.length / 2);
+  const count = (field) => (field ? words.filter(w => field.includes(w)).length : 0);
+  let best = -1;
+  [idx.title, idx.meta, idx.lyrics].forEach((field, fi) => {
+    const c = count(field);
+    if (c >= need) {
+      const tier = 10 + fi * 100 + (words.length - c);
+      if (best < 0 || tier < best) best = tier;
+    }
+  });
+  return best;
 };
 
 // Stable re-order: title matches first, then dhun/keywords, then lyrics.
@@ -4727,20 +4743,15 @@ const App = () => {
       return;
     }
 
-    const ua = navigator.userAgent;
-    const isIOS = /iPad|iPhone|iPod/.test(ua) && !window.MSStream;
-    const isIOSSafari = isIOS && /^((?!chrome|android).)*safari/i.test(ua);
-
     const recognition = new SpeechRecognition();
     speechRecognitionRef.current = recognition;
 
-    if (isIOSSafari) {
-      recognition.continuous = false;
-      recognition.interimResults = false;
-    } else {
-      recognition.continuous = true;
-      recognition.interimResults = true;
-    }
+    // SESSION 89: one phrase, then stop. `continuous` kept the mic open
+    // until the engine's silence timeout, so the final transcript arrived
+    // late and the user had to tap the mic again to end it. Interim
+    // results still stream into the search box while speaking.
+    recognition.continuous = false;
+    recognition.interimResults = true;
     recognition.lang = speechLang;
     recognition.maxAlternatives = 1;
 
@@ -4774,6 +4785,11 @@ const App = () => {
       if (targetField === 'library') setSearchQuery(display);
       else if (targetField === 'public') setPublicSearchQuery(display);
       else if (targetField === 'bhajanPicker') setBhajanPickerSearch(display);
+      // Got the final phrase — release the mic right away instead of
+      // waiting for the engine to time out on silence.
+      if (finalTranscript) {
+        try { recognition.stop(); } catch (err) {}
+      }
     };
     try {
       recognition.start();
