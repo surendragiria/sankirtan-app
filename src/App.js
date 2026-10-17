@@ -1084,7 +1084,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.10.17.s90';
+const APP_VERSION = '2026.10.17.s91';
 const AUTO_SCROLL_VIEWS = ['live-program', 'bhajan-detail', 'public-bhajan-detail'];
 const LIVE_SCROLL_STEPS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 
@@ -2316,7 +2316,28 @@ const cleanLyricsText = (raw) => {
   t = t.replace(/\p{Extended_Pictographic}️?|[☀-➿]/gu, ''); // emoji
   t = t.replace(/^\s*(lyrics?|बोल|भजन के बोल|song|title)\s*[:：-]\s*$/gim, '');
   t = t.replace(/^\s*[-=_*~·•]{3,}\s*$/gm, '');                   // divider lines
-  t = t.split('\n').map(l => l.replace(/[ \t]+/g, ' ').replace(/\s+([।॥,.!?])/g, '$1').trim()).join('\n');
+  // OCR noise: on lines that are mostly Devanagari, drop short stray Latin
+  // runs ("eRe", "KA", "gt"), stray symbols, lone digits; ASCII | → danda.
+  const devLetters = (s) => (s.match(/[ऀ-ॿ]/g) || []).length;
+  const latLetters = (s) => (s.match(/[A-Za-z]/g) || []).length;
+  t = t.split('\n').map(line => {
+    let l = line;
+    const d = devLetters(l);
+    if (d >= 3 && d > latLetters(l)) {
+      const num = l.match(/^\s*([\d०-९]{1,2}[.)])\s+/); // keep "1. " / "२) " antara numbering
+      if (num) l = l.slice(num[0].length);
+      l = l
+        .replace(/\|/g, '।')
+        .replace(/[*;`'’‘"“”^~_<>{}[\]\\#@$%&+=]/g, ' ')
+        .replace(/(^|[^A-Za-z])[A-Za-z]{1,4}(?![A-Za-z])/g, '$1 ')
+        .replace(/(^|\s)[\d०-९]{1,2}(?=\s|$|[,.।])/g, '$1 ')
+        .replace(/(^|\s)[,.]+(?=\s|$)/g, '$1 ')
+        .replace(/[।॥](?:\s*[।॥])+/g, (m) => (m.includes('॥') ? '॥' : '।'));
+      if (num) l = num[1] + ' ' + l.trim();
+    }
+    return l.replace(/[ \t]+/g, ' ').replace(/\s+([।॥,.!?])/g, '$1').trim();
+  }).filter(l => l === '' || (l.match(/\p{L}/gu) || []).length >= 3) // drop junk-only lines
+    .join('\n');
   t = t.replace(/\n{3,}/g, '\n\n');
   return t.trim();
 };
@@ -2334,7 +2355,7 @@ const useAutoGrow = (ref, value, minPx = 220) => {
 const LyricsToolbar = ({ darkMode, fullscreen, onFullscreen, onMukhda, onPaste, onDictate, dictating, onClean, onUndo, canUndo }) => {
   const btn = `inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors ${darkMode ? 'bg-[#1e2e33] text-gray-200 hover:bg-[#0B5A70]/30' : 'bg-[#0B5A70]/6 text-[#0B5A70] hover:bg-[#0B5A70]/12 border border-[#0B5A70]/12'}`;
   return (
-    <div className="flex items-center gap-1.5 overflow-x-auto pb-1 -mx-1 px-1" style={{ scrollbarWidth: 'none' }}>
+    <div className="flex items-center gap-1.5 flex-wrap">
       <button type="button" onClick={onDictate} className={`${btn} ${dictating ? '!bg-red-600 !text-white !border-red-600 animate-pulse' : ''}`} title={dictating ? 'Stop dictation' : 'Dictate lyrics (Hindi)'} aria-pressed={dictating}>
         🎤 {dictating ? 'Listening… tap to stop' : 'Dictate'}
       </button>
@@ -2343,7 +2364,7 @@ const LyricsToolbar = ({ darkMode, fullscreen, onFullscreen, onMukhda, onPaste, 
       <button type="button" onClick={onClean} className={btn} title="Remove timestamps, emoji, extra spaces and blank lines">🧹 Clean up</button>
       <button type="button" onClick={onUndo} disabled={!canUndo} className={`${btn} disabled:opacity-40`} title="Undo last toolbar action">↶ Undo</button>
       {!fullscreen && (
-        <button type="button" onClick={onFullscreen} className={`${btn} ml-auto`} title="Open full-screen editor">⛶ Full screen</button>
+        <button type="button" onClick={onFullscreen} className={btn} title="Open full-screen editor">⛶ Full screen</button>
       )}
     </div>
   );
@@ -4906,7 +4927,7 @@ const App = () => {
   };
   const cleanLyrics = (which) => {
     const next = cleanLyricsText(getLyrics(which));
-    if (next === getLyrics(which)) { showToast('Already clean ✨'); return; }
+    if (next === getLyrics(which)) { showToast('Nothing to clean — no stray symbols, timestamps or extra blank lines found'); return; }
     setLyricsWithUndo(which, next);
     showToast('🧹 Cleaned up');
   };
