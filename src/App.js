@@ -1084,7 +1084,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.10.17.s100';
+const APP_VERSION = '2026.10.17.s101';
 const AUTO_SCROLL_VIEWS = ['live-program', 'bhajan-detail', 'public-bhajan-detail'];
 const LIVE_SCROLL_STEPS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 
@@ -6251,10 +6251,23 @@ const App = () => {
       showToast('Access denied. Admin only.', 'error');
       return;
     }
+    // SESSION 101: warn how many of the admin's own programs/playlists use
+    // it (other users' lists are private; theirs drop it automatically).
+    const myCopyIds = new Set(bhajans.filter(b => b.id === bhajan.id || b.savedFromPublicId === bhajan.id).map(b => b.id));
+    myCopyIds.add(bhajan.id);
+    const using = programs.filter(p => (p.bhajanIds || []).some(id => myCopyIds.has(id)));
+    const nProg = using.filter(p => getProgramType(p) === 'program').length;
+    const nPl = using.length - nProg;
+    const parts = [];
+    if (nProg) parts.push(`${nProg} program${nProg === 1 ? '' : 's'}`);
+    if (nPl) parts.push(`${nPl} playlist${nPl === 1 ? '' : 's'}/medley${nPl === 1 ? '' : 's'}`);
+    const usage = using.length
+      ? `\n\n⚠️ It is in ${parts.join(' and ')} of yours (${using.slice(0, 4).map(p => p.name).join(', ')}${using.length > 4 ? '…' : ''}). It will be removed from them, and from every other user's programs and playlists.`
+      : '\n\nIt is not in any of your programs or playlists. Other users' lists that include it will drop it automatically.';
     askConfirm(
       {
         title: 'Delete Public Bhajan?',
-        message: `"${bhajan.title}" will be removed from the Public Library for ALL users.`,
+        message: `"${bhajan.title}" will be removed from the Public Library for ALL users.${usage}`,
         confirmLabel: '🗑️ Delete for Everyone'
       },
       async () => {
@@ -6938,6 +6951,19 @@ const App = () => {
     persistSingers(program, singers);
   };
 
+  // SESSION 101: a bhajan deleted from the library silently drops out of
+  // any program/playlist the next time it is opened — the remaining ones
+  // renumber. Only runs once both libraries have loaded, so a slow
+  // network never prunes by mistake.
+  useEffect(() => {
+    if (currentView !== 'program-detail' || !selectedProgram || !user) return;
+    if (bhajansLoading || publicLoading || publicBhajans.length === 0) return;
+    const ids = selectedProgram.bhajanIds || [];
+    const kept = ids.filter(id => !!getBhajanById(id));
+    if (kept.length !== ids.length) persistSetlist(selectedProgram, kept);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentView, selectedProgram && selectedProgram.id, bhajans, publicBhajans, bhajansLoading, publicLoading]);
+
   const persistSetlist = async (program, newIds) => {
     if (!user || !program) return;
     const updated = { ...program, bhajanIds: newIds, bhajanCount: newIds.length };
@@ -7327,7 +7353,7 @@ const App = () => {
         </div>
         <div className="p-5">
           {confirmDialog.message && (
-            <p className={`text-sm leading-relaxed mb-5 text-center ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+            <p className={`text-sm leading-relaxed mb-5 text-center whitespace-pre-line ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
               {confirmDialog.message}
             </p>
           )}
@@ -10200,11 +10226,7 @@ const App = () => {
                   <div className="space-y-3">
                     {selectedProgram.bhajanIds.map((bhajanId, index) => {
                       const bhajan = getBhajanById(bhajanId);
-                      if (!bhajan) return (
-                        <div key={bhajanId} className="bg-red-50 rounded-xl p-3 border border-red-200">
-                          <p className="text-sm text-red-700">⚠️ Bhajan not found (may have been deleted)</p>
-                        </div>
-                      );
+                      if (!bhajan) return null;
                       const mukhda = getMukhda(bhajan);
                       return (
                         <button
@@ -10249,11 +10271,7 @@ const App = () => {
                   <div className="space-y-2">
                     {selectedProgram.bhajanIds.map((bhajanId, index) => {
                       const bhajan = getBhajanById(bhajanId);
-                      if (!bhajan) return (
-                        <div key={bhajanId} className="bg-red-50 rounded-xl p-3 border border-red-200">
-                          <p className="text-sm text-red-700">⚠️ Bhajan not found (may have been deleted)</p>
-                        </div>
-                      );
+                      if (!bhajan) return null;
                       const total = selectedProgram.bhajanIds.length;
                       const rowBody = (
                         <>
