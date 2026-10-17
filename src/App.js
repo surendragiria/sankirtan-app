@@ -1084,7 +1084,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.10.17.s115';
+const APP_VERSION = '2026.10.17.s116';
 const AUTO_SCROLL_VIEWS = ['live-program', 'bhajan-detail', 'public-bhajan-detail'];
 const LIVE_SCROLL_STEPS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 
@@ -9052,25 +9052,49 @@ const App = () => {
                   </button>
                 </div>
 
-                {/* One filter row: Starred · Deity ▾ · Type ▾ · Mood ▾ · Sort · Clear */}
-                <div className="mt-2 -mx-4 px-4 overflow-x-auto [&::-webkit-scrollbar]:hidden" style={{scrollbarWidth: 'none'}}>
-                  <div className="flex flex-nowrap gap-2 items-center">
-                    <button onClick={() => setLibraryStarredOnly(v => !v)} aria-pressed={libraryStarredOnly} className={`${chipBase} ${libraryStarredOnly ? 'bg-[#E65100] text-white border-[#E65100] shadow-sm' : (darkMode ? 'bg-transparent text-orange-200 border-[#E65100]/40' : 'bg-white text-[#E65100] border-[#E65100]/30')}`}>⭐ Starred</button>
-                    <button onClick={() => setLibrarySheet('deity')} className={`${chipBase} ${filterDeity ? chipOn : chipOff}`}>{filterDeity || 'Deity'} <span className="opacity-70">▾</span></button>
-                    <button onClick={() => setLibrarySheet('type')} className={`${chipBase} ${filterCategory ? chipOn : chipOff}`}>{filterCategory || 'Type'} <span className="opacity-70">▾</span></button>
-                    <button onClick={() => setLibrarySheet('mood')} className={`${chipBase} ${libraryFilterKeyword ? chipOn : chipOff}`}>{libraryFilterKeyword ? `#${libraryFilterKeyword}` : 'Mood'} <span className="opacity-70">▾</span></button>
-                    {isAdmin && (
-                      <button onClick={() => setUnreviewedOnly(v => !v)} aria-pressed={unreviewedOnly} className={`${chipBase} ${unreviewedOnly ? 'bg-purple-700 text-white border-purple-700 shadow-sm' : (darkMode ? 'bg-transparent text-purple-200 border-purple-400/40' : 'bg-white text-purple-700 border-purple-300')}`} title="Admin: show only bhajans not yet reviewed">
-                        ⚠ Unreviewed {publicBhajans.filter(b => b.reviewStatus !== 'reviewed').length}
-                      </button>
-                    )}
-                    <button onClick={() => setLibrarySheet('sort')} className={`${chipBase} ${chipOff}`} title="Sort & view">⇅ {sortLabel}</button>
-                    {anyFilter && (
-                      <button onClick={clearAll} className={`${chipBase} border-red-300 text-red-600 bg-white`}>✕ Clear</button>
-                    )}
-                  </div>
-                </div>
               </div>
+
+              {/* SESSION 116: quick chips per filter + "More ▾" for the rest */}
+              {(() => {
+                const row = (children) => (
+                  <div className="-mx-4 px-4 overflow-x-auto [&::-webkit-scrollbar]:hidden" style={{scrollbarWidth: 'none'}}>
+                    <div className="flex flex-nowrap gap-2 items-center">{children}</div>
+                  </div>
+                );
+                const quick = (items, current, set, sheet, moreLabel, fmt) => {
+                  const other = current && !items.includes(current);
+                  return (
+                    <>
+                      {items.map(v => (
+                        <button key={v} onClick={() => set(current === v ? '' : v)} aria-pressed={current === v} className={`${chipBase} ${current === v ? chipOn : chipOff}`}>{fmt ? fmt(v) : v}</button>
+                      ))}
+                      <button onClick={() => setLibrarySheet(sheet)} className={`${chipBase} ${other ? chipOn : chipOff}`}>{other ? (fmt ? fmt(current) : current) : moreLabel} <span className="opacity-70">▾</span></button>
+                    </>
+                  );
+                };
+                const QUICK_DEITY = ['Babosa', 'Krishna', 'Hanuman', 'Mata Ji'];
+                const QUICK_TYPE = ['Bhajan', 'Katha', 'Chalisa', 'Parody'];
+                const QUICK_MOOD = ['marwari', 'bhawna', 'dance', 'melody'];
+                return (
+                  <div className="mt-3 space-y-2">
+                    {row(<>
+                      <button onClick={() => setLibraryStarredOnly(v => !v)} aria-pressed={libraryStarredOnly} className={`${chipBase} ${libraryStarredOnly ? 'bg-[#E65100] text-white border-[#E65100] shadow-sm' : (darkMode ? 'bg-transparent text-orange-200 border-[#E65100]/40' : 'bg-white text-[#E65100] border-[#E65100]/30')}`}>⭐ Starred</button>
+                      <button onClick={() => setLibrarySheet('sort')} className={`${chipBase} ${chipOff}`} title="Sort & view">⇅ {sortLabel}</button>
+                      {isAdmin && (
+                        <button onClick={() => setUnreviewedOnly(v => !v)} aria-pressed={unreviewedOnly} className={`${chipBase} ${unreviewedOnly ? 'bg-purple-700 text-white border-purple-700 shadow-sm' : (darkMode ? 'bg-transparent text-purple-200 border-purple-400/40' : 'bg-white text-purple-700 border-purple-300')}`} title="Admin: show only bhajans not yet reviewed">
+                          ⚠ Unreviewed {publicBhajans.filter(b => b.reviewStatus !== 'reviewed').length}
+                        </button>
+                      )}
+                      {anyFilter && (
+                        <button onClick={clearAll} className={`${chipBase} border-red-300 text-red-600 bg-white`}>✕ Clear filters</button>
+                      )}
+                    </>)}
+                    {row(quick(QUICK_DEITY, filterDeity, setFilterDeity, 'deity', 'More deities'))}
+                    {row(quick(QUICK_TYPE, filterCategory, setFilterCategory, 'type', 'More types'))}
+                    {row(quick(QUICK_MOOD, libraryFilterKeyword, setLibraryFilterKeyword, 'mood', 'More moods', (v) => '#' + v))}
+                  </div>
+                );
+              })()}
 
               {/* Continue strip — last opened bhajans, one tap back */}
               {continueItems.length > 0 && (
