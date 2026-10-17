@@ -1084,7 +1084,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.10.17.s83';
+const APP_VERSION = '2026.10.17.s84';
 const AUTO_SCROLL_VIEWS = ['live-program', 'bhajan-detail', 'public-bhajan-detail'];
 const LIVE_SCROLL_STEPS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 
@@ -1314,6 +1314,7 @@ const isPastProgramDate = (dateStr) => !!dateStr && String(dateStr).trim() < get
 // SESSION 16: hash a YYYY-MM-DD date string to a 32-bit int
 // suitable for seeding mulberry32. Simple FNV-1a — deterministic,
 // fast, no collisions we care about at this scale.
+// eslint-disable-next-line no-unused-vars
 const hashDateKey = (str) => {
   let h = 2166136261;
   for (let i = 0; i < str.length; i++) {
@@ -1924,8 +1925,6 @@ const IconGlobe = (p) => <Icon {...p} path={<><circle cx="12" cy="12" r="9" /><p
 const IconBookOpen = (p) => <Icon {...p} path={<path d="M2 5.5A2.5 2.5 0 014.5 3H10v16H4.5A2.5 2.5 0 012 16.5v-11zM22 5.5A2.5 2.5 0 0019.5 3H14v16h5.5a2.5 2.5 0 002.5-2.5v-11z" />} />;
 const IconMusic = (p) => <Icon {...p} path={<><path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" /></>} />;
 const IconLock = (p) => <Icon {...p} path={<><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V7a4 4 0 018 0v4" /></>} />;
-const IconFlame = (p) => <Icon {...p} path={<path d="M12 3s3 4 3 8a3 3 0 01-6 0c0-1 .5-2 1-3-2 1-4 3-4 6a6 6 0 0012 0c0-4-3-7-6-11z" />} />;
-const IconSparkle = (p) => <Icon {...p} path={<><path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3z" /><path d="M19 15l.75 2.25L22 18l-2.25.75L19 21l-.75-2.25L16 18l2.25-.75L19 15z" /></>} />;
 const IconShare = (p) => <Icon {...p} path={<><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><path d="M8.6 10.5l6.8-3.9M8.6 13.5l6.8 3.9" /></>} />;
 const IconListPlus = (p) => <Icon {...p} path={<><path d="M4 6h12M4 12h12M4 18h7" /><path d="M18 14v6M15 17h6" /></>} />;
 const IconStar = ({ filled, ...p }) => <Icon {...p} path={<path fill={filled ? 'currentColor' : 'none'} d="M12 3l2.8 5.9 6.4.8-4.7 4.5 1.2 6.4L12 17.5 6.3 20.6l1.2-6.4L2.8 9.7l6.4-.8L12 3z" />} />;
@@ -2454,7 +2453,6 @@ const App = () => {
   // open at a time (tapping the other collapses the first). Both
   // collapsed by default to keep the home page compact — the whole
   // point of the pill pattern.
-  const [expandedDiscoverySection, setExpandedDiscoverySection] = useState(null);
   // SESSION 38: state for the "Add to Program/Playlist/Parody"
   // picker that opens from the bhajan-detail reading view.
   // Stores the bhajan being added so the picker can target it,
@@ -2638,7 +2636,9 @@ const App = () => {
   // Fetched once on app open. Falls back to a deterministic
   // pick (same for all users on a given day) if no admin curation
   // exists for today's date.
+// eslint-disable-next-line no-unused-vars
   const [dailyBhajanId, setDailyBhajanId] = useState(null);
+// eslint-disable-next-line no-unused-vars
   const [dailyBhajanNote, setDailyBhajanNote] = useState('');
   // SESSION 8: escape hatch — after 8 seconds of skeleton loading,
   // show a "Having trouble loading" message with a Retry button so
@@ -2892,6 +2892,7 @@ const App = () => {
   // storage key changes — i.e. when user logs in or out)
   // ==============================================
   const RECENT_KEY = user ? `sankirtan-recent-${user.uid}` : 'sankirtan-recent-guest';
+  // eslint-disable-next-line no-unused-vars
   const [recentlyRead, setRecentlyRead] = useState(() => {
     try {
       const raw = localStorage.getItem(RECENT_KEY);
@@ -5585,82 +5586,9 @@ const App = () => {
     return rankByTier(seededShuffle(filtered, shuffleSeed), q);
   }, [publicBhajans, debouncedPublicSearch, publicFilterDeity, publicFilterCategory, publicFilterKeyword, shuffleSeed]);
 
-  // SESSION 11: Popular Bhajans section — top 8 by saveCount
-  // (already-tracked signal, no new writes needed). Shown only when
-  // no active search or filter, so newcomers get a clear starting
-  // point instead of a wall of unfamiliar titles.
-  // SESSION 19: hybrid popularity score.
-  // score = readCount + saveCount * 3
-  //
-  // Reading is now the primary popularity signal (people opening
-  // a bhajan to sing/read it), but saves are still weighted
-  // higher because they're a stronger intent signal — saving is
-  // a commitment to keep something, reading is just curiosity.
-  // The 3x weight makes 1 save worth roughly the same as 3 reads.
-  //
-  // A bhajan qualifies for the Popular section if its score > 0.
-  // This includes bhajans with EITHER any reads OR any saves,
-  // so the section stays populated during the readCount rollout.
-  const topPublicBhajans = useMemo(() => {
-    const scoreOf = (b) => (b.readCount || 0) + (b.saveCount || 0) * 3;
-    return [...publicBhajans]
-      .filter(b => scoreOf(b) > 0)
-      .sort((a, b) => {
-        const sb = scoreOf(b);
-        const sa = scoreOf(a);
-        if (sb !== sa) return sb - sa;
-        return (a.title || '').localeCompare(b.title || '');
-      })
-      .slice(0, 8);
-  }, [publicBhajans]);
 
-  // SESSION 41: Recently Added — newest 8 public bhajans by createdAt.
-  // Freshness signal complementing Popular's aggregate signal. Both
-  // shown as collapsible pills on the Public Library home.
-  //
-  // createdAt is a Firestore server timestamp on every publicBhajans
-  // doc (set by admin's addPublicBhajan). Docs without createdAt
-  // (from very early admin flows, if any) fall to the bottom via
-  // the 0 fallback.
-  const recentPublicBhajans = useMemo(() => {
-    const timeOf = (b) => (b.createdAt && b.createdAt.seconds) || 0;
-    return [...publicBhajans]
-      .filter(b => timeOf(b) > 0)
-      .sort((a, b) => timeOf(b) - timeOf(a))
-      .slice(0, 8);
-  }, [publicBhajans]);
 
-  // SESSION 16: resolve today's bhajan.
-  //   1. If admin curated a bhajan for today (dailyBhajanId is set
-  //      AND the referenced bhajan exists in publicBhajans), use it.
-  //   2. Otherwise, deterministic fallback — same for every user on
-  //      a given day, so the "आज का भजन" feeling of community is
-  //      preserved even without curation. Bias slightly toward
-  //      higher-saveCount bhajans so the fallback isn't a random
-  //      obscure one.
-  const resolvedDailyBhajan = useMemo(() => {
-    if (!publicBhajans || publicBhajans.length === 0) return null;
-    if (dailyBhajanId) {
-      const curated = publicBhajans.find(b => b.id === dailyBhajanId);
-      if (curated) return { bhajan: curated, curated: true, note: dailyBhajanNote };
-    }
-    // Deterministic fallback — prefer the top 40 by saveCount so the
-    // fallback picks a "known" bhajan rather than a random obscure one.
-    const pool = [...publicBhajans]
-      .sort((a, b) => (b.saveCount || 0) - (a.saveCount || 0))
-      .slice(0, Math.max(20, Math.min(40, publicBhajans.length)));
-    const seed = hashDateKey(getTodayKey());
-    const rand = mulberry32(seed);
-    const pick = pool[Math.floor(rand() * pool.length)];
-    return pick ? { bhajan: pick, curated: false, note: '' } : null;
-  }, [publicBhajans, dailyBhajanId, dailyBhajanNote]);
 
-  const hasActivePublicFilters = !!(
-    debouncedPublicSearch ||
-    publicFilterDeity ||
-    publicFilterCategory ||
-    publicFilterKeyword
-  );
 
   const filteredBhajans = useMemo(() => {
     const q = foldSearchKey(debouncedSearchQuery);
@@ -8187,35 +8115,6 @@ const App = () => {
                   </>
                 );
               })()}
-
-              {/* Recently Read */}
-              {recentlyRead.length > 0 && !searchQuery && !filterDeity && !filterCategory && !libraryFilterKeyword && !libraryStarredOnly && (
-                <div className="mb-4">
-                  <p className={`text-xs font-semibold uppercase tracking-wide mb-2 ${darkMode ? 'text-gray-500' : 'text-[#0B5A70]/60'}`}>
-                    🕐 Recently Read
-                  </p>
-                  <div className="flex gap-2 overflow-x-auto pb-2" style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
-                    {recentlyRead.map(r => {
-                      const fullBhajan = bhajans.find(b => b.id === r.id);
-                      if (!fullBhajan) return null;
-                      return (
-                        <button
-                          key={r.id}
-                          onClick={() => { setSelectedBhajan(fullBhajan); setCurrentView('bhajan-detail'); trackRecentRead(fullBhajan); }}
-                          className={`flex-shrink-0 px-3 py-2 rounded-xl border text-left transition-all max-w-[160px] ${
-                            darkMode
-                              ? 'bg-[#162226] border-[#0B5A70]/15 hover:border-[#0B5A70]/30'
-                              : 'bg-[#FFFCF8] border-[#0B5A70]/8 hover:border-[#0B5A70]/25 shadow-[0_1px_4px_rgba(11,90,112,0.04)]'
-                          }`}
-                        >
-                          <p className={`text-xs font-bold truncate ${darkMode ? 'text-amber-100' : 'text-[#0B5A70]'}`}>{r.title}</p>
-                          <p className="text-[10px] text-gray-500 truncate">{r.deity} · {r.category}</p>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
 
               {/* Search Bar */}
               <div className="mb-4">
@@ -10956,179 +10855,6 @@ const App = () => {
                 </div>
               ) : (
                 <>
-                  {/* SESSION 16: आज का भजन · Today's Bhajan
-                      Admin-curated (or deterministic fallback if not
-                      curated). Prominent card at the very top of the
-                      Public Library when no active filter — one-tap
-                      access to the day's featured bhajan, plus a
-                      one-tap Share so it can travel via WhatsApp.
-                      SESSION 31: compacted — removed lyric preview
-                      and tightened padding. Card is now ~half its
-                      previous height, giving Popular Bhajans and the
-                      library grid more room without losing the
-                      "today's featured" visibility. */}
-                  {!hasActivePublicFilters && resolvedDailyBhajan && (
-                    <div className="mb-5">
-                      {/* SESSION 40: compacted to match regular
-                          compact-card size. No gradient bg, no
-                          large saffron border, no big header —
-                          just a normal-looking card with a small
-                          "🌟 TODAY" chip so the featured bhajan
-                          doesn't dominate the scroll. Note (if
-                          curated) appears as a small italic line
-                          below meta. */}
-                      <div
-                        onClick={() => openPublicBhajanDetail(resolvedDailyBhajan.bhajan)}
-                        role="button"
-                        tabIndex={0}
-                        onKeyDown={(e) => { if (e.key === 'Enter') openPublicBhajanDetail(resolvedDailyBhajan.bhajan); }}
-                        className={`w-full rounded-xl p-3 border cursor-pointer transition-all flex items-center gap-3 ${darkMode ? 'bg-[#162226] border-[#E65100]/25 hover:border-[#E65100]/50' : 'bg-[#FFFCF8] border-[#E65100]/20 shadow-[0_1px_4px_rgba(11,90,112,0.04)] hover:border-[#E65100]/40 hover:shadow-[0_2px_8px_rgba(11,90,112,0.10)]'}`}
-                      >
-                        <div className="flex-1 min-w-0">
-                          <h3 className={`text-sm font-bold truncate ${darkMode ? 'text-amber-100' : 'text-[#0B5A70]'}`}>
-                            {resolvedDailyBhajan.bhajan.title}
-                          </h3>
-                          <p className={`text-xs truncate ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                            {resolvedDailyBhajan.bhajan.deity}
-                            {resolvedDailyBhajan.bhajan.category ? ` · ${resolvedDailyBhajan.bhajan.category}` : ''}
-                            {resolvedDailyBhajan.bhajan.dhun ? ` · तर्ज़: ${resolvedDailyBhajan.bhajan.dhun}` : ''}
-                          </p>
-                          {resolvedDailyBhajan.note && (
-                            <p className={`text-xs italic truncate mt-0.5 ${darkMode ? 'text-orange-300/80' : 'text-[#E65100]/80'}`}>
-                              "{resolvedDailyBhajan.note}"
-                            </p>
-                          )}
-                        </div>
-                        <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-full flex-shrink-0 ${darkMode ? 'bg-[#E65100]/20 text-orange-200' : 'bg-[#E65100]/10 text-[#E65100]'}`}>
-                          🌟 आज का
-                        </span>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* SESSION 41: DISCOVERY PILLS
-                      Two chips — Popular Bhajans + Recently Added.
-                      Both collapsed by default (keeps home page
-                      compact). Tapping expands 8 bhajans inline.
-                      Only one open at a time — tapping the other
-                      collapses the first.
-                      Hidden when the user has an active search or
-                      filter (same rule as before for Popular).
-                      Session 11 (Popular) + Session 41 addition
-                      (Recently Added) live under the same UX pattern. */}
-                  {!hasActivePublicFilters && (topPublicBhajans.length > 0 || recentPublicBhajans.length > 0) && (
-                    <div className="mb-5">
-                      <div className="flex flex-wrap gap-2 mb-3">
-                        {topPublicBhajans.length > 0 && (
-                          <button
-                            onClick={() => setExpandedDiscoverySection(prev => prev === 'popular' ? null : 'popular')}
-                            aria-expanded={expandedDiscoverySection === 'popular'}
-                            className={`px-3 py-1.5 rounded-full text-sm font-semibold flex items-center gap-1.5 transition-colors ${
-                              expandedDiscoverySection === 'popular'
-                                ? 'bg-[#E65100] text-white shadow-sm'
-                                : (darkMode ? 'bg-[#162226] border border-[#0B5A70]/25 text-teal-200 hover:border-[#0B5A70]/50' : 'bg-[#FFFCF8] border border-[#0B5A70]/15 text-[#0B5A70] hover:border-[#0B5A70]/40')
-                            }`}
-                          >
-                            <IconFlame size={16} /> Popular Bhajans
-                            <span className="text-xs opacity-70">
-                              {expandedDiscoverySection === 'popular' ? '▲' : '▼'}
-                            </span>
-                          </button>
-                        )}
-                        {recentPublicBhajans.length > 0 && (
-                          <button
-                            onClick={() => setExpandedDiscoverySection(prev => prev === 'recent' ? null : 'recent')}
-                            aria-expanded={expandedDiscoverySection === 'recent'}
-                            className={`px-3 py-1.5 rounded-full text-sm font-semibold flex items-center gap-1.5 transition-colors ${
-                              expandedDiscoverySection === 'recent'
-                                ? 'bg-[#E65100] text-white shadow-sm'
-                                : (darkMode ? 'bg-[#162226] border border-[#0B5A70]/25 text-teal-200 hover:border-[#0B5A70]/50' : 'bg-[#FFFCF8] border border-[#0B5A70]/15 text-[#0B5A70] hover:border-[#0B5A70]/40')
-                            }`}
-                          >
-                            <IconSparkle size={16} /> Recently Added
-                            <span className="text-xs opacity-70">
-                              {expandedDiscoverySection === 'recent' ? '▲' : '▼'}
-                            </span>
-                          </button>
-                        )}
-                      </div>
-
-                      {/* Expanded content — one of the two sections
-                          renders here when its pill is active. Uses
-                          the same compact-card layout used for
-                          Popular in Session 11, so both sections
-                          feel visually consistent. */}
-                      {expandedDiscoverySection === 'popular' && (
-                        <div>
-                          <div className="flex items-center justify-between mb-2">
-                            <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-[#0B5A70]/60'}`}>
-                              Top {topPublicBhajans.length} · Most read
-                            </p>
-                          </div>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                            {topPublicBhajans.map((b, idx) => (
-                              <button
-                                key={b.id}
-                                onClick={() => openPublicBhajanDetail(b)}
-                                className={`w-full text-left rounded-xl p-3 border transition-all flex items-center gap-3 ${darkMode ? 'bg-[#162226] border-[#0B5A70]/15 hover:border-[#0B5A70]/30' : 'bg-[#FFFCF8] border-[#0B5A70]/8 shadow-[0_1px_4px_rgba(11,90,112,0.04)] hover:border-[#0B5A70]/25 hover:shadow-[0_2px_8px_rgba(11,90,112,0.10)]'}`}
-                              >
-                                <div className={`text-base font-bold min-w-[24px] text-center flex-shrink-0 ${darkMode ? 'text-orange-300' : 'text-[#E65100]'}`}>
-                                  {idx + 1}
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <p className={`text-sm font-bold truncate ${darkMode ? 'text-amber-100' : 'text-[#0B5A70]'}`}>
-                                    {b.title}
-                                  </p>
-                                  <p className={`text-xs truncate ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                                    {b.deity} · {b.category}
-                                  </p>
-                                </div>
-                                <span className={`text-xs flex-shrink-0 ${darkMode ? 'text-gray-500' : 'text-[#0B5A70]/50'}`}>
-                                  📖 {b.readCount || b.saveCount || 0}
-                                </span>
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {expandedDiscoverySection === 'recent' && (
-                        <div>
-                          <div className="flex items-center justify-between mb-2">
-                            <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-[#0B5A70]/60'}`}>
-                              Latest {recentPublicBhajans.length} · Newest first
-                            </p>
-                          </div>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                            {recentPublicBhajans.map((b) => (
-                              <button
-                                key={b.id}
-                                onClick={() => openPublicBhajanDetail(b)}
-                                className={`w-full text-left rounded-xl p-3 border transition-all flex items-center gap-3 ${darkMode ? 'bg-[#162226] border-[#0B5A70]/15 hover:border-[#0B5A70]/30' : 'bg-[#FFFCF8] border-[#0B5A70]/8 shadow-[0_1px_4px_rgba(11,90,112,0.04)] hover:border-[#0B5A70]/25 hover:shadow-[0_2px_8px_rgba(11,90,112,0.10)]'}`}
-                              >
-                                <div className={`text-base flex-shrink-0 ${darkMode ? 'text-orange-300' : 'text-[#E65100]'}`}>
-                                  ✨
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <p className={`text-sm font-bold truncate ${darkMode ? 'text-amber-100' : 'text-[#0B5A70]'}`}>
-                                    {b.title}
-                                  </p>
-                                  <p className={`text-xs truncate ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                                    {b.deity} · {b.category}
-                                  </p>
-                                </div>
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {expandedDiscoverySection && (
-                        <div className={`mt-4 border-t ${darkMode ? 'border-[#0B5A70]/15' : 'border-[#0B5A70]/8'}`} />
-                      )}
-                    </div>
-                  )}
-
                   <div className="flex justify-end mb-2">
                     <div className="inline-flex bg-[#0B5A70]/5 rounded-lg p-0.5 border border-[#0B5A70]/10">
                       <button
