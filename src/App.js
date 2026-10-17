@@ -1084,7 +1084,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.10.17.s107';
+const APP_VERSION = '2026.10.17.s108';
 const AUTO_SCROLL_VIEWS = ['live-program', 'bhajan-detail', 'public-bhajan-detail'];
 const LIVE_SCROLL_STEPS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 
@@ -2703,6 +2703,7 @@ const App = () => {
   const [publicFormMoods, setPublicFormMoods] = useState(false);   // SESSION 104
   const publicAiInputRef = useRef(null);  // SESSION 102
   const [publicFormMore, setPublicFormMore] = useState(false); // SESSION 97
+  const [publishFromId, setPublishFromId] = useState(null); // SESSION 108: personal bhajan being published
   const [bhajanFormSaving, setBhajanFormSaving] = useState(false);
 
   // Programs states
@@ -6436,6 +6437,7 @@ const App = () => {
 
   const openAddPublicBhajan = (prefill = {}) => {
     if (!isAdmin) return;
+    if (!(prefill && typeof prefill === 'object' && !prefill.nativeEvent && prefill.title !== undefined)) setPublishFromId(null);
     setPublicBhajanForm({
       title: '',
       lyrics: '',
@@ -6455,6 +6457,27 @@ const App = () => {
     setEditingPublicBhajan(null);
     setPublicBhajanFormError('');
     setShowPublicBhajanForm(true);
+  };
+
+  // SESSION 108: admin publishes one of their own bhajans to the public
+  // library. Opens the public Add form prefilled; on save the personal
+  // copy is linked to the new public doc.
+  const publishBhajanToPublic = (bhajan) => {
+    if (!isAdmin || !bhajan) return;
+    setPublishFromId(bhajan.id);
+    openAddPublicBhajan({
+      title: bhajan.title || '',
+      lyrics: bhajan.lyrics || '',
+      deity: bhajan.deity || 'Babosa',
+      category: bhajan.category || 'Bhajan',
+      language: bhajan.language || 'Hindi',
+      dhun: bhajan.dhun || '',
+      scale: bhajan.scale || '',
+      singer: bhajan.singer || '',
+      lyricist: bhajan.lyricist || '',
+      keywords: bhajan.keywords || [],
+      source: bhajan.source || ''
+    });
   };
 
   const openEditPublicBhajan = (bhajan) => {
@@ -6576,7 +6599,15 @@ const App = () => {
         bhajanData.saveCount = 0;
         bhajanData.viewCount = 0;
         bhajanData.createdAt = window.firebase.firestore.FieldValue.serverTimestamp();
-        await db.collection('publicBhajans').add(bhajanData);
+        const newRef = await db.collection('publicBhajans').add(bhajanData);
+        if (publishFromId) {
+          // SESSION 108: link the personal copy so it follows the public one
+          try {
+            await db.collection('users').doc(user.uid).collection('bhajans').doc(publishFromId).update({ savedFromPublicId: newRef.id, baseRev: nextRev });
+            setSelectedBhajan(prev => (prev && prev.id === publishFromId ? { ...prev, savedFromPublicId: newRef.id } : prev));
+          } catch (e) { console.warn('Could not link personal copy:', e); }
+          setPublishFromId(null);
+        }
         showToast(`✅ "${bhajanData.title}" added to Public Library`);
       }
 
@@ -9230,6 +9261,15 @@ const App = () => {
                       into an overflow menu. Same behavior; less visual weight
                       — destructive actions shouldn't share space with routine
                       Edit/View/Add-to buttons. */}
+                  {isAdmin && !selectedBhajan.virtual && !publicBhajans.some(b => b.id === (selectedBhajan.savedFromPublicId || selectedBhajan.id)) && (
+                    <button
+                      onClick={() => publishBhajanToPublic(selectedBhajan)}
+                      className="h-9 px-3 rounded-full text-xs font-semibold flex items-center gap-1 bg-purple-700 text-white hover:bg-purple-800"
+                      title="Add this bhajan to the public library for all users"
+                    >
+                      🌐 Publish
+                    </button>
+                  )}
                   {isAdmin && publicBhajans.some(b => b.id === (selectedBhajan.savedFromPublicId || selectedBhajan.id)) && (
                     <button
                       onClick={() => openEditPublicBhajan(publicBhajans.find(b => b.id === (selectedBhajan.savedFromPublicId || selectedBhajan.id)) || selectedBhajan)}
