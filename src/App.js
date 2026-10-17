@@ -1084,7 +1084,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.10.17.s94';
+const APP_VERSION = '2026.10.17.s95';
 const AUTO_SCROLL_VIEWS = ['live-program', 'bhajan-detail', 'public-bhajan-detail'];
 const LIVE_SCROLL_STEPS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 
@@ -1426,6 +1426,98 @@ const HINDI_FALLBACK_MAP = {
   'mera': 'मेरा', 'meri': 'मेरी', 'mere': 'मेरे', 'mujh': 'मुझ',
   'bhajans': 'भजन', 'kirtan': 'कीर्तन', 'sankirtan': 'संकीर्तन',
   'satsang': 'सत्संग', 'jagran': 'जागरण', 'mela': 'मेला',
+};
+
+// ==============================================
+// SESSION 94: DICTATION CORRECTION
+// Speech engines (iOS especially) mangle devotional names: "jai shree
+// babosa" → "जाए बाबू साहब". Two passes fix most of it:
+//  1. Phrase fixes for names that are mangled the same way every time.
+//  2. Snap each word to the nearest word the app already knows (titles,
+//     lyrics and dhun across the user's library + public library, plus
+//     a seed list), when it is within a letter or two of it.
+// ==============================================
+const DICTATION_PHRASE_FIXES = [
+  // names first, so the "जय" rule below can see them
+  [/(^|\s)(बाबू\s*(?:साहब|सा|सहाब|सहा|शा|साब)|बाबो\s*सा|बाबूसा|बबोसा|बाबोशा|बाबो\s*साँ|बाबोसां)(?=\s|$)/g, '$1बाबोसा'],
+  [/(^|\s)(सिरी|श्रि|स्री|शिरी|सिरि)(?=\s|$)/g, '$1श्री'],
+  [/(^|\s)(खाटू|खाटु|काटू|खातू)\s*(स्याम|श्याम|शाम|स्वामी)(?=\s|$)/g, '$1खाटू श्याम'],
+  [/(^|\s)(हनूमान|हनुमाँ|हनुमन|हनुमा)(?=\s|$)/g, '$1हनुमान'],
+  [/(^|\s)(गनेश|गणेस|गनेस)(?=\s|$)/g, '$1गणेश'],
+  [/(^|\s)(किसन|किशन|कृष्न|क्रिश्ना|कृष्णा)(?=\s|$)/g, '$1कृष्ण'],
+  [/(^|\s)(भगवन|भगवाँ)(?=\s|$)/g, '$1भगवान'],
+  [/(^|\s)(गिरधर|गिरीधर)(?=\s|$)/g, '$1गिरिधर'],
+  [/(^|\s)(जाए|जाये|जे|जै|जाय|जय्|जयि|जाओ)(?=\s+(श्री|हो|बाबोसा|बाबा|माता|गणेश|हनुमान|श्याम|राम|श्री))/g, '$1जय'],
+];
+const DICTATION_SEED_WORDS = Object.values(HINDI_FALLBACK_MAP).concat([
+  'बाबोसा', 'चूरू', 'धाम', 'म्हारो', 'म्हारा', 'थारो', 'थारा', 'जय', 'जयकारा', 'सांवरिया', 'सांवरा', 'खाटू', 'श्याम', 'गिरिधर', 'गोपाल',
+  'मीरा', 'कन्हैया', 'मुरलीधर', 'बांके', 'बिहारी', 'वृंदावन', 'बरसाना', 'गोकुल', 'सालासर', 'बालाजी', 'मेहंदीपुर', 'भैरव', 'भैरूं',
+  'करणी', 'जीण', 'शाकंभरी', 'अंबे', 'दुर्गा', 'शेरांवाली', 'ज्योत', 'आरती', 'कीर्तन', 'सत्संग', 'महिमा', 'कृपा', 'दया', 'शरण', 'चरण', 'दर्शन',
+  'भक्त', 'भक्ति', 'नमो', 'नमः', 'ओम', 'णमो', 'अरिहंताणं', 'सिद्धाणं', 'पारसनाथ', 'महावीर', 'स्वामी', 'स्तवन', 'चैत्य', 'वंदना',
+]);
+const levenshtein = (a, b) => {
+  if (a === b) return 0;
+  if (!a.length) return b.length;
+  if (!b.length) return a.length;
+  let prev = new Array(b.length + 1);
+  for (let j = 0; j <= b.length; j++) prev[j] = j;
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i];
+    for (let j = 1; j <= b.length; j++) {
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    }
+    prev = cur;
+  }
+  return prev[b.length];
+};
+// vocab: Map<foldedKey, { word, count }>  (built by the app from its bhajans)
+const buildDictationVocab = (lists) => {
+  const vocab = new Map();
+  const add = (w, n) => {
+    if (!w || !/[ऀ-ॿ]/.test(w)) return;
+    const k = foldSearchKey(w);
+    if (!k) return;
+    const e = vocab.get(k);
+    if (e) { e.count += n; if (n > e.best) { e.best = n; e.word = w; } }
+    else vocab.set(k, { word: w, count: n, best: n });
+  };
+  DICTATION_SEED_WORDS.forEach(w => add(w, 50));
+  lists.forEach(list => (list || []).forEach(b => {
+    [b.title, b.dhun, b.lyrics].filter(Boolean).join(' ').split(/[\s।॥,.!?/()\-–—"'“”‘’]+/).forEach(w => add(w.replace(/^[^ऀ-ॿ]+|[^ऀ-ॿ]+$/g, ''), 1));
+  }));
+  return vocab;
+};
+const correctDictation = (text, vocab) => {
+  if (!text) return text;
+  let t = ' ' + text.replace(/\s+/g, ' ').trim();
+  DICTATION_PHRASE_FIXES.forEach(([re, rep]) => { t = t.replace(re, rep); });
+  t = t.trim();
+  if (!vocab || vocab.size === 0) return t;
+  const words = t.split(' ');
+  const out = [];
+  for (let i = 0; i < words.length; i++) {
+    const w = words[i];
+    if (!/[ऀ-ॿ]/.test(w)) { out.push(w); continue; }
+    const k = foldSearchKey(w);
+    const exact = vocab.get(k);
+    if (exact) { out.push(exact.count >= 2 ? exact.word : w); continue; }
+    // two short words that are really one ("बाबो सा" → "बाबोसा")
+    if (i + 1 < words.length && /[ऀ-ॿ]/.test(words[i + 1])) {
+      const joined = vocab.get(foldSearchKey(w + words[i + 1]));
+      if (joined && joined.count >= 2) { out.push(joined.word); i++; continue; }
+    }
+    if (k.length < 3) { out.push(w); continue; }
+    const maxD = k.length <= 4 ? 1 : 2;
+    let best = null, bestD = maxD + 1;
+    for (const [vk, e] of vocab) {
+      if (Math.abs(vk.length - k.length) > maxD || e.count < 2) continue;
+      const d = levenshtein(k, vk);
+      if (d < bestD || (d === bestD && best && e.count > best.count)) { bestD = d; best = e; }
+      if (bestD === 0) break;
+    }
+    out.push(best ? best.word : w);
+  }
+  return out.join(' ');
 };
 
 // Consistent transliteration cache key (SESSION 5 FIX:
@@ -2364,8 +2456,8 @@ const LyricsToolbar = ({ darkMode, fullscreen, onFullscreen, onMukhda, onPaste, 
   const btn = `inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors ${darkMode ? 'bg-[#1e2e33] text-gray-200 hover:bg-[#0B5A70]/30' : 'bg-[#0B5A70]/6 text-[#0B5A70] hover:bg-[#0B5A70]/12 border border-[#0B5A70]/12'}`;
   return (
     <div className="flex items-center gap-1.5 flex-wrap">
-      <button type="button" onClick={onDictate} className={`${btn} ${dictating ? '!bg-red-600 !text-white !border-red-600 animate-pulse' : ''}`} title={dictating ? 'Stop dictation' : 'Dictate lyrics (Hindi)'} aria-pressed={dictating}>
-        🎤 {dictating ? 'Listening… tap to stop' : 'Dictate'}
+      <button type="button" onClick={onDictate} className={dictating ? 'inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap bg-red-600 text-white border border-red-600' : btn} title={dictating ? 'Stop dictation' : 'Dictate lyrics (Hindi)'} aria-pressed={dictating}>
+        {dictating ? '🔴 Listening… tap to stop' : '🎤 Dictate'}
       </button>
       <button type="button" onClick={onPaste} className={btn} title="Paste from clipboard and clean up">📋 Paste</button>
       <button type="button" onClick={onMukhda} className={btn} title="Insert a blank line here (marks the end of the mukhda)">¶ Mukhda break</button>
@@ -2942,6 +3034,10 @@ const App = () => {
   const lyricsDictatingRef = useRef(null);
   const lyricsTextareaRef = useRef(null);
   const publicLyricsTextareaRef = useRef(null);
+  // SESSION 94: words the app knows, for snapping dictated words onto.
+  const dictationVocab = useMemo(() => buildDictationVocab([rawBhajans, publicBhajans]), [rawBhajans, publicBhajans]);
+  const dictationVocabRef = useRef(null);
+  dictationVocabRef.current = dictationVocab;
   const [transliterationSuggestions, setTransliterationSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [currentWord, setCurrentWord] = useState('');
@@ -5044,7 +5140,8 @@ const App = () => {
         let stopAfter = false;
         for (let i = e.resultIndex; i < e.results.length; i++) {
           if (!e.results[i].isFinal) { const t = (e.results[i][0].transcript || '').trim(); if (t) interim += (interim ? ' ' : '') + t; continue; }
-          const { text, cmd, cmdFirst } = parseDictCommand(pickDevanagariAlt(e.results[i]));
+          const { text: rawText, cmd, cmdFirst } = parseDictCommand(pickDevanagariAlt(e.results[i]));
+          const text = correctDictation(rawText, dictationVocabRef.current);
           const applyBreak = () => { if (cmd === 'line') endLine(); else if (cmd === 'para') { endLine(); committed.push(''); } };
           if (cmdFirst) applyBreak(); // "नई लाइन जाके सिर…" → break, then the words
           if (text) {
