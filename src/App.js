@@ -1084,7 +1084,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.10.17.s101';
+const APP_VERSION = '2026.10.17.s102';
 const AUTO_SCROLL_VIEWS = ['live-program', 'bhajan-detail', 'public-bhajan-detail'];
 const LIVE_SCROLL_STEPS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 
@@ -2034,6 +2034,7 @@ const IconSearch = (p) => <Icon {...p} path={<><circle cx="11" cy="11" r="7" /><
 const IconGlobe = (p) => <Icon {...p} path={<><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3a15 15 0 010 18M12 3a15 15 0 000 18" /></>} />;
 const IconBookOpen = (p) => <Icon {...p} path={<path d="M2 5.5A2.5 2.5 0 014.5 3H10v16H4.5A2.5 2.5 0 012 16.5v-11zM22 5.5A2.5 2.5 0 0019.5 3H14v16h5.5a2.5 2.5 0 002.5-2.5v-11z" />} />;
 const IconCalendar = (p) => <Icon {...p} path={<><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M3 10h18M8 3v4M16 3v4" /></>} />;
+const IconSparkle = (p) => <Icon {...p} path={<><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3z" /><path d="M19 15l.7 2.3L22 18l-2.3.7L19 21l-.7-2.3L16 18l2.3-.7L19 15z" /></>} />;
 const IconCamera = (p) => <Icon {...p} path={<><path d="M4 8h3l2-3h6l2 3h3a1 1 0 011 1v10a1 1 0 01-1 1H4a1 1 0 01-1-1V9a1 1 0 011-1z" /><circle cx="12" cy="13" r="3.5" /></>} />;
 const IconGallery = (p) => <Icon {...p} path={<><rect x="3" y="4" width="18" height="16" rx="2" /><circle cx="8.5" cy="9.5" r="1.5" /><path d="M21 16l-5-5-6 6-2-2-5 5" /></>} />;
 const IconDocument = (p) => <Icon {...p} path={<><path d="M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8l-5-5z" /><path d="M14 3v5h5M9 13h6M9 17h6" /></>} />;
@@ -2043,7 +2044,9 @@ const AttachBtn = ({ kind, onClick, disabled, title }) => {
     ? { bg: 'bg-[#D3396D]', Icon: IconCamera }
     : kind === 'gallery'
       ? { bg: 'bg-[#BF59CF]', Icon: IconGallery }
-      : { bg: 'bg-[#5157AE]', Icon: IconDocument };
+      : kind === 'ai'
+        ? { bg: 'bg-[#0B5A70]', Icon: IconSparkle }
+        : { bg: 'bg-[#5157AE]', Icon: IconDocument };
   return (
     <button
       type="button"
@@ -2695,6 +2698,8 @@ const App = () => {
   const [bhajansLoading, setBhajansLoading] = useState(false);
   const [bhajanFormError, setBhajanFormError] = useState('');
   const [bhajanFormMore, setBhajanFormMore] = useState(false); // SESSION 96: collapsed extras
+  const aiInputRef = useRef(null);        // SESSION 102
+  const publicAiInputRef = useRef(null);  // SESSION 102
   const [publicFormMore, setPublicFormMore] = useState(false); // SESSION 97
   const [bhajanFormSaving, setBhajanFormSaving] = useState(false);
 
@@ -4935,6 +4940,45 @@ const App = () => {
     }
 
     return result && result.data ? result.data.text : '';
+  };
+
+  // SESSION 102: "Read with AI" — sends the photo/PDF to /api/ocr (Gemini,
+  // key kept on the server). Better than Tesseract on photos and the only
+  // route that reads handwriting. Falls back with a clear message.
+  const handleAiRead = async (file, formSetter = setBhajanForm) => {
+    if (!file) return;
+    setOcrProcessing(true);
+    setOcrProgress(30);
+    setOcrMessage('✨ Reading with AI…');
+    try {
+      let mime = file.type || '';
+      let b64;
+      if (/^application\/pdf$/.test(mime)) {
+        if (file.size > 3.8 * 1024 * 1024) throw new Error('PDF is larger than 4 MB — split it or photograph the pages');
+        const buf = await file.arrayBuffer();
+        let bin = '';
+        const bytes = new Uint8Array(buf);
+        for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+        b64 = btoa(bin);
+      } else {
+        const dataUrl = await fileToOptimizedDataUrl(file, 1600);
+        mime = 'image/jpeg';
+        b64 = dataUrl.split(',')[1];
+      }
+      setOcrProgress(60);
+      const r = await fetch('/api/ocr', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mime, data: b64 }) });
+      const j = await r.json().catch(() => ({}));
+      if (!j.ok) throw new Error(j.error || 'AI could not read this file');
+      setOcrProgress(100);
+      applyExtractedText(j.lyrics, 'AI', formSetter);
+      if (j.title) formSetter(prev => (prev.title && prev.title.trim() ? prev : { ...prev, title: j.title }));
+      setOcrMessage('✨ Read with AI — please check the text before saving');
+    } catch (err) {
+      console.error('AI read failed:', err);
+      setOcrMessage('❌ ' + (err.message || 'AI could not read this file') + ' — you can still use Camera / Gallery / Document.');
+    } finally {
+      setOcrProcessing(false);
+    }
   };
 
   const handleImageFileForOcr = async (file, sourceLabel, formSetter = setBhajanForm) => {
@@ -9644,8 +9688,11 @@ const App = () => {
                       <AttachBtn kind="camera" disabled={ocrProcessing} onClick={() => cameraInputRef.current && cameraInputRef.current.click()} title="Camera — photograph the lyrics" />
                       <AttachBtn kind="gallery" disabled={ocrProcessing} onClick={() => imageInputRef.current && imageInputRef.current.click()} title="Gallery — pick a photo of the lyrics" />
                       <AttachBtn kind="document" disabled={ocrProcessing} onClick={() => pdfInputRef.current && pdfInputRef.current.click()} title="Document — PDF of the lyrics" />
+                      <AttachBtn kind="ai" disabled={ocrProcessing} onClick={() => aiInputRef.current && aiInputRef.current.click()} title="Read with AI — photo or PDF, including handwriting" />
                     </div>
                   </div>
+                  <input ref={aiInputRef} type="file" accept="image/*,application/pdf" className="hidden"
+                    onChange={(e) => { const f = e.target.files && e.target.files[0]; if (f) handleAiRead(f); e.target.value = ''; }} />
                   <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden"
                     onChange={(e) => { const f = e.target.files && e.target.files[0]; if (f) handleImageFileForOcr(f, 'photo'); e.target.value = ''; }} />
                   <input ref={imageInputRef} type="file" accept="image/*" className="hidden"
@@ -12483,8 +12530,11 @@ const App = () => {
                       <AttachBtn kind="camera" disabled={ocrProcessing} onClick={() => publicCameraInputRef.current && publicCameraInputRef.current.click()} title="Camera — photograph the lyrics" />
                       <AttachBtn kind="gallery" disabled={ocrProcessing} onClick={() => publicImageInputRef.current && publicImageInputRef.current.click()} title="Gallery — pick a photo of the lyrics" />
                       <AttachBtn kind="document" disabled={ocrProcessing} onClick={() => publicPdfInputRef.current && publicPdfInputRef.current.click()} title="Document — PDF of the lyrics" />
+                      <AttachBtn kind="ai" disabled={ocrProcessing} onClick={() => publicAiInputRef.current && publicAiInputRef.current.click()} title="Read with AI — photo or PDF, including handwriting" />
                     </div>
                   </div>
+                  <input ref={publicAiInputRef} type="file" accept="image/*,application/pdf" className="hidden"
+                    onChange={(e) => { const f = e.target.files && e.target.files[0]; if (f) handleAiRead(f, setPublicBhajanForm); e.target.value = ''; }} />
                   <input ref={publicCameraInputRef} type="file" accept="image/*" capture="environment" className="hidden"
                     onChange={(e) => { const f = e.target.files && e.target.files[0]; if (f) handleImageFileForOcr(f, 'photo', setPublicBhajanForm); e.target.value = ''; }} />
                   <input ref={publicImageInputRef} type="file" accept="image/*" className="hidden"
