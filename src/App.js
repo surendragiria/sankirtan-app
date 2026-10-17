@@ -1084,7 +1084,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.10.17.s85';
+const APP_VERSION = '2026.10.17.s86';
 const AUTO_SCROLL_VIEWS = ['live-program', 'bhajan-detail', 'public-bhajan-detail'];
 const LIVE_SCROLL_STEPS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 
@@ -2393,6 +2393,12 @@ const App = () => {
 
   // My Library states
   const [currentView, setCurrentView] = useState('public-library');
+  // SESSION 86: signed-in users have a single Library (My Library); any
+  // navigation to the public list view lands there instead.
+  useEffect(() => {
+    if (user && currentView === 'public-library') setCurrentView('library');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, currentView]);
   const [scrollPositions, setScrollPositions] = useState({});
   const [rawBhajans, setBhajans] = useState([]);
   const [selectedBhajan, setSelectedBhajan] = useState(null);
@@ -8119,7 +8125,7 @@ const App = () => {
                     <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
                       <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-[#0B5A70]/70'}`}>
                         {bhajans.length} bhajan{bhajans.length === 1 ? '' : 's'}
-                        {myParodies.length > 0 ? ` · ${myParodies.length} medley${myParodies.length === 1 ? '' : 's'}` : ''} in your collection
+                        {myParodies.length > 0 ? ` · ${myParodies.length} medley${myParodies.length === 1 ? '' : 's'}` : ''} in your library
                       </p>
                       {/* SESSION 43: "+ Add" is now a two-way choice — Bhajan
                           or Parody. Parodies are performance units (a medley
@@ -8132,6 +8138,15 @@ const App = () => {
                         >
                           <span className="text-lg leading-none">+</span> Bhajan
                         </button>
+                        {isAdmin && (
+                          <button
+                            onClick={openAddPublicBhajan}
+                            className="bg-purple-700 hover:bg-purple-800 text-white font-semibold px-4 py-2 rounded-xl shadow-md flex items-center gap-1.5 text-sm"
+                            title="Add a bhajan to the public library (all users)"
+                          >
+                            <span className="text-lg leading-none">+</span> Public
+                          </button>
+                        )}
                         <button
                           onClick={openCreateParody}
                           className="bg-[#E65100] hover:bg-[#cc4700] text-white font-semibold px-4 py-2 rounded-xl shadow-md flex items-center gap-1.5 text-sm"
@@ -12590,8 +12605,12 @@ const App = () => {
             <div className="max-w-4xl mx-auto flex items-stretch">
               {[
                 // SESSION 50: emoji → SVG icon components
-                { view: 'public-library', label: 'Public', Icon: IconGlobe, requiresAuth: false },
-                { view: 'library', label: 'My Library', Icon: IconBookOpen, requiresAuth: true },
+                // SESSION 86: one Library tab. Guests get the public library;
+                // signed-in users get My Library (which contains all public
+                // bhajans since S83).
+                ...(user
+                  ? [{ view: 'library', label: 'Library', Icon: IconBookOpen, requiresAuth: true }]
+                  : [{ view: 'public-library', label: 'Library', Icon: IconGlobe, requiresAuth: false }]),
                 { view: 'programs', label: 'Playlists', Icon: IconMusic, requiresAuth: true },
               ].map(tab => {
                 const isActive = currentView === tab.view;
