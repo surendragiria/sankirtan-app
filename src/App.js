@@ -1084,7 +1084,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.10.13.s82';
+const APP_VERSION = '2026.10.17.s83';
 const AUTO_SCROLL_VIEWS = ['live-program', 'bhajan-detail', 'public-bhajan-detail'];
 const LIVE_SCROLL_STEPS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 
@@ -2008,7 +2008,7 @@ const MyBhajanCard = React.memo(function MyBhajanCard({
           saved-from-public bhajans, "Delete" (permanent) for
           personally-authored ones — the confirmation dialog
           reinforces the difference. */}
-      {onRemove && (
+      {onRemove && !bhajan.virtual && (
         <button
           type="button"
           onClick={(e) => {
@@ -2142,7 +2142,7 @@ const PublicBhajanCard = React.memo(function PublicBhajanCard({
             {bhajan.deity} · {bhajan.category}
           </p>
         </button>
-        {isSaved ? (
+        {isSaved === null ? null : isSaved ? (
           <span
             className="bg-green-50 text-green-700 text-xs font-semibold px-2 py-1 rounded-full flex-shrink-0"
             aria-label="Already in your library"
@@ -2207,7 +2207,7 @@ const PublicBhajanCard = React.memo(function PublicBhajanCard({
       </button>
 
       <div className={`flex gap-2 mt-3 pt-3 border-t ${darkMode ? 'border-[#0B5A70]/15' : 'border-[#0B5A70]/8'}`}>
-        {isSaved ? (
+        {isSaved === null ? null : isSaved ? (
           <span className="flex-1 bg-green-50 text-green-700 font-semibold py-2 rounded-lg text-sm text-center">
             ✓ In Your Library
           </span>
@@ -2594,7 +2594,7 @@ const App = () => {
   // lyricist, moods) flow through to the personal copy as long as the
   // user hasn't set that field themselves. Lyrics and title are never
   // overridden — those are the user's to edit.
-  const bhajans = useMemo(() => {
+  const ownedBhajans = useMemo(() => {
     if (rawBhajans.length === 0 || publicBhajans.length === 0) return rawBhajans;
     const pub = new Map(publicBhajans.map(b => [b.id, b]));
     const INHERIT = ['source', 'dhun', 'scale', 'singer', 'lyricist'];
@@ -2612,6 +2612,21 @@ const App = () => {
     });
     return changed ? out : rawBhajans;
   }, [rawBhajans, publicBhajans]);
+  // SESSION 83: every public bhajan is part of My Library. Public bhajans
+  // the user hasn't personalised appear as "virtual" entries (same id as
+  // the public doc, virtual: true). The first personal action on one —
+  // star, notes, edit — silently creates the user's own copy
+  // (materializeBhajan). New public bhajans appear for everyone at once.
+  const bhajans = useMemo(() => {
+    if (!user || publicBhajans.length === 0) return ownedBhajans;
+    const have = new Set();
+    ownedBhajans.forEach(b => { if (b.savedFromPublicId) have.add(b.savedFromPublicId); });
+    const virtual = publicBhajans
+      .filter(pb => !have.has(pb.id))
+      .map(pb => ({ ...pb, savedFromPublicId: pb.id, virtual: true, ownerId: user.uid, viewCount: 0, starred: false, notes: '' }));
+    return virtual.length ? [...ownedBhajans, ...virtual] : ownedBhajans;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ownedBhajans, publicBhajans, user && user.uid]);
   const [publicLoading, setPublicLoading] = useState(false);
   // SESSION 12: session-scoped seed drives seededShuffle in the
   // filteredPublicBhajans memo. Set once per browsing session so
@@ -4768,7 +4783,10 @@ const App = () => {
     setCurrentView('add-bhajan');
   };
 
-  const openEditBhajan = (bhajan) => {
+  const openEditBhajan = async (bhajanIn) => {
+    // SESSION 83: editing a public (virtual) entry edits your own copy
+    const bhajan = await materializeBhajan(bhajanIn);
+    if (!bhajan) return;
     setBhajanForm({
       title: bhajan.title || '',
       lyrics: bhajan.lyrics || '',
@@ -4917,11 +4935,13 @@ const App = () => {
     try {
       if (!user) return;
       const db = window.firebase.firestore();
-      // Personal viewCount — always increment
-      await db.collection('users').doc(user.uid).collection('bhajans').doc(bhajan.id).update({
-        viewCount: window.firebase.firestore.FieldValue.increment(1),
-        lastActive: window.firebase.firestore.FieldValue.serverTimestamp()
-      });
+      // Personal viewCount — only when the user owns a copy (SESSION 83)
+      if (!bhajan.virtual) {
+        await db.collection('users').doc(user.uid).collection('bhajans').doc(bhajan.id).update({
+          viewCount: window.firebase.firestore.FieldValue.increment(1),
+          lastActive: window.firebase.firestore.FieldValue.serverTimestamp()
+        });
+      }
 
       // SESSION 40: if this personal bhajan originated from a
       // public bhajan (savedFromPublicId set), also bump the
@@ -5466,7 +5486,7 @@ const App = () => {
     return () => clearTimeout(t);
   }, [deepLinkResolving]);
 
-  const saveToMyLibrary = useCallback(async (publicBhajan) => {
+  const saveToMyLibrary = useCallback(async (publicBhajan, opts = {}) => {
     if (!user || !userProfile) {
       if (guestMode) { setGuestMode(false); }
       return;
@@ -5528,10 +5548,12 @@ const App = () => {
         firstSave = !localStorage.getItem('sankirtan-first-save-done');
         if (firstSave) localStorage.setItem('sankirtan-first-save-done', '1');
       } catch {}
-      showToast(firstSave
-        ? `✅ Saved! You can now add "${publicBhajan.title}" to playlists and edit its lyrics from My Library.`
-        : `✅ "${publicBhajan.title}" added to your library!`);
-      return { id: newRef.id, ...bhajanData };
+      if (!opts.silent) {
+        showToast(firstSave
+          ? `✅ Saved! You can now add "${publicBhajan.title}" to playlists and edit its lyrics from My Library.`
+          : `✅ "${publicBhajan.title}" added to your library!`);
+      }
+      return { id: newRef.id, ...bhajanData, savedFromPublicId: publicBhajan.id };
     } catch (error) {
       console.error('Error saving bhajan:', error);
       showToast('Could not save: ' + error.message, 'error');
@@ -6174,13 +6196,26 @@ const App = () => {
     }
   };
 
+  // SESSION 83: turn a virtual (public) library entry into the user's own
+  // copy before a personal write. Returns the bhajan to operate on.
+  const materializeBhajan = async (bhajan) => {
+    if (!bhajan || !bhajan.virtual) return bhajan;
+    const pub = publicBhajans.find(b => b.id === bhajan.id) || bhajan;
+    const saved = await saveToMyLibrary(pub, { silent: true });
+    if (!saved) return null;
+    setSelectedBhajan(prev => (prev && prev.id === bhajan.id ? { ...saved, starred: false, notes: '' } : prev));
+    return saved;
+  };
+
   // SESSION 75: ⭐ star / unstar a library bhajan.
-  const toggleStarred = async (bhajan) => {
-    if (!user || !bhajan) return;
+  const toggleStarred = async (bhajanIn) => {
+    if (!user || !bhajanIn) return;
+    const bhajan = await materializeBhajan(bhajanIn);
+    if (!bhajan) return;
     const next = !bhajan.starred;
     try {
       await window.firebase.firestore().collection('users').doc(user.uid).collection('bhajans').doc(bhajan.id).update({ starred: next });
-      setSelectedBhajan(prev => (prev && prev.id === bhajan.id ? { ...prev, starred: next } : prev));
+      setSelectedBhajan(prev => (prev && (prev.id === bhajan.id || prev.id === bhajanIn.id) ? { ...prev, ...bhajan, starred: next, virtual: false } : prev));
       showToast(next ? '⭐ Starred' : 'Removed from Starred');
     } catch (error) {
       showToast('Could not update: ' + error.message, 'error');
@@ -6188,12 +6223,14 @@ const App = () => {
   };
 
   // SESSION 75: private singer notes on a library bhajan.
-  const saveBhajanNotes = async (bhajan, text) => {
-    if (!user || !bhajan) return;
+  const saveBhajanNotes = async (bhajanIn, text) => {
+    if (!user || !bhajanIn) return;
     const notes = (text || '').trim();
     try {
+      const bhajan = await materializeBhajan(bhajanIn);
+      if (!bhajan) return;
       await window.firebase.firestore().collection('users').doc(user.uid).collection('bhajans').doc(bhajan.id).update({ notes });
-      setSelectedBhajan(prev => (prev && prev.id === bhajan.id ? { ...prev, notes } : prev));
+      setSelectedBhajan(prev => (prev && (prev.id === bhajan.id || prev.id === bhajanIn.id) ? { ...prev, ...bhajan, notes, virtual: false } : prev));
       setNotesDraft(null);
       showToast(notes ? '📝 Notes saved' : 'Notes cleared');
     } catch (error) {
@@ -6454,7 +6491,9 @@ const App = () => {
     });
   };
 
-  const getBhajanById = (id) => bhajans.find(b => b.id === id);
+  // SESSION 83: a program may reference a public id (added while the
+  // bhajan was virtual); resolve it to the personal copy once one exists.
+  const getBhajanById = (id) => bhajans.find(b => b.id === id) || bhajans.find(b => b.savedFromPublicId === id);
 
   // ==============================================
   // LIVE PROGRAM MODE
@@ -8540,7 +8579,7 @@ const App = () => {
                       into an overflow menu. Same behavior; less visual weight
                       — destructive actions shouldn't share space with routine
                       Edit/View/Add-to buttons. */}
-                  <div className="relative">
+                  {!selectedBhajan.virtual && <div className="relative">
                     <button
                       onClick={() => setShowDeleteMenu(showDeleteMenu === 'library' ? null : 'library')}
                       className={`w-9 h-9 rounded-full flex items-center justify-center text-lg leading-none transition-colors ${darkMode ? 'bg-[#1e2e33] text-gray-300 hover:bg-[#0B5A70]/20' : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15'}`}
@@ -8563,7 +8602,7 @@ const App = () => {
                         </div>
                       </>
                     )}
-                  </div>
+                  </div>}
                 </div>
               </div>
 
@@ -10382,7 +10421,7 @@ const App = () => {
                 // searches or filters (not all 280+ by default). Public
                 // bhajans already saved to My Library are excluded — their
                 // personal copy is in the list above.
-                const publicPickerMatches = hasActiveFiltersFn() ? rankByTier(publicBhajans.filter(b => {
+                const publicPickerMatches = (hasActiveFiltersFn() && !user) ? rankByTier(publicBhajans.filter(b => {
                   if (savedBhajanIds.has(b.id)) return false;
                   if (pickerQ && searchTier(b, pickerQ) < 0) return false;
                   if (pickerDeityFilter && b.deity !== pickerDeityFilter) return false;
@@ -11121,7 +11160,7 @@ const App = () => {
                       darkMode={darkMode}
                       compactView={compactView}
                       cardIndex={pubCardIndex}
-                      isSaved={savedBhajanIds.has(bhajan.id)}
+                      isSaved={user ? null : false}
                       savingToLibrary={savingToLibrary}
                       onOpen={openPublicBhajanDetail}
                       onSave={saveToMyLibrary}
@@ -11205,20 +11244,12 @@ const App = () => {
                   ← Back
                 </button>
                 <div className="flex items-center gap-1.5">
-                  {savedBhajanIds.has(selectedPublicBhajan.id) ? (
-                    <span
-                      className="h-9 bg-green-50 text-green-700 font-semibold px-3 rounded-full text-xs flex items-center"
-                      title="Already in your library"
-                    >
-                      In Library
-                    </span>
-                  ) : (
+                  {!user && (
                     <button
                       onClick={() => saveToMyLibrary(selectedPublicBhajan)}
-                      disabled={savingToLibrary}
-                      className="h-9 bg-green-100 hover:bg-green-200 text-green-700 font-semibold px-3 rounded-full text-xs disabled:opacity-50 flex items-center"
+                      className="h-9 bg-green-100 hover:bg-green-200 text-green-700 font-semibold px-3 rounded-full text-xs flex items-center"
                     >
-                      {savingToLibrary ? '…' : 'Save'}
+                      Save
                     </button>
                   )}
 
