@@ -1084,7 +1084,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.10.17.s103';
+const APP_VERSION = '2026.10.17.s104';
 const AUTO_SCROLL_VIEWS = ['live-program', 'bhajan-detail', 'public-bhajan-detail'];
 const LIVE_SCROLL_STEPS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 
@@ -2699,6 +2699,8 @@ const App = () => {
   const [bhajanFormError, setBhajanFormError] = useState('');
   const [bhajanFormMore, setBhajanFormMore] = useState(false); // SESSION 96: collapsed extras
   const aiInputRef = useRef(null);        // SESSION 102
+  const [bhajanFormMoods, setBhajanFormMoods] = useState(false);   // SESSION 104
+  const [publicFormMoods, setPublicFormMoods] = useState(false);   // SESSION 104
   const publicAiInputRef = useRef(null);  // SESSION 102
   const [publicFormMore, setPublicFormMore] = useState(false); // SESSION 97
   const [bhajanFormSaving, setBhajanFormSaving] = useState(false);
@@ -4972,7 +4974,7 @@ const App = () => {
       setOcrProgress(100);
       applyExtractedText(j.lyrics, 'AI', formSetter);
       if (j.title) formSetter(prev => (prev.title && prev.title.trim() ? prev : { ...prev, title: j.title }));
-      setOcrMessage('✨ Read with AI — please check the text before saving');
+      setOcrMessage('');
     } catch (err) {
       console.error('AI read failed:', err);
       setOcrMessage('❌ ' + (err.message || 'AI could not read this file') + ' — you can still use Camera / Gallery / Document.');
@@ -5354,6 +5356,7 @@ const App = () => {
     setOcrProgress(0);
     setOcrProcessing(false);
     setBhajanFormMore(false);
+    setBhajanFormMoods(false);
     setCurrentView('add-bhajan');
   };
 
@@ -5376,6 +5379,7 @@ const App = () => {
     });
     setBhajanFormError('');
     setBhajanFormMore(!!(bhajan.singer || bhajan.lyricist || bhajan.source));
+    setBhajanFormMoods(false);
     setEditingBhajan(bhajan);
     setCurrentView('edit-bhajan');
   };
@@ -9762,28 +9766,26 @@ const App = () => {
                 {/* ---------- Details ---------- */}
                 <p className={sectionTitle}>Details</p>
                 <div className="grid grid-cols-2 gap-3 mb-3">
-                  <div>
-                    <label className={fLabel}>Deity</label>
-                    <select value={bhajanForm.deity} onChange={(e) => setBhajanForm({ ...bhajanForm, deity: e.target.value })} className={fSelect}>
+                  <div className="relative">
+                    <span className={`absolute left-4 top-1.5 text-[10px] font-semibold pointer-events-none ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Deity</span>
+                    <select value={bhajanForm.deity} onChange={(e) => setBhajanForm({ ...bhajanForm, deity: e.target.value })} className={fSelect + ' pt-5 pb-2'} aria-label="Deity">
                       {allDeityOptions.map(d => <option key={d.value} value={d.value}>{d.value}</option>)}
                     </select>
                   </div>
-                  <div>
-                    <label className={fLabel}>Type</label>
-                    <select value={bhajanForm.category} onChange={(e) => setBhajanForm({ ...bhajanForm, category: e.target.value })} className={fSelect}>
+                  <div className="relative">
+                    <span className={`absolute left-4 top-1.5 text-[10px] font-semibold pointer-events-none ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Type</span>
+                    <select value={bhajanForm.category} onChange={(e) => setBhajanForm({ ...bhajanForm, category: e.target.value })} className={fSelect + ' pt-5 pb-2'} aria-label="Type">
                       {allCategoryOptions.map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3 mb-3">
                   <div className="relative">
-                    <label className={fLabel}>तर्ज़ / Tune</label>
-                    <input type="text" {...hindiProps('dhun')} className={fInput} placeholder="e.g. तुझे देखा तो" />
+                    <input type="text" {...hindiProps('dhun')} className={fInput} placeholder="तर्ज़ / Tune" aria-label="तर्ज़ / Tune" />
                     {chipsFor('dhun')}
                   </div>
                   <div>
-                    <label className={fLabel}>Scale / Raag</label>
-                    <input type="text" value={bhajanForm.scale} onChange={(e) => setBhajanForm({ ...bhajanForm, scale: e.target.value })} className={fInput} placeholder="e.g. C#, Yaman" />
+                    <input type="text" value={bhajanForm.scale} onChange={(e) => setBhajanForm({ ...bhajanForm, scale: e.target.value })} className={fInput} placeholder="Scale / Raag" aria-label="Scale / Raag" />
                   </div>
                 </div>
 
@@ -9794,31 +9796,41 @@ const App = () => {
                   aria-expanded={bhajanFormMore}
                   className={`text-xs font-semibold mb-3 ${darkMode ? 'text-teal-200' : 'text-[#0B5A70]'}`}
                 >
-                  {bhajanFormMore ? '▾' : '▸'} Singer, lyricist, link
+                  {bhajanFormMore ? '▾' : '+'} Add singer, lyricist…
                 </button>
                 {bhajanFormMore && (
                   <div className="mb-3 space-y-3">
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <label className={fLabel}>गायक / Singer</label>
-                        <input type="text" value={bhajanForm.singer} onChange={(e) => setBhajanForm({ ...bhajanForm, singer: e.target.value })} className={fInput} placeholder="e.g. Anup Jalota" />
+                        <input type="text" value={bhajanForm.singer} onChange={(e) => setBhajanForm({ ...bhajanForm, singer: e.target.value })} className={fInput} placeholder="गायक / Singer" aria-label="Singer" />
                       </div>
                       <div className="relative">
-                        <label className={fLabel}>रचनाकार / Lyricist</label>
-                        <input type="text" {...hindiProps('lyricist')} className={fInput} placeholder="e.g. मीरा बाई" />
+                        <input type="text" {...hindiProps('lyricist')} className={fInput} placeholder="रचनाकार / Lyricist" aria-label="Lyricist" />
                         {chipsFor('lyricist')}
                       </div>
                     </div>
                     <div>
-                      <label className={fLabel}>YouTube or reference link</label>
+                      <label className={fLabel}>YouTube link</label>
                       <input type="url" value={bhajanForm.source} onChange={(e) => setBhajanForm({ ...bhajanForm, source: e.target.value })} className={fInput} placeholder="https://youtube.com/…" />
                     </div>
                   </div>
                 )}
 
-                {/* ---------- Moods ---------- */}
-                <p className={sectionTitle + ' mt-2'}>Moods{bhajanForm.keywords.length ? ` · ${bhajanForm.keywords.length}` : ''}</p>
-                <div className="flex flex-wrap gap-1.5 mb-6">
+                {/* ---------- Moods (collapsed) ---------- */}
+                <div className="flex flex-wrap items-center gap-1.5 mb-2">
+                  <button
+                    type="button"
+                    onClick={() => setBhajanFormMoods(v => !v)}
+                    aria-expanded={bhajanFormMoods}
+                    className={`text-xs font-semibold ${darkMode ? 'text-teal-200' : 'text-[#0B5A70]'}`}
+                  >
+                    {bhajanFormMoods ? '▾' : '+'} Add mood
+                  </button>
+                  {!bhajanFormMoods && bhajanForm.keywords.map(kw => (
+                    <button key={kw} type="button" onClick={() => toggleKeyword(kw)} title="Remove" className="px-2.5 py-1 rounded-full text-xs font-medium bg-[#0B5A70] text-white">#{kw} ×</button>
+                  ))}
+                </div>
+                <div className={`flex flex-wrap gap-1.5 mb-6 ${bhajanFormMoods ? '' : 'hidden'}`}>
                   {allKeywordOptions.map(kw => (
                     <button
                       key={kw}
@@ -12594,58 +12606,61 @@ const App = () => {
                 {/* ---------- Details ---------- */}
                 <p className={pSection}>Details</p>
                 <div className="grid grid-cols-2 gap-3 mb-3">
-                  <div>
-                    <label className={pLabel}>Deity</label>
-                    <select value={publicBhajanForm.deity} onChange={(e) => setPublicBhajanForm({ ...publicBhajanForm, deity: e.target.value })} className={pIn}>
+                  <div className="relative">
+                    <span className="absolute left-4 top-1.5 text-[10px] font-semibold pointer-events-none text-gray-500">Deity</span>
+                    <select value={publicBhajanForm.deity} onChange={(e) => setPublicBhajanForm({ ...publicBhajanForm, deity: e.target.value })} className={pIn + ' pt-5 pb-2'} aria-label="Deity">
                       {allDeityOptions.map(d => <option key={d.value} value={d.value}>{d.value}</option>)}
                     </select>
                   </div>
-                  <div>
-                    <label className={pLabel}>Type</label>
-                    <select value={publicBhajanForm.category} onChange={(e) => setPublicBhajanForm({ ...publicBhajanForm, category: e.target.value })} className={pIn}>
+                  <div className="relative">
+                    <span className="absolute left-4 top-1.5 text-[10px] font-semibold pointer-events-none text-gray-500">Type</span>
+                    <select value={publicBhajanForm.category} onChange={(e) => setPublicBhajanForm({ ...publicBhajanForm, category: e.target.value })} className={pIn + ' pt-5 pb-2'} aria-label="Type">
                       {allCategoryOptions.map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3 mb-3">
                   <div className="relative">
-                    <label className={pLabel}>तर्ज़ / Tune</label>
-                    <input type="text" {...hp('dhun')} className={pIn} placeholder="e.g. तुझे देखा तो" />
+                    <input type="text" {...hp('dhun')} className={pIn} placeholder="तर्ज़ / Tune" aria-label="तर्ज़ / Tune" />
                     {chips('dhun')}
                   </div>
                   <div>
-                    <label className={pLabel}>Scale / Raag</label>
-                    <input type="text" value={publicBhajanForm.scale} onChange={(e) => setPublicBhajanForm({ ...publicBhajanForm, scale: e.target.value })} className={pIn} placeholder="e.g. C#, Yaman" />
+                    <input type="text" value={publicBhajanForm.scale} onChange={(e) => setPublicBhajanForm({ ...publicBhajanForm, scale: e.target.value })} className={pIn} placeholder="Scale / Raag" aria-label="Scale / Raag" />
                   </div>
                 </div>
 
                 {/* ---------- More ---------- */}
                 <button type="button" onClick={() => setPublicFormMore(v => !v)} aria-expanded={moreOpen} className="text-xs font-semibold mb-3 text-[#0B5A70]">
-                  {moreOpen ? '▾' : '▸'} Singer, lyricist, link
+                  {moreOpen ? '▾' : '+'} Add singer, lyricist…
                 </button>
                 {moreOpen && (
                   <div className="mb-3 space-y-3">
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <label className={pLabel}>गायक / Singer</label>
-                        <input type="text" value={publicBhajanForm.singer} onChange={(e) => setPublicBhajanForm({ ...publicBhajanForm, singer: e.target.value })} className={pIn} placeholder="e.g. Anup Jalota" />
+                        <input type="text" value={publicBhajanForm.singer} onChange={(e) => setPublicBhajanForm({ ...publicBhajanForm, singer: e.target.value })} className={pIn} placeholder="गायक / Singer" aria-label="Singer" />
                       </div>
                       <div className="relative">
-                        <label className={pLabel}>रचनाकार / Lyricist</label>
-                        <input type="text" {...hp('lyricist')} className={pIn} placeholder="e.g. मीरा बाई" />
+                        <input type="text" {...hp('lyricist')} className={pIn} placeholder="रचनाकार / Lyricist" aria-label="Lyricist" />
                         {chips('lyricist')}
                       </div>
                     </div>
                     <div>
-                      <label className={pLabel}>YouTube or reference link</label>
+                      <label className={pLabel}>YouTube link</label>
                       <input type="url" value={publicBhajanForm.source} onChange={(e) => setPublicBhajanForm({ ...publicBhajanForm, source: e.target.value })} className={pIn} placeholder="https://youtube.com/…" />
                     </div>
                   </div>
                 )}
 
-                {/* ---------- Moods ---------- */}
-                <p className={pSection + ' mt-2'}>Moods{publicBhajanForm.keywords.length ? ` · ${publicBhajanForm.keywords.length}` : ''}</p>
-                <div className="flex flex-wrap gap-1.5 mb-5">
+                {/* ---------- Moods (collapsed) ---------- */}
+                <div className="flex flex-wrap items-center gap-1.5 mb-2">
+                  <button type="button" onClick={() => setPublicFormMoods(v => !v)} aria-expanded={publicFormMoods} className="text-xs font-semibold text-[#0B5A70]">
+                    {publicFormMoods ? '▾' : '+'} Add mood
+                  </button>
+                  {!publicFormMoods && publicBhajanForm.keywords.map(kw => (
+                    <button key={kw} type="button" onClick={() => togglePublicBhajanKeyword(kw)} title="Remove" className="px-2.5 py-1 rounded-full text-xs font-medium bg-[#0B5A70] text-white">#{kw} ×</button>
+                  ))}
+                </div>
+                <div className={`flex flex-wrap gap-1.5 mb-5 ${publicFormMoods ? '' : 'hidden'}`}>
                   {allKeywordOptions.map(kw => (
                     <button key={kw} type="button" onClick={() => togglePublicBhajanKeyword(kw)} className={`px-2.5 py-1 rounded-full text-xs font-medium ${publicBhajanForm.keywords.includes(kw) ? 'bg-[#0B5A70] text-white' : 'bg-[#0B5A70]/5 text-[#0B5A70] border border-[#0B5A70]/12'}`}>
                       #{kw}
