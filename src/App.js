@@ -1084,7 +1084,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.10.17.s97';
+const APP_VERSION = '2026.10.17.s98';
 const AUTO_SCROLL_VIEWS = ['live-program', 'bhajan-detail', 'public-bhajan-detail'];
 const LIVE_SCROLL_STEPS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 
@@ -2034,6 +2034,29 @@ const IconSearch = (p) => <Icon {...p} path={<><circle cx="11" cy="11" r="7" /><
 const IconGlobe = (p) => <Icon {...p} path={<><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3a15 15 0 010 18M12 3a15 15 0 000 18" /></>} />;
 const IconBookOpen = (p) => <Icon {...p} path={<path d="M2 5.5A2.5 2.5 0 014.5 3H10v16H4.5A2.5 2.5 0 012 16.5v-11zM22 5.5A2.5 2.5 0 0019.5 3H14v16h5.5a2.5 2.5 0 002.5-2.5v-11z" />} />;
 const IconCalendar = (p) => <Icon {...p} path={<><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M3 10h18M8 3v4M16 3v4" /></>} />;
+const IconCamera = (p) => <Icon {...p} path={<><path d="M4 8h3l2-3h6l2 3h3a1 1 0 011 1v10a1 1 0 01-1 1H4a1 1 0 01-1-1V9a1 1 0 011-1z" /><circle cx="12" cy="13" r="3.5" /></>} />;
+const IconGallery = (p) => <Icon {...p} path={<><rect x="3" y="4" width="18" height="16" rx="2" /><circle cx="8.5" cy="9.5" r="1.5" /><path d="M21 16l-5-5-6 6-2-2-5 5" /></>} />;
+const IconDocument = (p) => <Icon {...p} path={<><path d="M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8l-5-5z" /><path d="M14 3v5h5M9 13h6M9 17h6" /></>} />;
+// SESSION 98: WhatsApp-style attach buttons — coloured circles with line icons
+const AttachBtn = ({ kind, onClick, disabled, title }) => {
+  const look = kind === 'camera'
+    ? { bg: 'bg-[#D3396D]', Icon: IconCamera }
+    : kind === 'gallery'
+      ? { bg: 'bg-[#BF59CF]', Icon: IconGallery }
+      : { bg: 'bg-[#5157AE]', Icon: IconDocument };
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      aria-label={title}
+      className={`w-9 h-9 rounded-full flex items-center justify-center text-white shadow-sm transition-transform active:scale-95 disabled:opacity-40 ${look.bg}`}
+    >
+      <look.Icon size={18} strokeWidth={2} />
+    </button>
+  );
+};
 const IconMusic = (p) => <Icon {...p} path={<><path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" /></>} />;
 const IconLock = (p) => <Icon {...p} path={<><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V7a4 4 0 018 0v4" /></>} />;
 const IconShare = (p) => <Icon {...p} path={<><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><path d="M8.6 10.5l6.8-3.9M8.6 13.5l6.8 3.9" /></>} />;
@@ -9545,7 +9568,6 @@ const App = () => {
                 />
               ) : null
             );
-            const toolBtn = `w-9 h-9 rounded-lg flex items-center justify-center text-base transition-colors disabled:opacity-40 ${darkMode ? 'bg-[#1e2e33] hover:bg-[#0B5A70]/25 text-gray-200' : 'bg-[#0B5A70]/8 hover:bg-[#0B5A70]/15 text-[#0B5A70]'}`;
             const mukhdaInfo = (() => {
               if (!bhajanForm.lyrics || !bhajanForm.lyrics.trim()) return null;
               const m = getMukhda({ lyrics: bhajanForm.lyrics });
@@ -9591,9 +9613,9 @@ const App = () => {
                         अ {hindiTypingEnabled ? 'on' : 'off'}
                       </button>
                       <span className={`mx-0.5 h-5 w-px ${darkMode ? 'bg-white/15' : 'bg-[#0B5A70]/15'}`} aria-hidden="true" />
-                      <button type="button" disabled={ocrProcessing} onClick={() => cameraInputRef.current && cameraInputRef.current.click()} className={toolBtn} title="Read lyrics with the camera" aria-label="Scan lyrics with camera">📷</button>
-                      <button type="button" disabled={ocrProcessing} onClick={() => imageInputRef.current && imageInputRef.current.click()} className={toolBtn} title="Read lyrics from a photo" aria-label="Read lyrics from a photo">🖼️</button>
-                      <button type="button" disabled={ocrProcessing} onClick={() => pdfInputRef.current && pdfInputRef.current.click()} className={toolBtn} title="Read lyrics from a PDF" aria-label="Read lyrics from a PDF">📄</button>
+                      <AttachBtn kind="camera" disabled={ocrProcessing} onClick={() => cameraInputRef.current && cameraInputRef.current.click()} title="Camera — photograph the lyrics" />
+                      <AttachBtn kind="gallery" disabled={ocrProcessing} onClick={() => imageInputRef.current && imageInputRef.current.click()} title="Gallery — pick a photo of the lyrics" />
+                      <AttachBtn kind="document" disabled={ocrProcessing} onClick={() => pdfInputRef.current && pdfInputRef.current.click()} title="Document — PDF of the lyrics" />
                     </div>
                   </div>
                   <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden"
@@ -12391,7 +12413,6 @@ const App = () => {
           const pIn = 'w-full px-4 py-3 border border-[#0B5A70]/15 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none bg-[#FFFCF8] text-gray-900';
           const pLabel = 'block text-sm font-semibold text-[#0B5A70] mb-1';
           const pSection = 'text-[11px] font-semibold uppercase tracking-wide mb-2 text-[#0B5A70]/60';
-          const pTool = 'w-9 h-9 rounded-lg flex items-center justify-center text-base transition-colors disabled:opacity-40 bg-[#0B5A70]/8 hover:bg-[#0B5A70]/15 text-[#0B5A70]';
           const hp = (field) => ({
             id: `public-hindi-input-${field}`,
             value: publicBhajanForm[field],
@@ -12438,9 +12459,9 @@ const App = () => {
                         अ {hindiTypingEnabled ? 'on' : 'off'}
                       </button>
                       <span className="mx-0.5 h-5 w-px bg-[#0B5A70]/15" aria-hidden="true" />
-                      <button type="button" disabled={ocrProcessing} onClick={() => publicCameraInputRef.current && publicCameraInputRef.current.click()} className={pTool} title="Read lyrics with the camera" aria-label="Scan lyrics with camera">📷</button>
-                      <button type="button" disabled={ocrProcessing} onClick={() => publicImageInputRef.current && publicImageInputRef.current.click()} className={pTool} title="Read lyrics from a photo" aria-label="Read lyrics from a photo">🖼️</button>
-                      <button type="button" disabled={ocrProcessing} onClick={() => publicPdfInputRef.current && publicPdfInputRef.current.click()} className={pTool} title="Read lyrics from a PDF" aria-label="Read lyrics from a PDF">📄</button>
+                      <AttachBtn kind="camera" disabled={ocrProcessing} onClick={() => publicCameraInputRef.current && publicCameraInputRef.current.click()} title="Camera — photograph the lyrics" />
+                      <AttachBtn kind="gallery" disabled={ocrProcessing} onClick={() => publicImageInputRef.current && publicImageInputRef.current.click()} title="Gallery — pick a photo of the lyrics" />
+                      <AttachBtn kind="document" disabled={ocrProcessing} onClick={() => publicPdfInputRef.current && publicPdfInputRef.current.click()} title="Document — PDF of the lyrics" />
                     </div>
                   </div>
                   <input ref={publicCameraInputRef} type="file" accept="image/*" capture="environment" className="hidden"
