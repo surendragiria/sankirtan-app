@@ -1084,7 +1084,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.10.17.s109';
+const APP_VERSION = '2026.10.17.s110';
 const AUTO_SCROLL_VIEWS = ['live-program', 'bhajan-detail', 'public-bhajan-detail'];
 const LIVE_SCROLL_STEPS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 
@@ -2097,8 +2097,17 @@ const BhajanTitle = ({ title, size = 'md', darkMode }) => {
   );
 };
 
+// SESSION 110: admin-only flag on the expanded (full) card for bhajans
+// whose public source is not yet marked reviewed/finalised.
+const UnreviewedChip = ({ darkMode }) => (
+  <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full ${darkMode ? 'bg-amber-900/40 text-amber-200' : 'bg-amber-100 text-amber-800'}`} title="Not yet reviewed & finalised">
+    <span aria-hidden="true">⚠</span> Unreviewed
+  </span>
+);
+const unreviewedCardCls = (darkMode) => darkMode ? ' !border-amber-500/50 !bg-[#2a2214]' : ' !border-amber-300 !bg-amber-50/70';
+
 const MyBhajanCard = React.memo(function MyBhajanCard({
-  bhajan, darkMode, compactView, cardIndex, onOpen, onRemove
+  bhajan, darkMode, compactView, cardIndex, onOpen, onRemove, unreviewed
 }) {
   if (compactView) {
     return (
@@ -2135,7 +2144,7 @@ const MyBhajanCard = React.memo(function MyBhajanCard({
       tabIndex={0}
       onClick={() => onOpen(bhajan)}
       onKeyDown={handleKey}
-      className={`sk-card-animate rounded-2xl p-5 border transition-all text-left cursor-pointer relative ${darkMode ? 'bg-[#162226] border-[#0B5A70]/15 shadow-[0_2px_12px_rgba(11,90,112,0.15)] hover:border-[#0B5A70]/30 hover:shadow-[0_4px_20px_rgba(11,90,112,0.25)]' : 'bg-[#FFFCF8] border-[#0B5A70]/8 shadow-[0_2px_12px_rgba(11,90,112,0.06)] hover:border-[#0B5A70]/25 hover:shadow-[0_4px_20px_rgba(11,90,112,0.12)]'}`}
+      className={`sk-card-animate rounded-2xl p-5 border transition-all text-left cursor-pointer relative ${darkMode ? 'bg-[#162226] border-[#0B5A70]/15 shadow-[0_2px_12px_rgba(11,90,112,0.15)] hover:border-[#0B5A70]/30 hover:shadow-[0_4px_20px_rgba(11,90,112,0.25)]' : 'bg-[#FFFCF8] border-[#0B5A70]/8 shadow-[0_2px_12px_rgba(11,90,112,0.06)] hover:border-[#0B5A70]/25 hover:shadow-[0_4px_20px_rgba(11,90,112,0.12)]'}${unreviewed ? unreviewedCardCls(darkMode) : ''}`}
       style={{ animationDelay: `${Math.min(cardIndex, 8) * 0.04}s` }}
     >
       {/* SESSION 18: quick unsave / delete button, top-right.
@@ -2161,6 +2170,7 @@ const MyBhajanCard = React.memo(function MyBhajanCard({
 
       <div className="mb-2 pr-8">
         <BhajanTitle title={bhajan.title} size="lg" darkMode={darkMode} />
+        {unreviewed && <div className="mt-1"><UnreviewedChip darkMode={darkMode} /></div>}
       </div>
 
       {bhajan.dhun && (
@@ -2258,7 +2268,7 @@ const MyBhajanCard = React.memo(function MyBhajanCard({
 });
 
 const PublicBhajanCard = React.memo(function PublicBhajanCard({
-  bhajan, darkMode, compactView, cardIndex, isSaved, savingToLibrary, onOpen, onSave
+  bhajan, darkMode, compactView, cardIndex, isSaved, savingToLibrary, onOpen, onSave, unreviewed
 }) {
   if (compactView) {
     // SESSION 6 FIX: was <button><span onClick>+ Save</span></button>
@@ -2301,7 +2311,7 @@ const PublicBhajanCard = React.memo(function PublicBhajanCard({
 
   return (
     <div
-      className={`sk-card-animate rounded-2xl p-5 border transition-all ${darkMode ? 'bg-[#162226] border-[#0B5A70]/15 shadow-[0_2px_12px_rgba(11,90,112,0.15)] hover:border-[#0B5A70]/30 hover:shadow-[0_4px_20px_rgba(11,90,112,0.25)]' : 'bg-[#FFFCF8] border-[#0B5A70]/8 shadow-[0_2px_12px_rgba(11,90,112,0.06)] hover:border-[#0B5A70]/25 hover:shadow-[0_4px_20px_rgba(11,90,112,0.12)]'}`}
+      className={`sk-card-animate rounded-2xl p-5 border transition-all ${darkMode ? 'bg-[#162226] border-[#0B5A70]/15 shadow-[0_2px_12px_rgba(11,90,112,0.15)] hover:border-[#0B5A70]/30 hover:shadow-[0_4px_20px_rgba(11,90,112,0.25)]' : 'bg-[#FFFCF8] border-[#0B5A70]/8 shadow-[0_2px_12px_rgba(11,90,112,0.06)] hover:border-[#0B5A70]/25 hover:shadow-[0_4px_20px_rgba(11,90,112,0.12)]'}${unreviewed ? unreviewedCardCls(darkMode) : ''}`}
       style={{ animationDelay: `${Math.min(cardIndex, 8) * 0.04}s` }}
     >
       <button
@@ -2310,6 +2320,7 @@ const PublicBhajanCard = React.memo(function PublicBhajanCard({
       >
         <div className="mb-2">
           <BhajanTitle title={bhajan.title} size="lg" darkMode={darkMode} />
+          {unreviewed && <div className="mt-1"><UnreviewedChip darkMode={darkMode} /></div>}
         </div>
 
         {bhajan.dhun && (
@@ -9144,6 +9155,7 @@ const App = () => {
                       cardIndex={cardIndex}
                       onOpen={openBhajanDetail}
                       onRemove={deleteBhajan}
+                      unreviewed={isAdmin && !compactView && !isReviewed(bhajan)}
                     />
                   ))}
                 </div>
@@ -11443,6 +11455,7 @@ const App = () => {
                       savingToLibrary={savingToLibrary}
                       onOpen={openPublicBhajanDetail}
                       onSave={saveToMyLibrary}
+                      unreviewed={isAdmin && !compactView && !isReviewed(bhajan)}
                     />
                   ))}
                 </div>
