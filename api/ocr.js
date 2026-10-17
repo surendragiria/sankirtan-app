@@ -5,7 +5,23 @@
 // POST /api/ocr  { mime: "image/jpeg" | "image/png" | "application/pdf", data: "<base64>" }
 // → { ok, title, lyrics, model }
 
-const MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash'];
+// Model names change over time; ask the API which ones this key can use
+// and prefer the newest "flash" model that supports generateContent.
+const PREFERRED = [/^gemini-3[\.\d-]*flash(?!-lite)/, /^gemini-3[\.\d-]*flash-lite/, /^gemini-2\.5-flash(?!-lite)/, /^gemini-2\.5-flash-lite/, /^gemini-2\.0-flash/, /flash/, /gemini/];
+let cachedModels = null;
+async function pickModels(key) {
+  if (cachedModels) return cachedModels;
+  const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(key)}&pageSize=200`);
+  const j = await r.json().catch(() => ({}));
+  const names = (j.models || [])
+    .filter(m => (m.supportedGenerationMethods || []).includes('generateContent'))
+    .map(m => String(m.name || '').replace(/^models\//, ''))
+    .filter(n => !/embedding|imagen|veo|tts|audio|live|image-generation|thinking-exp/i.test(n));
+  const ordered = [];
+  for (const re of PREFERRED) for (const n of names) if (re.test(n) && !ordered.includes(n)) ordered.push(n);
+  cachedModels = ordered.length ? ordered.slice(0, 4) : ['gemini-2.5-flash', 'gemini-2.0-flash'];
+  return cachedModels;
+}
 const MAX_BYTES = 4 * 1024 * 1024; // keep under Vercel's request body limit
 
 const PROMPT = `You are transcribing a Hindi/Marwari devotional song (bhajan, aarti, chalisa) from the attached image or document.
@@ -45,7 +61,10 @@ module.exports = async (req, res) => {
   };
 
   let lastErr = 'AI service unavailable';
-  for (const model of MODELS) {
+  let models;
+  try { models = await pickModels(key); } catch { models = ['gemini-2.5-flash', 'gemini-2.0-flash']; }
+  const errors = [];
+  for (const model of models) {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 55000);
     try {
@@ -55,9 +74,8 @@ module.exports = async (req, res) => {
         body: JSON.stringify(payload)
       });
       const j = await r.json().catch(() => ({}));
-      if (r.status === 429) { lastErr = 'Free AI quota is used up for now — try again in a minute, or later today'; continue; }
-      if (r.status === 404) { lastErr = `Model ${model} not available`; continue; }
-      if (!r.ok) { lastErr = (j.error && j.error.message) || `AI error ${r.status}`; continue; }
+      if (r.status === 429) { lastErr = 'Free AI quota is used up for now — try again in a minute, or later today'; errors.push(`${model}: 429`); continue; }
+      if (!r.ok) { lastErr = (j.error && j.error.message) || `AI error ${r.status}`; errors.push(`${model}: ${r.status} ${lastErr}`); if (r.status === 404) cachedModels = null; continue; }
       const text = ((((j.candidates || [])[0] || {}).content || {}).parts || []).map(p => p.text || '').join('');
       let out = {};
       try { out = JSON.parse(text); } catch { out = { title: '', lyrics: text }; }
@@ -70,5 +88,5 @@ module.exports = async (req, res) => {
       clearTimeout(timer);
     }
   }
-  return res.status(502).json({ ok: false, error: lastErr });
+  return res.status(502).json({ ok: false, error: lastErr, tried: errors });
 };
