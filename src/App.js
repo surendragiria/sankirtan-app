@@ -1084,7 +1084,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.10.17.s112';
+const APP_VERSION = '2026.10.17.s113';
 const AUTO_SCROLL_VIEWS = ['live-program', 'bhajan-detail', 'public-bhajan-detail'];
 const LIVE_SCROLL_STEPS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 
@@ -6424,6 +6424,11 @@ const App = () => {
           if (selectedPublicBhajan && selectedPublicBhajan.id === bhajan.id) {
             setCurrentView('public-library');
             setSelectedPublicBhajan(null);
+          }
+          // SESSION 113: also leave the library reading page if it was showing this bhajan
+          if (currentView === 'bhajan-detail' && selectedBhajan && (selectedBhajan.id === bhajan.id || selectedBhajan.savedFromPublicId === bhajan.id)) {
+            setCurrentView('library');
+            setSelectedBhajan(null);
           }
           showToast('Public bhajan deleted');
         } catch (error) {
@@ -12783,6 +12788,18 @@ const App = () => {
                   </button>
                   <button onClick={close} className="px-6 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 font-semibold">Cancel</button>
                 </div>
+                {/* SESSION 113: delete from the edit form */}
+                {editingPublicBhajan && (
+                  <div className="mt-4 text-center">
+                    <button
+                      type="button"
+                      onClick={() => { const b = editingPublicBhajan; close(); deletePublicBhajan(b); }}
+                      className="text-sm font-semibold text-red-600 hover:text-red-800 underline hover:no-underline"
+                    >
+                      🗑 Delete this bhajan from the Public Library
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </div>
