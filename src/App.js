@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 
 // ==============================================
@@ -1084,7 +1084,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.10.17.s113';
+const APP_VERSION = '2026.10.17.s114';
 const AUTO_SCROLL_VIEWS = ['live-program', 'bhajan-detail', 'public-bhajan-detail'];
 const LIVE_SCROLL_STEPS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 
@@ -2527,14 +2527,55 @@ const cleanLyricsText = (raw, { hindiOnly = false } = {}) => {
   return t.trim();
 };
 
-// Grow a textarea with its content (no inner scrollbar).
-const useAutoGrow = (ref, value, minPx = 220) => {
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    el.style.height = 'auto';
-    el.style.height = Math.max(minPx, el.scrollHeight + 2) + 'px';
-  }, [ref, value, minPx]);
+// SESSION 114: the lyrics box is a fixed-height, inner-scrolling textarea
+// (auto-grow made the page jump on every keystroke on iPhone).
+const LYRICS_BOX_STYLE = { height: 'min(48vh, 420px)', minHeight: '240px', lineHeight: '1.9', fontFamily: LYRICS_FONT };
+
+// Pixel position of the caret inside a textarea (mirror-div technique).
+const getCaretTop = (el) => {
+  const cs = window.getComputedStyle(el);
+  const div = document.createElement('div');
+  ['fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'wordSpacing', 'paddingTop', 'paddingLeft', 'paddingRight', 'paddingBottom', 'textTransform'].forEach(k => { div.style[k] = cs[k]; });
+  Object.assign(div.style, { position: 'absolute', visibility: 'hidden', whiteSpace: 'pre-wrap', wordWrap: 'break-word', overflowWrap: 'break-word', boxSizing: 'border-box', width: el.clientWidth + 'px', top: '0', left: '-9999px', border: '0' });
+  const pos = typeof el.selectionStart === 'number' ? el.selectionStart : el.value.length;
+  div.textContent = el.value.substring(0, pos);
+  const span = document.createElement('span');
+  span.textContent = el.value.substring(pos, pos + 1) || '.';
+  div.appendChild(span);
+  document.body.appendChild(div);
+  const top = span.offsetTop - el.scrollTop;
+  document.body.removeChild(div);
+  return { top, lineH: parseFloat(cs.lineHeight) || 28 };
+};
+
+// Floats the Hindi suggestion chips inside the textarea, just above the
+// line being edited (below it when there is no room above).
+const CaretChips = ({ inputId, children }) => {
+  const [pos, setPos] = useState(null);
+  const has = !!children;
+  useLayoutEffect(() => {
+    const el = document.getElementById(inputId);
+    if (!el || !has) { setPos(p => (p === null ? p : null)); return; }
+    const update = () => {
+      try {
+        const { top, lineH } = getCaretTop(el);
+        const CH = 54;
+        let y = top - CH - 2;
+        if (y < 0) y = top + lineH + 2;
+        y = Math.max(0, Math.min(y, el.clientHeight - CH));
+        setPos(p => (p && p.y === y ? p : { y }));
+      } catch { setPos(null); }
+    };
+    update();
+    el.addEventListener('scroll', update);
+    return () => el.removeEventListener('scroll', update);
+  }, [inputId, has, children]);
+  if (!has || !pos) return null;
+  return (
+    <div className="absolute left-2 right-2 z-30" style={{ top: pos.y }}>
+      {children}
+    </div>
+  );
 };
 
 const LyricsToolbar = ({ darkMode, fullscreen, onFullscreen, onMukhda, onPaste, onDictate, dictating, onClean, onUndo, canUndo }) => {
@@ -2583,7 +2624,7 @@ const TransliterationChips = ({ currentWord, suggestions, onPick, darkMode, clas
 // Full-screen lyrics sheet. The textarea keeps the same `id` as the inline
 // one (which is unmounted while this is open) so the Hindi-typing helpers
 // that look the field up by id keep working.
-const LyricsEditorSheet = ({ open, onClose, darkMode, inputId, value, onChange, onKeyDown, onFocus, onBlur, placeholder, toolbar, chips, mukhdaChip }) => {
+const LyricsEditorSheet = ({ open, onClose, onCancel, darkMode, inputId, value, onChange, onKeyDown, onFocus, onBlur, placeholder, toolbar, chips, mukhdaChip }) => {
   useEffect(() => {
     if (!open) return;
     const prev = document.body.style.overflow;
@@ -2605,27 +2646,28 @@ const LyricsEditorSheet = ({ open, onClose, darkMode, inputId, value, onChange, 
           <p className={`text-sm font-bold ${darkMode ? 'text-teal-200' : 'text-[#0B5A70]'}`}>भजन के बोल</p>
           <p className={`text-[11px] ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{lines} line{lines === 1 ? '' : 's'}{mukhdaChip ? ` · ${mukhdaChip}` : ''}</p>
         </div>
-        <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl text-sm font-bold bg-[#E65100] text-white shadow-md">Done</button>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {onCancel && <button type="button" onClick={onCancel} className={`px-3 py-2 rounded-xl text-sm font-semibold ${darkMode ? 'bg-[#1e2e33] text-gray-200' : 'bg-gray-100 text-gray-700'}`}>Cancel</button>}
+          <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl text-sm font-bold bg-[#E65100] text-white shadow-md">Done</button>
+        </div>
       </div>
       <div className={`px-4 pt-2 ${darkMode ? '' : ''}`}>
         <LyricsToolbar {...toolbar} darkMode={darkMode} fullscreen />
       </div>
-      <textarea
-        id={inputId}
-        value={value}
-        onChange={onChange}
-        onKeyDown={onKeyDown}
-        onFocus={onFocus}
-        onBlur={onBlur}
-        placeholder={placeholder}
-        className={`flex-1 w-full px-5 py-4 outline-none resize-none bg-transparent text-lg ${darkMode ? 'text-gray-100 placeholder:text-gray-500' : 'text-gray-900 placeholder:text-gray-400'}`}
-        style={{ fontFamily: LYRICS_FONT, lineHeight: '1.9' }}
-      />
-      {chips && (
-        <div className="px-3 pb-2" style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}>
-          {chips}
-        </div>
-      )}
+      <div className="relative flex-1 min-h-0">
+        <textarea
+          id={inputId}
+          value={value}
+          onChange={onChange}
+          onKeyDown={onKeyDown}
+          onFocus={onFocus}
+          onBlur={onBlur}
+          placeholder={placeholder}
+          className={`absolute inset-0 w-full h-full px-5 py-4 outline-none resize-none bg-transparent text-lg overflow-y-auto ${darkMode ? 'text-gray-100 placeholder:text-gray-500' : 'text-gray-900 placeholder:text-gray-400'}`}
+          style={{ fontFamily: LYRICS_FONT, lineHeight: '1.9', paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}
+        />
+        <CaretChips inputId={inputId}>{chips}</CaretChips>
+      </div>
     </div>
   );
 };
@@ -3144,7 +3186,9 @@ const App = () => {
   // SESSION 90: lyrics editor state (shared by the library and public forms)
   const [lyricsSheet, setLyricsSheet] = useState(null);       // null | 'bhajan' | 'public'
   const [lyricsDictating, setLyricsDictating] = useState(null); // null | 'bhajan' | 'public'
-  const lyricsUndoRef = useRef({ bhajan: null, public: null });
+  const lyricsUndoRef = useRef({ bhajan: [], public: [] });          // SESSION 114: undo stacks
+  const lyricsUndoTsRef = useRef({ bhajan: 0, public: 0 });
+  const lyricsSheetSnapRef = useRef({ bhajan: '', public: '' });      // text when the full-screen sheet opened
   const [lyricsUndoTick, setLyricsUndoTick] = useState(0);
   const lyricsRecRef = useRef(null);
   const lyricsDictatingRef = useRef(null);
@@ -5157,21 +5201,44 @@ const App = () => {
   const lyricsInputId = (which) => (which === 'public' ? 'public-hindi-input-lyrics' : 'hindi-input-lyrics');
   const getLyrics = (which) => (which === 'public' ? publicBhajanForm.lyrics : bhajanForm.lyrics) || '';
   // Replace the lyrics, remembering the previous text for Undo.
+  const pushLyricsHistory = (which, prev, force) => {
+    const now = Date.now();
+    const st = lyricsUndoRef.current[which];
+    if (!force && now - lyricsUndoTsRef.current[which] < 1500) return; // group quick keystrokes
+    if (st.length && st[st.length - 1] === prev) return;
+    st.push(prev);
+    if (st.length > 60) st.shift();
+    lyricsUndoTsRef.current[which] = now;
+    setLyricsUndoTick(t => t + 1);
+  };
   const setLyricsWithUndo = (which, next) => {
     const prev = getLyrics(which);
     if (next === prev) return;
-    lyricsUndoRef.current[which] = prev;
-    setLyricsUndoTick(t => t + 1);
+    pushLyricsHistory(which, prev, true);
+    lyricsUndoTsRef.current[which] = 0;
     if (which === 'public') setPublicBhajanForm(p => ({ ...p, lyrics: next }));
     else setBhajanForm(p => ({ ...p, lyrics: next }));
   };
   const undoLyrics = (which) => {
-    const prev = lyricsUndoRef.current[which];
-    if (prev === null || prev === undefined) return;
-    lyricsUndoRef.current[which] = null;
+    const st = lyricsUndoRef.current[which];
+    if (!st.length) return;
+    const prev = st.pop();
+    lyricsUndoTsRef.current[which] = 0;
     setLyricsUndoTick(t => t + 1);
     if (which === 'public') setPublicBhajanForm(p => ({ ...p, lyrics: prev }));
     else setBhajanForm(p => ({ ...p, lyrics: prev }));
+    requestAnimationFrame(() => { const el = document.getElementById(lyricsInputId(which)); if (el) el.focus(); });
+  };
+  const openLyricsSheet = (which) => { lyricsSheetSnapRef.current[which] = getLyrics(which); setLyricsSheet(which); };
+  const cancelLyricsSheet = (which) => {
+    const snap = lyricsSheetSnapRef.current[which];
+    if (snap !== getLyrics(which)) {
+      pushLyricsHistory(which, getLyrics(which), true);
+      if (which === 'public') setPublicBhajanForm(p => ({ ...p, lyrics: snap }));
+      else setBhajanForm(p => ({ ...p, lyrics: snap }));
+      showToast('Changes discarded');
+    }
+    setLyricsSheet(null);
   };
   // Insert a blank line at the end of the line the cursor is on.
   const insertMukhdaBreak = (which) => {
@@ -5267,8 +5334,7 @@ const App = () => {
     if (lyricsDictatingRef.current) { stopLyricsDictation(); return; }
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) { showToast('Dictation is not supported in this browser. Please use Chrome or Safari.', 'error'); return; }
-    lyricsUndoRef.current[which] = getLyrics(which);
-    setLyricsUndoTick(t => t + 1);
+    pushLyricsHistory(which, getLyrics(which), true);
     lyricsDictatingRef.current = which;
     setLyricsDictating(which);
     showToast('🎤 बोलिए… "नई लाइन" = line break · "मुखड़ा" = blank line · "रुको" = stop');
@@ -5331,14 +5397,14 @@ const App = () => {
   useEffect(() => { if (lyricsDictatingRef.current) stopLyricsDictation(); setLyricsSheet(null); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [currentView, showPublicBhajanForm]);
   useEffect(() => () => stopLyricsDictation(), []);
   const lyricsToolbarProps = (which) => ({
-    onFullscreen: () => setLyricsSheet(which),
+    onFullscreen: () => openLyricsSheet(which),
     onMukhda: () => insertMukhdaBreak(which),
     onPaste: () => pasteLyrics(which),
     onDictate: () => toggleLyricsDictation(which),
     dictating: lyricsDictating === which,
     onClean: () => cleanLyrics(which),
     onUndo: () => undoLyrics(which),
-    canUndo: lyricsUndoTick >= 0 && lyricsUndoRef.current[which] !== null && lyricsUndoRef.current[which] !== undefined,
+    canUndo: lyricsUndoTick >= 0 && lyricsUndoRef.current[which].length > 0,
   });
   const mukhdaChipText = (lyrics) => {
     if (!lyrics || !lyrics.trim()) return '';
@@ -5347,8 +5413,6 @@ const App = () => {
     const hasBlank = /\n\s*\n/.test(lyrics.replace(/^\s+/, ''));
     return hasBlank ? `Mukhda: ${n} line${n === 1 ? '' : 's'}` : 'No blank line — first line used as mukhda';
   };
-  useAutoGrow(lyricsTextareaRef, bhajanForm.lyrics);
-  useAutoGrow(publicLyricsTextareaRef, publicBhajanForm.lyrics);
 
   // ==============================================
   // VOICE SEARCH (Web Speech API)
@@ -5746,6 +5810,7 @@ const App = () => {
   const handleHindiInput = (e, fieldName) => {
     const value = e.target.value;
     const oldValue = bhajanForm[fieldName] || '';
+    if (fieldName === 'lyrics') pushLyricsHistory('bhajan', oldValue);
 
     const spaceJustTyped = value.length > oldValue.length &&
                            (value.endsWith(' ') || value.endsWith('\n') || value.endsWith('.')) &&
@@ -5852,6 +5917,7 @@ const App = () => {
   const handlePublicHindiInput = (e, fieldName) => {
     const value = e.target.value;
     const oldValue = publicBhajanForm[fieldName] || '';
+    if (fieldName === 'lyrics') pushLyricsHistory('public', oldValue);
 
     const spaceJustTyped = value.length > oldValue.length &&
                            (value.endsWith(' ') || value.endsWith('\n') || value.endsWith('.')) &&
@@ -9682,10 +9748,10 @@ const App = () => {
               onBlur: () => setTimeout(() => setShowSuggestions(false), 300),
               onFocus: () => setActiveTypingField(field)
             });
-            const chipsFor = (field) => (
+            const chipsFor = (field, inline) => (
               hindiTypingEnabled && showSuggestions && activeTypingField === field && transliterationSuggestions.length > 0 ? (
                 <TransliterationChips
-                  className="absolute bottom-full left-0 right-0 mb-2 z-30"
+                  className={inline ? '' : 'absolute bottom-full left-0 right-0 mb-2 z-30'}
                   currentWord={currentWord}
                   suggestions={transliterationSuggestions}
                   onPick={(s) => applySuggestion(s, field)}
@@ -9774,21 +9840,21 @@ const App = () => {
                       <textarea
                         ref={lyricsTextareaRef}
                         {...hindiProps('lyrics')}
-                        rows={8}
-                        className={fInput + ' text-lg resize-none overflow-hidden'}
+                        className={fInput + ' text-lg resize-none overflow-y-auto'}
                         placeholder={hindiTypingEnabled ? 'jai shri babosa … (space converts to Hindi)' : 'भजन के बोल यहाँ लिखें…'}
-                        style={{ lineHeight: '1.9', fontFamily: LYRICS_FONT }}
+                        style={LYRICS_BOX_STYLE}
                         aria-label="Lyrics (required)"
                       />
                     )}
                     {lyricsSheet === 'bhajan' && (
                       <div className={`rounded-xl border border-dashed p-4 text-sm text-center ${darkMode ? 'border-[#0B5A70]/30 text-gray-400' : 'border-[#0B5A70]/20 text-gray-500'}`}>Editing in full screen…</div>
                     )}
-                    {lyricsSheet !== 'bhajan' && chipsFor('lyrics')}
+                    {lyricsSheet !== 'bhajan' && <CaretChips inputId="hindi-input-lyrics">{chipsFor('lyrics', true)}</CaretChips>}
                   </div>
                   <LyricsEditorSheet
                     open={lyricsSheet === 'bhajan'}
                     onClose={() => setLyricsSheet(null)}
+                    onCancel={() => cancelLyricsSheet('bhajan')}
                     darkMode={darkMode}
                     inputId="hindi-input-lyrics"
                     value={bhajanForm.lyrics}
@@ -12591,9 +12657,9 @@ const App = () => {
             onBlur: () => setTimeout(() => setShowSuggestions(false), 300),
             onFocus: () => setActiveTypingField(field)
           });
-          const chips = (field) => (
+          const chips = (field, inline) => (
             hindiTypingEnabled && showSuggestions && activeTypingField === field && transliterationSuggestions.length > 0 ? (
-              <TransliterationChips className="absolute bottom-full left-0 right-0 mb-2 z-30" currentWord={currentWord} suggestions={transliterationSuggestions} onPick={(s) => applyPublicSuggestion(s, field)} darkMode={false} />
+              <TransliterationChips className={inline ? '' : 'absolute bottom-full left-0 right-0 mb-2 z-30'} currentWord={currentWord} suggestions={transliterationSuggestions} onPick={(s) => applyPublicSuggestion(s, field)} darkMode={false} />
             ) : null
           );
           const close = () => { setShowPublicBhajanForm(false); setEditingPublicBhajan(null); };
@@ -12659,16 +12725,17 @@ const App = () => {
                   </div>
                   <div className="relative">
                     {lyricsSheet !== 'public' && (
-                      <textarea ref={publicLyricsTextareaRef} {...hp('lyrics')} rows={8} className={pIn + ' text-lg resize-none overflow-hidden'} placeholder={hindiTypingEnabled ? 'jai shri babosa … (space converts to Hindi)' : 'भजन के बोल यहाँ लिखें…'} style={{ lineHeight: '1.9', fontFamily: LYRICS_FONT }} aria-label="Lyrics (required)" />
+                      <textarea ref={publicLyricsTextareaRef} {...hp('lyrics')} className={pIn + ' text-lg resize-none overflow-y-auto'} placeholder={hindiTypingEnabled ? 'jai shri babosa … (space converts to Hindi)' : 'भजन के बोल यहाँ लिखें…'} style={LYRICS_BOX_STYLE} aria-label="Lyrics (required)" />
                     )}
                     {lyricsSheet === 'public' && (
                       <div className="rounded-xl border border-dashed border-[#0B5A70]/20 p-4 text-sm text-center text-gray-500">Editing in full screen…</div>
                     )}
-                    {lyricsSheet !== 'public' && chips('lyrics')}
+                    {lyricsSheet !== 'public' && <CaretChips inputId="public-hindi-input-lyrics">{chips('lyrics', true)}</CaretChips>}
                   </div>
                   <LyricsEditorSheet
                     open={lyricsSheet === 'public'}
                     onClose={() => setLyricsSheet(null)}
+                    onCancel={() => cancelLyricsSheet('public')}
                     darkMode={false}
                     inputId="public-hindi-input-lyrics"
                     value={publicBhajanForm.lyrics}
