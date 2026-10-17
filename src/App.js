@@ -1084,7 +1084,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.10.17.s96';
+const APP_VERSION = '2026.10.17.s97';
 const AUTO_SCROLL_VIEWS = ['live-program', 'bhajan-detail', 'public-bhajan-detail'];
 const LIVE_SCROLL_STEPS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 
@@ -2672,6 +2672,7 @@ const App = () => {
   const [bhajansLoading, setBhajansLoading] = useState(false);
   const [bhajanFormError, setBhajanFormError] = useState('');
   const [bhajanFormMore, setBhajanFormMore] = useState(false); // SESSION 96: collapsed extras
+  const [publicFormMore, setPublicFormMore] = useState(false); // SESSION 97
   const [bhajanFormSaving, setBhajanFormSaving] = useState(false);
 
   // Programs states
@@ -12385,406 +12386,90 @@ const App = () => {
         {/* ==============================================
             PUBLIC BHAJAN ADD/EDIT MODAL (Admin only)
             ============================================== */}
-        {showPublicBhajanForm && isAdmin && (
+        {showPublicBhajanForm && isAdmin && (() => {
+          // SESSION 97: same simplified layout as the library form.
+          const pIn = 'w-full px-4 py-3 border border-[#0B5A70]/15 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none bg-[#FFFCF8] text-gray-900';
+          const pLabel = 'block text-sm font-semibold text-[#0B5A70] mb-1';
+          const pSection = 'text-[11px] font-semibold uppercase tracking-wide mb-2 text-[#0B5A70]/60';
+          const pTool = 'w-9 h-9 rounded-lg flex items-center justify-center text-base transition-colors disabled:opacity-40 bg-[#0B5A70]/8 hover:bg-[#0B5A70]/15 text-[#0B5A70]';
+          const hp = (field) => ({
+            id: `public-hindi-input-${field}`,
+            value: publicBhajanForm[field],
+            onChange: (e) => handlePublicHindiInput(e, field),
+            onKeyDown: (e) => handlePublicHindiKeyDown(e, field),
+            onBlur: () => setTimeout(() => setShowSuggestions(false), 300),
+            onFocus: () => setActiveTypingField(field)
+          });
+          const chips = (field) => (
+            hindiTypingEnabled && showSuggestions && activeTypingField === field && transliterationSuggestions.length > 0 ? (
+              <TransliterationChips className="absolute bottom-full left-0 right-0 mb-2 z-30" currentWord={currentWord} suggestions={transliterationSuggestions} onPick={(s) => applyPublicSuggestion(s, field)} darkMode={false} />
+            ) : null
+          );
+          const close = () => { setShowPublicBhajanForm(false); setEditingPublicBhajan(null); };
+          const mk = (() => {
+            if (!publicBhajanForm.lyrics || !publicBhajanForm.lyrics.trim()) return null;
+            const m = getMukhda({ lyrics: publicBhajanForm.lyrics });
+            return { n: m ? m.split('\n').length : 0, hasBlank: /\n\s*\n/.test(publicBhajanForm.lyrics.replace(/^\s+/, '')) };
+          })();
+          const moreOpen = publicFormMore || !!(publicBhajanForm.singer || publicBhajanForm.lyricist || publicBhajanForm.source);
+          return (
           <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 overflow-y-auto">
             <div className="bg-[#FFFCF8] rounded-2xl shadow-[0_8px_40px_rgba(11,90,112,0.15)] max-w-2xl w-full my-8 max-h-[90vh] overflow-y-auto">
               <div className="p-4 border-b border-[#0B5A70]/10 flex items-center justify-between sticky top-0 bg-white rounded-t-2xl z-10">
                 <h3 className="text-lg font-bold text-[#0B5A70]">
-                  {editingPublicBhajan ? '✏️ Edit Public Bhajan' : '➕ Add Public Bhajan'}
+                  {editingPublicBhajan ? 'Edit public bhajan' : 'New public bhajan'}
                 </h3>
-                <button
-                  onClick={() => {
-                    setShowPublicBhajanForm(false);
-                    setEditingPublicBhajan(null);
-                  }}
-                  className="text-gray-500 hover:text-gray-700 text-2xl leading-none"
-                  aria-label="Close form"
-                >
-                  ×
-                </button>
+                <button onClick={close} className="text-gray-500 hover:text-gray-700 text-2xl leading-none" aria-label="Close form">×</button>
               </div>
 
-              <div className="p-6 space-y-4">
-                {/* Title */}
-                <div>
-                  <label className="block text-sm font-semibold text-[#0B5A70] mb-1">
-                    Title <span className="text-red-500">*</span>
-                  </label>
-                  <div className="relative">
-                    <input
-                      id="public-hindi-input-title"
-                      type="text"
-                      value={publicBhajanForm.title}
-                      onChange={(e) => handlePublicHindiInput(e, 'title')}
-                      onKeyDown={(e) => handlePublicHindiKeyDown(e, 'title')}
-                      onBlur={() => setTimeout(() => setShowSuggestions(false), 300)}
-                      onFocus={() => setActiveTypingField('title')}
-                      className="w-full px-4 py-3 border border-[#0B5A70]/15 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none text-lg"
-                      placeholder={hindiTypingEnabled ? "Type: om jai jagdish hare" : "e.g., जय जगदीश हरे"}
-                    />
-                    {hindiTypingEnabled && showSuggestions && activeTypingField === 'title' && transliterationSuggestions.length > 0 && (
-                      <div className="absolute bottom-full left-0 right-0 mb-2 bg-[#FFFCF8] border border-[#0B5A70]/15 rounded-lg shadow-[0_8px_30px_rgba(11,90,112,0.18)] p-2 flex flex-wrap gap-2 items-center z-30">
-                        <span className="text-xs text-gray-500 mr-1">
-                          <strong>"{currentWord}"</strong> →
-                        </span>
-                        {transliterationSuggestions.map((suggestion, idx) => (
-                          <button
-                            key={idx}
-                            type="button"
-                            onMouseDown={(e) => {
-                              e.preventDefault();
-                              applyPublicSuggestion(suggestion, 'title');
-                            }}
-                            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                              idx === 0
-                                ? 'bg-[#0B5A70] text-white hover:bg-[#094a5d] shadow-md'
-                                : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15'
-                            }`}
-                          >
-                            {idx === 0 && '⭐ '}{suggestion}
-                          </button>
-                        ))}
-                        <button
-                          type="button"
-                          onMouseDown={(e) => {
-                            e.preventDefault();
-                            applyPublicSuggestion(currentWord, 'title');
-                          }}
-                          className="px-3 py-1.5 rounded-lg text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition-all border border-gray-300"
-                          title="Keep as English"
-                        >
-                          {currentWord}
-                        </button>
-                      </div>
-                    )}
-                  </div>
+              <div className="p-6">
+                {/* ---------- Title ---------- */}
+                <div className="mb-5 relative">
+                  <input type="text" {...hp('title')} className={pIn + ' text-lg font-semibold'} placeholder={hindiTypingEnabled ? 'Title — type in English, space converts to Hindi' : 'Title · शीर्षक'} aria-label="Title (required)" />
+                  {chips('title')}
                 </div>
 
-                {/* Deity and Category */}
-                {/* SESSION 51: items-end so selects align at the bottom
-                    regardless of label wrap-height (the Deity label wraps
-                    to 1 line, Category wraps to 2 — without this the
-                    selects were vertically staggered). */}
-                <div className="grid grid-cols-2 gap-3 items-end">
-                  <div>
-                    <label className="block text-sm font-semibold text-[#0B5A70] mb-1">Deity <span className="block text-xs font-normal text-gray-500">Who the bhajan is about</span></label>
-                    <select
-                      value={publicBhajanForm.deity}
-                      onChange={(e) => setPublicBhajanForm({...publicBhajanForm, deity: e.target.value})}
-                      className="w-full px-4 py-3 border border-[#0B5A70]/15 rounded-xl outline-none bg-[#FFFCF8]"
-                    >
-                      {allDeityOptions.map(d => (
-                        <option key={d.value} value={d.value}>{d.value}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-[#0B5A70] mb-1">Category <span className="block text-xs font-normal text-gray-500">Type: bhajan, aarti, chalisa…</span></label>
-                    <select
-                      value={publicBhajanForm.category}
-                      onChange={(e) => setPublicBhajanForm({...publicBhajanForm, category: e.target.value})}
-                      className="w-full px-4 py-3 border border-[#0B5A70]/15 rounded-xl outline-none bg-[#FFFCF8]"
-                    >
-                      {allCategoryOptions.map(c => (
-                        <option key={c} value={c}>{c}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                {/* Dhun */}
-                <div>
-                  <label className="block text-sm font-semibold text-[#0B5A70] mb-1">
-                    तर्ज़ / धुन (Tune)
-                    <span className={`block text-xs font-normal mt-0.5 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>The song or bhajan whose tune this is sung to</span>
-                  </label>
-                  <div className="relative">
-                    <input
-                      id="public-hindi-input-dhun"
-                      type="text"
-                      value={publicBhajanForm.dhun}
-                      onChange={(e) => handlePublicHindiInput(e, 'dhun')}
-                      onKeyDown={(e) => handlePublicHindiKeyDown(e, 'dhun')}
-                      onBlur={() => setTimeout(() => setShowSuggestions(false), 300)}
-                      onFocus={() => setActiveTypingField('dhun')}
-                      className="w-full px-4 py-3 border border-[#0B5A70]/15 rounded-xl outline-none"
-                      placeholder={hindiTypingEnabled ? "Type: tujhe dekha to" : "e.g., तुझे देखा तो..."}
-                    />
-                    {hindiTypingEnabled && showSuggestions && activeTypingField === 'dhun' && transliterationSuggestions.length > 0 && (
-                      <div className="absolute bottom-full left-0 right-0 mb-2 bg-[#FFFCF8] border border-[#0B5A70]/15 rounded-lg shadow-[0_8px_30px_rgba(11,90,112,0.18)] p-2 flex flex-wrap gap-2 items-center z-30">
-                        <span className="text-xs text-gray-500 mr-1">
-                          <strong>"{currentWord}"</strong> →
-                        </span>
-                        {transliterationSuggestions.map((suggestion, idx) => (
-                          <button
-                            key={idx}
-                            type="button"
-                            onMouseDown={(e) => {
-                              e.preventDefault();
-                              applyPublicSuggestion(suggestion, 'dhun');
-                            }}
-                            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                              idx === 0
-                                ? 'bg-[#0B5A70] text-white hover:bg-[#094a5d] shadow-md'
-                                : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15'
-                            }`}
-                          >
-                            {idx === 0 && '⭐ '}{suggestion}
-                          </button>
-                        ))}
-                        <button
-                          type="button"
-                          onMouseDown={(e) => {
-                            e.preventDefault();
-                            applyPublicSuggestion(currentWord, 'dhun');
-                          }}
-                          className="px-3 py-1.5 rounded-lg text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition-all border border-gray-300"
-                          title="Keep as English"
-                        >
-                          {currentWord}
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Scale */}
-                <div>
-                  <label className="block text-sm font-semibold text-[#0B5A70] mb-1">Scale / Raag</label>
-                  <input
-                    type="text"
-                    value={publicBhajanForm.scale}
-                    onChange={(e) => setPublicBhajanForm({...publicBhajanForm, scale: e.target.value})}
-                    className="w-full px-4 py-3 border border-[#0B5A70]/15 rounded-xl outline-none"
-                    placeholder="e.g., Raag Yaman, C# Scale"
-                  />
-                </div>
-
-                {/* SESSION 11: Singer + Lyricist (public form) */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-sm font-semibold text-[#0B5A70] mb-1">गायक / Singer</label>
-                    <input
-                      type="text"
-                      value={publicBhajanForm.singer}
-                      onChange={(e) => setPublicBhajanForm({...publicBhajanForm, singer: e.target.value})}
-                      className="w-full px-4 py-3 border border-[#0B5A70]/15 rounded-xl outline-none"
-                      placeholder="e.g., Anup Jalota"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-[#0B5A70] mb-1">रचनाकार / Lyricist</label>
-                    {/* SESSION 35: Hindi typing wired (matches user form). */}
-                    <div className="relative">
-                      <input
-                        id="public-hindi-input-lyricist"
-                        type="text"
-                        value={publicBhajanForm.lyricist}
-                        onChange={(e) => handlePublicHindiInput(e, 'lyricist')}
-                        onKeyDown={(e) => handlePublicHindiKeyDown(e, 'lyricist')}
-                        onBlur={() => setTimeout(() => setShowSuggestions(false), 300)}
-                        onFocus={() => setActiveTypingField('lyricist')}
-                        className="w-full px-4 py-3 border border-[#0B5A70]/15 rounded-xl outline-none"
-                        placeholder={hindiTypingEnabled ? "Type: meera bai" : "e.g., मीरा बाई"}
-                      />
-                      {hindiTypingEnabled && showSuggestions && activeTypingField === 'lyricist' && transliterationSuggestions.length > 0 && (
-                        <div className={`absolute bottom-full left-0 right-0 mb-2 border rounded-lg shadow-[0_8px_30px_rgba(11,90,112,0.18)] p-2 flex flex-wrap gap-2 items-center z-30 ${darkMode ? "bg-[#1e2e33] border-[#0B5A70]/30" : "bg-[#FFFCF8] border-[#0B5A70]/15"}`}>
-                          <span className="text-xs text-gray-500 mr-1">
-                            <strong>"{currentWord}"</strong> →
-                          </span>
-                          {transliterationSuggestions.map((suggestion, idx) => (
-                            <button
-                              key={idx}
-                              type="button"
-                              onMouseDown={(e) => {
-                                e.preventDefault();
-                                applyPublicSuggestion(suggestion, 'lyricist');
-                              }}
-                              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                                idx === 0
-                                  ? 'bg-[#0B5A70] text-white hover:bg-[#094a5d] shadow-md'
-                                  : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15'
-                              }`}
-                            >
-                              {idx === 0 && '⭐ '}{suggestion}
-                            </button>
-                          ))}
-                          <button
-                            type="button"
-                            onMouseDown={(e) => {
-                              e.preventDefault();
-                              applyPublicSuggestion(currentWord, 'lyricist');
-                            }}
-                            className="px-3 py-1.5 rounded-lg text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition-all border border-gray-300"
-                            title="Keep as English"
-                          >
-                            {currentWord}
-                          </button>
-                        </div>
-                      )}
+                {/* ---------- Lyrics ---------- */}
+                <div className="mb-5">
+                  <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
+                    <label className={pLabel + ' mb-0'}>Lyrics</label>
+                    <div className="flex items-center gap-1.5">
+                      <button type="button" onClick={() => setHindiTypingEnabled(!hindiTypingEnabled)} className={`h-9 px-3 rounded-lg text-xs font-bold transition-colors ${hindiTypingEnabled ? 'bg-[#0B5A70] text-white' : 'bg-[#0B5A70]/8 text-[#0B5A70]'}`} title={hindiTypingEnabled ? 'Hindi typing is on — type in English, space converts' : 'Turn on Hindi typing'} aria-pressed={hindiTypingEnabled}>
+                        अ {hindiTypingEnabled ? 'on' : 'off'}
+                      </button>
+                      <span className="mx-0.5 h-5 w-px bg-[#0B5A70]/15" aria-hidden="true" />
+                      <button type="button" disabled={ocrProcessing} onClick={() => publicCameraInputRef.current && publicCameraInputRef.current.click()} className={pTool} title="Read lyrics with the camera" aria-label="Scan lyrics with camera">📷</button>
+                      <button type="button" disabled={ocrProcessing} onClick={() => publicImageInputRef.current && publicImageInputRef.current.click()} className={pTool} title="Read lyrics from a photo" aria-label="Read lyrics from a photo">🖼️</button>
+                      <button type="button" disabled={ocrProcessing} onClick={() => publicPdfInputRef.current && publicPdfInputRef.current.click()} className={pTool} title="Read lyrics from a PDF" aria-label="Read lyrics from a PDF">📄</button>
                     </div>
                   </div>
-                </div>
-
-                {/* OCR import block (public form) */}
-                <div className="mb-3 p-3 bg-[#0B5A70]/5 border border-[#0B5A70]/12 rounded-xl">
-                  <p className="text-xs font-semibold text-[#0B5A70] mb-2">
-                    📥 Auto-fill lyrics from a photo, PDF, or camera — text is read on your device, nothing is uploaded or stored as a file
-                  </p>
-
-                  {!localStorage.getItem('sankirtan-tesseract-langs-cached') && !ocrProcessing && (
-                    <div className="mb-2 p-2 bg-[#E65100]/5 border border-[#E65100]/20 rounded-lg text-xs text-[#0B5A70]">
-                      ⚠️ <strong>First-time use:</strong> The OCR engine (~15 MB) will download once and be cached. Please use WiFi if possible.
-                    </div>
-                  )}
-
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      disabled={ocrProcessing}
-                      onClick={() => publicCameraInputRef.current && publicCameraInputRef.current.click()}
-                      className="bg-[#0B5A70] hover:bg-[#094a5d] text-white font-semibold px-3 py-2 rounded-lg text-sm disabled:opacity-50 flex items-center gap-1"
-                    >
-                      📷 Camera
-                    </button>
-                    <button
-                      type="button"
-                      disabled={ocrProcessing}
-                      onClick={() => publicImageInputRef.current && publicImageInputRef.current.click()}
-                      className="bg-[#0B5A70] hover:bg-[#094a5d] text-white font-semibold px-3 py-2 rounded-lg text-sm disabled:opacity-50 flex items-center gap-1"
-                    >
-                      🖼️ Upload Image
-                    </button>
-                    <button
-                      type="button"
-                      disabled={ocrProcessing}
-                      onClick={() => publicPdfInputRef.current && publicPdfInputRef.current.click()}
-                      className="bg-[#0B5A70] hover:bg-[#094a5d] text-white font-semibold px-3 py-2 rounded-lg text-sm disabled:opacity-50 flex items-center gap-1"
-                    >
-                      📄 Upload PDF
-                    </button>
-                  </div>
-
-                  <input
-                    ref={publicCameraInputRef}
-                    type="file"
-                    accept="image/*"
-                    capture="environment"
-                    className="hidden"
-                    onChange={(e) => {
-                      const f = e.target.files && e.target.files[0];
-                      if (f) handleImageFileForOcr(f, 'photo', setPublicBhajanForm);
-                      e.target.value = '';
-                    }}
-                  />
-                  <input
-                    ref={publicImageInputRef}
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={(e) => {
-                      const f = e.target.files && e.target.files[0];
-                      if (f) handleImageFileForOcr(f, 'image', setPublicBhajanForm);
-                      e.target.value = '';
-                    }}
-                  />
-                  <input
-                    ref={publicPdfInputRef}
-                    type="file"
-                    accept="application/pdf,.pdf"
-                    className="hidden"
-                    onChange={(e) => {
-                      const f = e.target.files && e.target.files[0];
-                      if (f) handlePdfFileForOcr(f, setPublicBhajanForm);
-                      e.target.value = '';
-                    }}
-                  />
+                  <input ref={publicCameraInputRef} type="file" accept="image/*" capture="environment" className="hidden"
+                    onChange={(e) => { const f = e.target.files && e.target.files[0]; if (f) handleImageFileForOcr(f, 'photo', setPublicBhajanForm); e.target.value = ''; }} />
+                  <input ref={publicImageInputRef} type="file" accept="image/*" className="hidden"
+                    onChange={(e) => { const f = e.target.files && e.target.files[0]; if (f) handleImageFileForOcr(f, 'image', setPublicBhajanForm); e.target.value = ''; }} />
+                  <input ref={publicPdfInputRef} type="file" accept="application/pdf,.pdf" className="hidden"
+                    onChange={(e) => { const f = e.target.files && e.target.files[0]; if (f) handlePdfFileForOcr(f, setPublicBhajanForm); e.target.value = ''; }} />
 
                   {ocrProcessing && (
-                    <div className="mt-3 p-3 bg-[#FFFCF8] border border-[#0B5A70]/15 rounded-lg">
-                      <div className="w-full bg-[#0B5A70]/10 rounded-full h-3 mb-2">
-                        <div
-                          className="bg-[#0B5A70] h-3 rounded-full transition-all"
-                          style={{ width: ocrProgress + '%' }}
-                        ></div>
-                      </div>
-                      <p className="text-xs font-semibold text-[#0B5A70]">{ocrMessage || 'Processing...'}</p>
-                      {!localStorage.getItem('sankirtan-tesseract-langs-cached') && (
-                        <p className="text-[10px] text-[#0B5A70]/80 mt-1">
-                          💡 First-time setup takes 30-60 seconds. Future uses will be instant.
-                        </p>
-                      )}
+                    <div className="mb-2 p-3 bg-[#FFFCF8] border border-[#0B5A70]/15 rounded-lg">
+                      <div className="w-full bg-[#0B5A70]/10 rounded-full h-2 mb-2"><div className="bg-[#0B5A70] h-2 rounded-full transition-all" style={{ width: ocrProgress + '%' }} /></div>
+                      <p className="text-xs font-semibold text-[#0B5A70]">{ocrMessage || 'Reading…'}</p>
+                      {!localStorage.getItem('sankirtan-tesseract-langs-cached') && <p className="text-[11px] mt-1 text-gray-500">First use downloads the reader (~15 MB) once; later scans are quick.</p>}
                     </div>
                   )}
-                  {!ocrProcessing && ocrMessage && (
-                    <p className="text-xs font-semibold text-[#0B5A70] mt-2">{ocrMessage}</p>
-                  )}
-                  <p className="text-xs text-[#0B5A70]/80 mt-2">
-                    💡 Works best with clear, printed Hindi/English text. Handwriting may need manual correction. Scanned PDFs supported (up to 10 pages).
-                  </p>
-                </div>
+                  {!ocrProcessing && ocrMessage && <p className="text-xs font-semibold text-[#0B5A70] mb-2">{ocrMessage}</p>}
 
-                {/* Lyrics */}
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="block text-sm font-semibold text-[#0B5A70]">
-                      Lyrics <span className="text-red-500">*</span>
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => setHindiTypingEnabled(!hindiTypingEnabled)}
-                      className={`text-xs font-semibold px-3 py-1 rounded-full transition-all ${
-                        hindiTypingEnabled
-                          ? 'bg-[#0B5A70] text-white shadow-md'
-                          : 'bg-gray-100 text-gray-600 border border-gray-300'
-                      }`}
-                      title={hindiTypingEnabled ? 'Turn off Hindi typing' : 'Turn on Hindi typing'}
-                    >
-                      {hindiTypingEnabled ? '🇮🇳 हिंदी ON' : '🔤 Hindi OFF'}
-                    </button>
-                  </div>
-                  {hindiTypingEnabled && (
-                    <div className="mb-2 p-2 bg-[#0B5A70]/5 border border-[#0B5A70]/12 rounded-lg">
-                      <p className="text-xs text-[#E65100]">
-                        ✨ Type in English, press <kbd className="bg-white px-1.5 py-0.5 rounded border text-xs">space</kbd> to auto-convert to Hindi
-                      </p>
-                      <p className="text-xs text-[#0B5A70]/60 mt-1">
-                        Example: <code className="bg-white px-1 rounded">jai shri babosa</code> → जय श्री बाबोसा
-                      </p>
-                    </div>
-                  )}
-                  {/* SESSION 90: same lyrics editor as the library form */}
                   <div className="mb-2">
                     <LyricsToolbar {...lyricsToolbarProps('public')} darkMode={false} />
                   </div>
                   <div className="relative">
                     {lyricsSheet !== 'public' && (
-                      <textarea
-                        ref={publicLyricsTextareaRef}
-                        id="public-hindi-input-lyrics"
-                        value={publicBhajanForm.lyrics}
-                        onChange={(e) => handlePublicHindiInput(e, 'lyrics')}
-                        onKeyDown={(e) => handlePublicHindiKeyDown(e, 'lyrics')}
-                        onBlur={() => setTimeout(() => setShowSuggestions(false), 300)}
-                        onFocus={() => setActiveTypingField('lyrics')}
-                        rows={8}
-                        className="w-full px-4 py-3 border border-[#0B5A70]/15 rounded-xl outline-none text-lg resize-none overflow-hidden"
-                        placeholder={hindiTypingEnabled ? "Type: jai shri babosa (press space to convert)" : "भजन के बोल यहाँ लिखें…\nया 🎤 Dictate / 📋 Paste ऊपर से"}
-                        style={{ lineHeight: '1.9', fontFamily: LYRICS_FONT }}
-                      />
+                      <textarea ref={publicLyricsTextareaRef} {...hp('lyrics')} rows={8} className={pIn + ' text-lg resize-none overflow-hidden'} placeholder={hindiTypingEnabled ? 'jai shri babosa … (space converts to Hindi)' : 'भजन के बोल यहाँ लिखें…'} style={{ lineHeight: '1.9', fontFamily: LYRICS_FONT }} aria-label="Lyrics (required)" />
                     )}
                     {lyricsSheet === 'public' && (
                       <div className="rounded-xl border border-dashed border-[#0B5A70]/20 p-4 text-sm text-center text-gray-500">Editing in full screen…</div>
                     )}
-                    {lyricsSheet !== 'public' && hindiTypingEnabled && showSuggestions && activeTypingField === 'lyrics' && transliterationSuggestions.length > 0 && (
-                      <TransliterationChips
-                        className="absolute bottom-full left-0 right-0 mb-2 z-30"
-                        currentWord={currentWord}
-                        suggestions={transliterationSuggestions}
-                        onPick={(s) => applyPublicSuggestion(s, 'lyrics')}
-                        darkMode={false}
-                      />
-                    )}
+                    {lyricsSheet !== 'public' && chips('lyrics')}
                   </div>
                   <LyricsEditorSheet
                     open={lyricsSheet === 'public'}
@@ -12796,112 +12481,119 @@ const App = () => {
                     onKeyDown={(e) => handlePublicHindiKeyDown(e, 'lyrics')}
                     onBlur={() => setTimeout(() => setShowSuggestions(false), 300)}
                     onFocus={() => setActiveTypingField('lyrics')}
-                    placeholder={hindiTypingEnabled ? "Type: jai shri babosa (press space to convert)" : "भजन के बोल यहाँ लिखें…"}
+                    placeholder={hindiTypingEnabled ? 'jai shri babosa … (space converts to Hindi)' : 'भजन के बोल यहाँ लिखें…'}
                     toolbar={lyricsToolbarProps('public')}
                     mukhdaChip={mukhdaChipText(publicBhajanForm.lyrics)}
                     chips={hindiTypingEnabled && showSuggestions && activeTypingField === 'lyrics' && transliterationSuggestions.length > 0 ? (
                       <TransliterationChips currentWord={currentWord} suggestions={transliterationSuggestions} onPick={(s) => applyPublicSuggestion(s, 'lyrics')} darkMode={false} />
                     ) : null}
                   />
+                  <p className="mt-1.5 text-xs flex flex-wrap items-center gap-x-2 gap-y-1 text-gray-500">
+                    <span>Blank line after the mukhda.</span>
+                    {mk && (
+                      <span className={`px-2 py-0.5 rounded-full font-semibold ${mk.hasBlank ? 'bg-[#0B5A70]/8 text-[#0B5A70]' : 'bg-[#E65100]/10 text-[#E65100]'}`}>
+                        {mk.hasBlank ? `Mukhda · ${mk.n} line${mk.n === 1 ? '' : 's'}` : 'No blank line yet'}
+                      </span>
+                    )}
+                    {hindiTypingEnabled && <span>· <strong>shyam</strong> → श्याम on space</span>}
+                  </p>
                 </div>
 
-                {/* Keywords */}
-                <div>
-                  <label className="block text-sm font-semibold text-[#0B5A70] mb-2">Moods <span className="block text-xs font-normal text-gray-500">Moods and occasions — e.g. #diwali #morning #parody</span></label>
-                  <div className="flex flex-wrap gap-2">
-                    {allKeywordOptions.map(kw => (
-                      <button
-                        key={kw}
-                        type="button"
-                        onClick={() => togglePublicBhajanKeyword(kw)}
-                        className={`px-3 py-1.5 rounded-full text-sm font-medium ${
-                          publicBhajanForm.keywords.includes(kw)
-                            ? 'bg-[#0B5A70] text-white shadow-md'
-                            : 'bg-[#0B5A70]/5 text-[#0B5A70] border border-[#0B5A70]/12 hover:bg-[#0B5A70]/10'
-                        }`}
-                      >
-                        {publicBhajanForm.keywords.includes(kw) ? '✓ ' : ''}#{kw}
-                      </button>
-                    ))}
+                {/* ---------- Details ---------- */}
+                <p className={pSection}>Details</p>
+                <div className="grid grid-cols-2 gap-3 mb-3">
+                  <div>
+                    <label className={pLabel}>Deity</label>
+                    <select value={publicBhajanForm.deity} onChange={(e) => setPublicBhajanForm({ ...publicBhajanForm, deity: e.target.value })} className={pIn}>
+                      {allDeityOptions.map(d => <option key={d.value} value={d.value}>{d.value}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className={pLabel}>Type</label>
+                    <select value={publicBhajanForm.category} onChange={(e) => setPublicBhajanForm({ ...publicBhajanForm, category: e.target.value })} className={pIn}>
+                      {allCategoryOptions.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3 mb-3">
+                  <div className="relative">
+                    <label className={pLabel}>तर्ज़ / Tune</label>
+                    <input type="text" {...hp('dhun')} className={pIn} placeholder="e.g. तुझे देखा तो" />
+                    {chips('dhun')}
+                  </div>
+                  <div>
+                    <label className={pLabel}>Scale / Raag</label>
+                    <input type="text" value={publicBhajanForm.scale} onChange={(e) => setPublicBhajanForm({ ...publicBhajanForm, scale: e.target.value })} className={pIn} placeholder="e.g. C#, Yaman" />
                   </div>
                 </div>
 
-                {/* Source */}
-                <div>
-                  <label className="block text-sm font-semibold text-[#0B5A70] mb-1">Source URL (optional)</label>
-                  <input
-                    type="url"
-                    value={publicBhajanForm.source}
-                    onChange={(e) => setPublicBhajanForm({...publicBhajanForm, source: e.target.value})}
-                    className="w-full px-4 py-3 border border-[#0B5A70]/15 rounded-xl outline-none"
-                    placeholder="https://youtube.com/... or reference URL"
-                  />
+                {/* ---------- More ---------- */}
+                <button type="button" onClick={() => setPublicFormMore(v => !v)} aria-expanded={moreOpen} className="text-xs font-semibold mb-3 text-[#0B5A70]">
+                  {moreOpen ? '▾' : '▸'} Singer, lyricist, link
+                </button>
+                {moreOpen && (
+                  <div className="mb-3 space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className={pLabel}>गायक / Singer</label>
+                        <input type="text" value={publicBhajanForm.singer} onChange={(e) => setPublicBhajanForm({ ...publicBhajanForm, singer: e.target.value })} className={pIn} placeholder="e.g. Anup Jalota" />
+                      </div>
+                      <div className="relative">
+                        <label className={pLabel}>रचनाकार / Lyricist</label>
+                        <input type="text" {...hp('lyricist')} className={pIn} placeholder="e.g. मीरा बाई" />
+                        {chips('lyricist')}
+                      </div>
+                    </div>
+                    <div>
+                      <label className={pLabel}>YouTube or reference link</label>
+                      <input type="url" value={publicBhajanForm.source} onChange={(e) => setPublicBhajanForm({ ...publicBhajanForm, source: e.target.value })} className={pIn} placeholder="https://youtube.com/…" />
+                    </div>
+                  </div>
+                )}
+
+                {/* ---------- Moods ---------- */}
+                <p className={pSection + ' mt-2'}>Moods{publicBhajanForm.keywords.length ? ` · ${publicBhajanForm.keywords.length}` : ''}</p>
+                <div className="flex flex-wrap gap-1.5 mb-5">
+                  {allKeywordOptions.map(kw => (
+                    <button key={kw} type="button" onClick={() => togglePublicBhajanKeyword(kw)} className={`px-2.5 py-1 rounded-full text-xs font-medium ${publicBhajanForm.keywords.includes(kw) ? 'bg-[#0B5A70] text-white' : 'bg-[#0B5A70]/5 text-[#0B5A70] border border-[#0B5A70]/12'}`}>
+                      #{kw}
+                    </button>
+                  ))}
                 </div>
 
-                {/* SESSION 85: review flag + propagation choice */}
-                <div className="rounded-xl border border-purple-200 bg-purple-50/60 p-3 space-y-2">
-                  <label className="flex items-start gap-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={!!publicBhajanForm.reviewed}
-                      onChange={(e) => setPublicBhajanForm({ ...publicBhajanForm, reviewed: e.target.checked })}
-                      className="mt-1 w-4 h-4 accent-purple-700"
-                    />
-                    <span>
-                      <span className="block text-sm font-semibold text-[#0B5A70]">Reviewed &amp; finalised</span>
-                      <span className="block text-xs text-gray-600">
-                        {editingPublicBhajan && editingPublicBhajan.reviewStatus === 'reviewed'
-                          ? `Reviewed${editingPublicBhajan.reviewedAt && editingPublicBhajan.reviewedAt.toDate ? ' on ' + editingPublicBhajan.reviewedAt.toDate().toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : ''} — untick to send it back for review`
-                          : 'Tick once typos and alignment are checked'}
-                      </span>
-                    </span>
+                {/* ---------- Review + propagation ---------- */}
+                <div className="rounded-xl border border-purple-200 bg-purple-50/60 p-3 space-y-2 mb-4">
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input type="checkbox" checked={!!publicBhajanForm.reviewed} onChange={(e) => setPublicBhajanForm({ ...publicBhajanForm, reviewed: e.target.checked })} className="w-4 h-4 accent-purple-700" />
+                    <span className="text-sm font-semibold text-[#0B5A70]">Reviewed &amp; finalised</span>
+                    {editingPublicBhajan && editingPublicBhajan.reviewStatus === 'reviewed' && editingPublicBhajan.reviewedAt && editingPublicBhajan.reviewedAt.toDate && (
+                      <span className="text-xs text-gray-500">· {editingPublicBhajan.reviewedAt.toDate().toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</span>
+                    )}
                   </label>
                   {editingPublicBhajan && (
-                    <label className="flex items-start gap-3 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={!!publicBhajanForm.applyToCopies}
-                        onChange={(e) => setPublicBhajanForm({ ...publicBhajanForm, applyToCopies: e.target.checked })}
-                        className="mt-1 w-4 h-4 accent-purple-700"
-                      />
-                      <span>
-                        <span className="block text-sm font-semibold text-[#0B5A70]">Apply to personal libraries too</span>
-                        <span className="block text-xs text-gray-600">
-                          On: users' copies pick up this text (copies they edited themselves are never touched). Off: public library only; existing copies keep their current text.
-                        </span>
-                      </span>
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input type="checkbox" checked={!!publicBhajanForm.applyToCopies} onChange={(e) => setPublicBhajanForm({ ...publicBhajanForm, applyToCopies: e.target.checked })} className="w-4 h-4 accent-purple-700" />
+                      <span className="text-sm font-semibold text-[#0B5A70]">Apply to personal libraries too</span>
+                      <span className="text-xs text-gray-500" title="Copies users edited themselves are never touched">· skips user-edited copies</span>
                     </label>
                   )}
                 </div>
 
                 {publicBhajanFormError && (
-                  <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
-                    ⚠️ {publicBhajanFormError}
-                  </div>
+                  <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">⚠️ {publicBhajanFormError}</div>
                 )}
 
-                <div className="flex gap-3 pt-2">
-                  <button
-                    onClick={savePublicBhajan}
-                    disabled={publicBhajanFormSaving || !publicBhajanForm.title.trim() || !publicBhajanForm.lyrics.trim()}
-                    className="flex-1 bg-[#0B5A70] hover:bg-[#094a5d] text-white font-bold py-3 rounded-xl shadow-lg disabled:opacity-50"
-                  >
-                    {publicBhajanFormSaving ? 'Saving...' : '💾 Save'}
+                <div className="flex gap-3">
+                  <button onClick={savePublicBhajan} disabled={publicBhajanFormSaving || !publicBhajanForm.title.trim() || !publicBhajanForm.lyrics.trim()} className="flex-1 bg-[#0B5A70] hover:bg-[#094a5d] text-white font-bold py-3 rounded-xl shadow-lg disabled:opacity-50">
+                    {publicBhajanFormSaving ? 'Saving…' : 'Save'}
                   </button>
-                  <button
-                    onClick={() => {
-                      setShowPublicBhajanForm(false);
-                      setEditingPublicBhajan(null);
-                    }}
-                    className="px-6 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 font-semibold"
-                  >
-                    Cancel
-                  </button>
+                  <button onClick={close} className="px-6 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 font-semibold">Cancel</button>
                 </div>
               </div>
             </div>
           </div>
-        )}
+          );
+        })()}
 
         {/* ==============================================
             BOTTOM TAB BAR (SESSION 5 — NEW)
