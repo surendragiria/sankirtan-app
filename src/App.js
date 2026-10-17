@@ -1084,7 +1084,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.10.17.s99';
+const APP_VERSION = '2026.10.17.s100';
 const AUTO_SCROLL_VIEWS = ['live-program', 'bhajan-detail', 'public-bhajan-detail'];
 const LIVE_SCROLL_STEPS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 
@@ -9614,6 +9614,7 @@ const App = () => {
                         {hindiTypingEnabled ? 'हिं' : 'EN'}
                       </button>
                       <span className={`mx-0.5 h-5 w-px ${darkMode ? 'bg-white/15' : 'bg-[#0B5A70]/15'}`} aria-hidden="true" />
+                      <span className={`text-[11px] font-semibold mr-0.5 ${darkMode ? 'text-gray-400' : 'text-[#0B5A70]/70'}`}>Upload</span>
                       <AttachBtn kind="camera" disabled={ocrProcessing} onClick={() => cameraInputRef.current && cameraInputRef.current.click()} title="Camera — photograph the lyrics" />
                       <AttachBtn kind="gallery" disabled={ocrProcessing} onClick={() => imageInputRef.current && imageInputRef.current.click()} title="Gallery — pick a photo of the lyrics" />
                       <AttachBtn kind="document" disabled={ocrProcessing} onClick={() => pdfInputRef.current && pdfInputRef.current.click()} title="Document — PDF of the lyrics" />
@@ -12460,6 +12461,7 @@ const App = () => {
                         {hindiTypingEnabled ? 'हिं' : 'EN'}
                       </button>
                       <span className="mx-0.5 h-5 w-px bg-[#0B5A70]/15" aria-hidden="true" />
+                      <span className="text-[11px] font-semibold mr-0.5 text-[#0B5A70]/70">Upload</span>
                       <AttachBtn kind="camera" disabled={ocrProcessing} onClick={() => publicCameraInputRef.current && publicCameraInputRef.current.click()} title="Camera — photograph the lyrics" />
                       <AttachBtn kind="gallery" disabled={ocrProcessing} onClick={() => publicImageInputRef.current && publicImageInputRef.current.click()} title="Gallery — pick a photo of the lyrics" />
                       <AttachBtn kind="document" disabled={ocrProcessing} onClick={() => publicPdfInputRef.current && publicPdfInputRef.current.click()} title="Document — PDF of the lyrics" />
