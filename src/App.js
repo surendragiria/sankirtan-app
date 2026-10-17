@@ -1084,7 +1084,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.10.17.s86';
+const APP_VERSION = '2026.10.17.s87';
 const AUTO_SCROLL_VIEWS = ['live-program', 'bhajan-detail', 'public-bhajan-detail'];
 const LIVE_SCROLL_STEPS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 
@@ -1923,6 +1923,7 @@ const Icon = ({ path, size = 20, className = '', strokeWidth = 2 }) => (
 const IconSearch = (p) => <Icon {...p} path={<><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.35-4.35" /></>} />;
 const IconGlobe = (p) => <Icon {...p} path={<><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3a15 15 0 010 18M12 3a15 15 0 000 18" /></>} />;
 const IconBookOpen = (p) => <Icon {...p} path={<path d="M2 5.5A2.5 2.5 0 014.5 3H10v16H4.5A2.5 2.5 0 012 16.5v-11zM22 5.5A2.5 2.5 0 0019.5 3H14v16h5.5a2.5 2.5 0 002.5-2.5v-11z" />} />;
+const IconCalendar = (p) => <Icon {...p} path={<><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M3 10h18M8 3v4M16 3v4" /></>} />;
 const IconMusic = (p) => <Icon {...p} path={<><path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" /></>} />;
 const IconLock = (p) => <Icon {...p} path={<><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V7a4 4 0 018 0v4" /></>} />;
 const IconShare = (p) => <Icon {...p} path={<><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><path d="M8.6 10.5l6.8-3.9M8.6 13.5l6.8 3.9" /></>} />;
@@ -6187,6 +6188,7 @@ const App = () => {
           setLibraryParodiesOpen(true);
           setCurrentView('library');
         } else {
+          setPlaylistViewMode(programForm.type);   // SESSION 87: land on the matching tab
           setCurrentView('programs');
         }
         showToast(`✅ ${label} "${programData.name}" created`);
@@ -6317,6 +6319,7 @@ const App = () => {
         try {
           const db = window.firebase.firestore();
           await db.collection('users').doc(user.uid).collection('programs').doc(program.id).delete();
+          if (pType !== 'parody') setPlaylistViewMode(pType);   // SESSION 87
           setCurrentView(pType === 'parody' ? 'library' : 'programs');  // SESSION 43
           setSelectedProgram(null);
           showToast(`${label} deleted`);
@@ -9521,48 +9524,13 @@ const App = () => {
             return (
             <>
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-2xl font-bold text-[#0B5A70]">{isPlaylistView ? '🎵 Playlists' : 'Programs'}</h2>
+                <h2 className="text-2xl font-bold text-[#0B5A70]">{isPlaylistView ? 'Playlists' : 'Programs'}</h2>
                 <button
                   onClick={openCreateProgram}
                   className="bg-[#0B5A70] hover:bg-[#094a5d] text-white font-semibold px-4 py-2 rounded-xl shadow-md flex items-center gap-2 text-sm"
                 >
                   <span className="text-lg">+</span> Create
                 </button>
-              </div>
-
-              {/* SESSION 32/36: three-way toggle — Playlists / Programs /
-                  Parodies. Same pill style as libraries' compact/full
-                  toggle. Selection persists in localStorage. */}
-              <div className="mb-4 flex items-center gap-1 p-1 bg-[#0B5A70]/5 rounded-xl w-fit">
-                <button
-                  onClick={() => {
-                    setPlaylistViewMode('playlist');
-                    try { localStorage.setItem('sankirtan-playlist-view', 'playlist'); } catch {}
-                  }}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
-                    isPlaylistView
-                      ? 'bg-[#E65100] text-white shadow-sm'
-                      : 'text-[#0B5A70]/70 hover:text-[#0B5A70]'
-                  }`}
-                >
-                  🎵 Playlists{playlists.length > 0 ? ` (${playlists.length})` : ''}
-                </button>
-                <button
-                  onClick={() => {
-                    setPlaylistViewMode('program');
-                    try { localStorage.setItem('sankirtan-playlist-view', 'program'); } catch {}
-                  }}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
-                    playlistViewMode === 'program'
-                      ? 'bg-[#E65100] text-white shadow-sm'
-                      : 'text-[#0B5A70]/70 hover:text-[#0B5A70]'
-                  }`}
-                >
-                  Programs{events.length > 0 ? ` (${events.length})` : ''}
-                </button>
-                {/* SESSION 43: Parodies pill removed — parodies now live in
-                    My Library alongside bhajans (they're performance units,
-                    not collections). */}
               </div>
 
               {/* SESSION 47: one-line explainer of the difference between
@@ -9572,10 +9540,41 @@ const App = () => {
                   tab; search only once the list is long enough to need it. */}
               {programs.length < 2 && (
                 <p className={`text-xs mb-4 ${darkMode ? 'text-gray-400' : 'text-[#0B5A70]/60'}`}>
-                  <span className="font-semibold">🎵 Playlist</span> — an undated collection for daily practice.
-                  {' '}<span className="font-semibold">📅 Program</span> — a dated event (jagran, sankirtan) with <strong>Live mode</strong> for performing.
+                  {isPlaylistView
+                    ? 'A playlist is an undated collection — daily practice, a theme, a favourite set.'
+                    : 'A program is a dated event (jagran, sankirtan) with a venue, singer assignments and Live mode for performing.'}
                 </p>
               )}
+
+              {/* SESSION 87: next program hero — the most common action
+                  (open tonight's program / start live) is one tap away. */}
+              {!isPlaylistView && !programSearchQuery && (() => {
+                const upcoming = events.filter(p => !isPastProgramDate(p.date)).sort((x, y) => String(x.date || '').localeCompare(String(y.date || '')));
+                const next = upcoming[0];
+                if (!next) return null;
+                const n = (next.bhajanIds || []).length;
+                return (
+                  <div className={`rounded-2xl p-4 mb-4 border ${darkMode ? 'bg-[#162226] border-[#E65100]/30' : 'bg-[#FFFCF8] border-[#E65100]/30 shadow-[0_2px_12px_rgba(230,81,0,0.08)]'}`}>
+                    <p className={`text-[11px] font-semibold uppercase tracking-wide mb-1 ${darkMode ? 'text-orange-300' : 'text-[#E65100]'}`}>
+                      Next program · {formatProgramDate(next.date)}
+                    </p>
+                    <button onClick={() => openProgramDetail(next)} className="w-full text-left">
+                      <h3 className={`text-lg font-bold truncate ${darkMode ? 'text-amber-100' : 'text-[#0B5A70]'}`}>{next.name}</h3>
+                      <p className={`text-xs truncate ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                        {n} bhajan{n === 1 ? '' : 's'}{next.venue ? ` · 📍 ${next.venue}` : ''}
+                      </p>
+                    </button>
+                    {n > 0 && (
+                      <button
+                        onClick={() => startLiveProgram(next)}
+                        className="w-full mt-3 font-semibold py-2.5 rounded-xl text-sm flex items-center justify-center gap-2 border transition-colors border-[#E65100]/50 text-[#E65100] hover:bg-[#E65100]/8"
+                      >
+                        🎤 Start live performance
+                      </button>
+                    )}
+                  </div>
+                );
+              })()}
 
               {(programs.length > 5 || programSearchQuery) && (
               <div className="mb-4">
@@ -12611,13 +12610,16 @@ const App = () => {
                 ...(user
                   ? [{ view: 'library', label: 'Library', Icon: IconBookOpen, requiresAuth: true }]
                   : [{ view: 'public-library', label: 'Library', Icon: IconGlobe, requiresAuth: false }]),
-                { view: 'programs', label: 'Playlists', Icon: IconMusic, requiresAuth: true },
+                // SESSION 87: Playlists and Programs are separate tabs (same
+                // list view, different mode).
+                { view: 'programs', mode: 'playlist', label: 'Playlists', Icon: IconMusic, requiresAuth: true },
+                { view: 'programs', mode: 'program', label: 'Programs', Icon: IconCalendar, requiresAuth: true },
               ].map(tab => {
-                const isActive = currentView === tab.view;
+                const isActive = currentView === tab.view && (!tab.mode || playlistViewMode === tab.mode);
                 const isLocked = tab.requiresAuth && guestMode && !user;
                 return (
                   <button
-                    key={tab.view}
+                    key={tab.view + (tab.mode || '')}
                     onClick={() => {
                       if (isLocked) {
                         // SESSION 6: explain WHY the screen is about to change,
@@ -12626,6 +12628,11 @@ const App = () => {
                         setGuestMode(false);
                         setLoading(false);
                         return;
+                      }
+                      if (tab.mode && playlistViewMode !== tab.mode) {
+                        setPlaylistViewMode(tab.mode);
+                        try { localStorage.setItem('sankirtan-playlist-view', tab.mode); } catch {}
+                        setProgramSearchQuery('');
                       }
                       if (!isActive) setCurrentView(tab.view);
                       else window.scrollTo({ top: 0, behavior: 'smooth' });
