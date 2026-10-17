@@ -6263,7 +6263,7 @@ const App = () => {
     if (nPl) parts.push(`${nPl} playlist${nPl === 1 ? '' : 's'}/medley${nPl === 1 ? '' : 's'}`);
     const usage = using.length
       ? `\n\n⚠️ It is in ${parts.join(' and ')} of yours (${using.slice(0, 4).map(p => p.name).join(', ')}${using.length > 4 ? '…' : ''}). It will be removed from them, and from every other user's programs and playlists.`
-      : '\n\nIt is not in any of your programs or playlists. Other users' lists that include it will drop it automatically.';
+      : "\n\nIt is not in any of your programs or playlists. Other users' lists that include it will drop it automatically.";
     askConfirm(
       {
         title: 'Delete Public Bhajan?',
