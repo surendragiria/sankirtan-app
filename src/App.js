@@ -1084,7 +1084,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.10.17.s92';
+const APP_VERSION = '2026.10.17.s93';
 const AUTO_SCROLL_VIEWS = ['live-program', 'bhajan-detail', 'public-bhajan-detail'];
 const LIVE_SCROLL_STEPS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 
@@ -2310,9 +2310,15 @@ const PublicBhajanCard = React.memo(function PublicBhajanCard({
 // ==============================================
 
 // Strip the junk that comes with lyrics pasted from WhatsApp / YouTube.
-const cleanLyricsText = (raw) => {
+const cleanLyricsText = (raw, { hindiOnly = false } = {}) => {
   if (!raw) return '';
   let t = String(raw).replace(/\r\n?/g, '\n');
+  // SESSION 92: Hindi-only mode (Clean up with हिंदी typing ON) — keep
+  // Devanagari letters/marks, spaces, line breaks and basic punctuation
+  // (। ॥ , ? !); strip every English letter, digit and other symbol.
+  if (hindiOnly) {
+    t = t.replace(/\|/g, '।').replace(/[^ऀ-ॿ\s।॥,?!]/g, ' ').replace(/[०-९]/g, ' ');
+  }
   t = t.replace(/[​-‍﻿ ]/g, ' ');            // zero-width, nbsp
   t = t.replace(/\[?\b\d{1,2}:\d{2}(?::\d{2})?\]?/g, '');         // timestamps 0:12 / [01:02:03]
   t = t.replace(/\p{Extended_Pictographic}️?|[☀-➿]/gu, ''); // emoji
@@ -4928,16 +4934,16 @@ const App = () => {
     requestAnimationFrame(() => { if (el) { el.focus(); try { el.setSelectionRange(cursor, cursor); } catch (e) {} } });
   };
   const cleanLyrics = (which) => {
-    const next = cleanLyricsText(getLyrics(which));
+    const next = cleanLyricsText(getLyrics(which), { hindiOnly: hindiTypingEnabled });
     if (next === getLyrics(which)) { showToast('Nothing to clean — no stray symbols, timestamps or extra blank lines found'); return; }
     setLyricsWithUndo(which, next);
-    showToast('🧹 Cleaned up');
+    showToast(hindiTypingEnabled ? '🧹 Cleaned up — Hindi only (English, numbers & symbols removed)' : '🧹 Cleaned up');
   };
   const pasteLyrics = async (which) => {
     try {
       if (!navigator.clipboard || !navigator.clipboard.readText) throw new Error('unsupported');
       const raw = await navigator.clipboard.readText();
-      const pasted = cleanLyricsText(raw);
+      const pasted = cleanLyricsText(raw, { hindiOnly: hindiTypingEnabled });
       if (!pasted) { showToast('Clipboard is empty', 'error'); return; }
       const cur = getLyrics(which).trim();
       setLyricsWithUndo(which, cur ? cur + '\n\n' + pasted : pasted);
