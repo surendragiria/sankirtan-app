@@ -1084,7 +1084,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.10.17.s116';
+const APP_VERSION = '2026.10.17.s117';
 const AUTO_SCROLL_VIEWS = ['live-program', 'bhajan-detail', 'public-bhajan-detail'];
 const LIVE_SCROLL_STEPS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 
@@ -8960,7 +8960,6 @@ const App = () => {
             const anyFilter = !!(searchQuery || filterDeity || filterCategory || libraryFilterKeyword || libraryStarredOnly || unreviewedOnly);
             const clearAll = () => { setSearchQuery(''); setFilterDeity(''); setFilterCategory(''); setLibraryFilterKeyword(''); setLibraryStarredOnly(false); setUnreviewedOnly(false); };
             const chipBase = 'px-3 py-1.5 rounded-full text-xs font-semibold border flex-shrink-0 transition-all flex items-center gap-1';
-            const chipOn = 'bg-[#0B5A70] text-white border-[#0B5A70] shadow-sm';
             const chipOff = darkMode ? 'bg-transparent text-teal-200 border-[#0B5A70]/40' : 'bg-white text-[#0B5A70] border-[#0B5A70]/25';
             const sortLabel = { az: 'A–Z', recent: 'Recently opened', sung: 'Most sung', added: 'Recently added' }[librarySort] || 'A–Z';
             const continueItems = !anyFilter ? recentlyRead.map(r => getBhajanById(r.id)).filter(Boolean).slice(0, 5) : [];
@@ -9061,15 +9060,31 @@ const App = () => {
                     <div className="flex flex-nowrap gap-2 items-center">{children}</div>
                   </div>
                 );
-                const quick = (items, current, set, sheet, moreLabel, fmt) => {
+                // SESSION 117: labelled, colour-tinted rows; "More" pinned at the right edge.
+                const TINT = {
+                  teal:   { on: 'bg-[#0B5A70] text-white border-[#0B5A70]', off: darkMode ? 'bg-transparent text-teal-200 border-[#0B5A70]/45' : 'bg-white text-[#0B5A70] border-[#0B5A70]/30', label: darkMode ? 'text-teal-300' : 'text-[#0B5A70]' },
+                  saffron:{ on: 'bg-[#E65100] text-white border-[#E65100]', off: darkMode ? 'bg-transparent text-orange-200 border-[#E65100]/45' : 'bg-white text-[#E65100] border-[#E65100]/35', label: darkMode ? 'text-orange-300' : 'text-[#E65100]' },
+                  purple: { on: 'bg-purple-700 text-white border-purple-700', off: darkMode ? 'bg-transparent text-purple-200 border-purple-400/45' : 'bg-white text-purple-700 border-purple-300', label: darkMode ? 'text-purple-300' : 'text-purple-700' },
+                };
+                const small = 'px-2.5 py-1 rounded-full text-[11px] font-semibold border flex-shrink-0 transition-all whitespace-nowrap';
+                const group = (label, tint, items, current, set, sheet, fmt) => {
+                  const t = TINT[tint];
                   const other = current && !items.includes(current);
                   return (
-                    <>
-                      {items.map(v => (
-                        <button key={v} onClick={() => set(current === v ? '' : v)} aria-pressed={current === v} className={`${chipBase} ${current === v ? chipOn : chipOff}`}>{fmt ? fmt(v) : v}</button>
-                      ))}
-                      <button onClick={() => setLibrarySheet(sheet)} className={`${chipBase} ${other ? chipOn : chipOff}`}>{other ? (fmt ? fmt(current) : current) : moreLabel} <span className="opacity-70">▾</span></button>
-                    </>
+                    <div className="flex items-center gap-2">
+                      <span className={`w-9 flex-shrink-0 text-[10px] font-bold uppercase tracking-wide ${t.label}`}>{label}</span>
+                      <div className="flex-1 min-w-0 overflow-x-auto [&::-webkit-scrollbar]:hidden" style={{scrollbarWidth: 'none'}}>
+                        <div className="flex flex-nowrap gap-1.5 items-center">
+                          {items.map(v => (
+                            <button key={v} onClick={() => set(current === v ? '' : v)} aria-pressed={current === v} className={`${small} ${current === v ? t.on : t.off}`}>{fmt ? fmt(v) : v}</button>
+                          ))}
+                        </div>
+                      </div>
+                      <button onClick={() => setLibrarySheet(sheet)} aria-label={`More ${label}`} title={`More ${label.toLowerCase()}`}
+                        className={`flex-shrink-0 border transition-all ${other ? `${small} ${t.on}` : `w-8 h-7 rounded-full text-sm font-bold flex items-center justify-center ${t.off}`}`}>
+                        {other ? (fmt ? fmt(current) : current) : '⋯'}
+                      </button>
+                    </div>
                   );
                 };
                 const QUICK_DEITY = ['Babosa', 'Krishna', 'Hanuman', 'Mata Ji'];
@@ -9089,9 +9104,11 @@ const App = () => {
                         <button onClick={clearAll} className={`${chipBase} border-red-300 text-red-600 bg-white`}>✕ Clear filters</button>
                       )}
                     </>)}
-                    {row(quick(QUICK_DEITY, filterDeity, setFilterDeity, 'deity', 'More deities'))}
-                    {row(quick(QUICK_TYPE, filterCategory, setFilterCategory, 'type', 'More types'))}
-                    {row(quick(QUICK_MOOD, libraryFilterKeyword, setLibraryFilterKeyword, 'mood', 'More moods', (v) => '#' + v))}
+                    <div className={`rounded-2xl border p-2.5 space-y-2 ${darkMode ? 'border-[#0B5A70]/20 bg-[#162226]/60' : 'border-[#0B5A70]/10 bg-[#FFFCF8]'}`}>
+                      {group('Deity', 'teal', QUICK_DEITY, filterDeity, setFilterDeity, 'deity')}
+                      {group('Type', 'saffron', QUICK_TYPE, filterCategory, setFilterCategory, 'type')}
+                      {group('Mood', 'purple', QUICK_MOOD, libraryFilterKeyword, setLibraryFilterKeyword, 'mood', (v) => '#' + v)}
+                    </div>
                   </div>
                 );
               })()}
