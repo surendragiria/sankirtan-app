@@ -1084,7 +1084,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.10.17.s91';
+const APP_VERSION = '2026.10.17.s92';
 const AUTO_SCROLL_VIEWS = ['live-program', 'bhajan-detail', 'public-bhajan-detail'];
 const LIVE_SCROLL_STEPS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 
@@ -1532,7 +1532,7 @@ const getProgramType = (program) => {
 //      before the para starts." Well-formatted bhajans use this.
 //      Handles arbitrary mukhda lengths (1 line, 4 lines, 8
 //      lines — whatever the actual mukhda is).
-//   3. Else → first 3 non-empty lines. Fallback for legacy or
+//   3. Else → first non-empty line (was 3 until Session 91). Fallback for legacy or
 //      imported bhajans (e.g., Kabir Bhajan Mala) that don't
 //      have paragraph separators. Degrades gracefully instead
 //      of dumping the entire bhajan into the mukhda view.
@@ -1578,9 +1578,11 @@ const getMukhda = (bhajan) => {
     return mukhdaLines.join('\n');
   }
 
-  // Tier 3: fallback for lyrics with no blank-line structure
+  // Tier 3: no blank-line structure → the first line is the mukhda.
+  // (SESSION 91: was the first 3 lines; the first line break now marks
+  // the mukhda when no explicit break was added.)
   const allNonEmpty = rawLines.slice(start).filter(l => l.trim().length > 0);
-  return allNonEmpty.slice(0, 3).map(l => l.trim()).join('\n');
+  return allNonEmpty.slice(0, 1).map(l => l.trim()).join('\n');
 };
 
 // SESSION 70: split lyrics into the mukhda (opening refrain) and the
@@ -5013,7 +5015,7 @@ const App = () => {
     const m = getMukhda({ lyrics });
     const n = m ? m.split('\n').length : 0;
     const hasBlank = /\n\s*\n/.test(lyrics.replace(/^\s+/, ''));
-    return hasBlank ? `Mukhda: ${n} line${n === 1 ? '' : 's'}` : 'No blank line yet — first 3 lines used as mukhda';
+    return hasBlank ? `Mukhda: ${n} line${n === 1 ? '' : 's'}` : 'No blank line — first line used as mukhda';
   };
   useAutoGrow(lyricsTextareaRef, bhajanForm.lyrics);
   useAutoGrow(publicLyricsTextareaRef, publicBhajanForm.lyrics);
@@ -9794,7 +9796,7 @@ const App = () => {
                         const hasBlank = /\n\s*\n/.test(bhajanForm.lyrics.replace(/^\s+/, ''));
                         return (
                           <span className={`px-2 py-0.5 rounded-full font-semibold ${hasBlank ? (darkMode ? 'bg-[#0B5A70]/20 text-teal-200' : 'bg-[#0B5A70]/8 text-[#0B5A70]') : (darkMode ? 'bg-[#E65100]/20 text-orange-200' : 'bg-[#E65100]/10 text-[#E65100]')}`}>
-                            {hasBlank ? `Mukhda: ${n} line${n === 1 ? '' : 's'}` : 'No blank line yet — first 3 lines will be used'}
+                            {hasBlank ? `Mukhda: ${n} line${n === 1 ? '' : 's'}` : 'No blank line — first line will be used as mukhda'}
                           </span>
                         );
                       })()}
