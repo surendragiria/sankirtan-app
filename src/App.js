@@ -1084,7 +1084,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.10.17.s93';
+const APP_VERSION = '2026.10.17.s94';
 const AUTO_SCROLL_VIEWS = ['live-program', 'bhajan-detail', 'public-bhajan-detail'];
 const LIVE_SCROLL_STEPS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 
@@ -4960,6 +4960,55 @@ const App = () => {
     lyricsRecRef.current = null;
     if (rec) { try { rec.stop(); } catch (e) {} }
   };
+  // SESSION 93: smarter Hindi dictation.
+  //  - Chunks spoken in one breath join into ONE line; a pause (the engine
+  //    ending its session) starts a new line.
+  //  - Of the alternatives Google offers, the one with the most Devanagari
+  //    wins; English words that still slip through ("Babosa", "Shyam") are
+  //    transliterated with the same Input Tools service the typing uses.
+  //  - Voice commands: "नई लाइन"/"next line" → line break,
+  //    "मुखड़ा"/"नया पैरा"/"new para" → blank line, "रुको"/"stop" → stop.
+  const devCount = (s) => (s.match(/[ऀ-ॿ]/g) || []).length;
+  const pickDevanagariAlt = (result) => {
+    let best = '', bestScore = -1;
+    for (let j = 0; j < result.length; j++) {
+      const t = (result[j].transcript || '').trim();
+      const score = devCount(t) * 10 - (t.match(/[A-Za-z]/g) || []).length;
+      if (t && score > bestScore) { best = t; bestScore = score; }
+    }
+    return best;
+  };
+  // (\b doesn't work next to Devanagari, so boundaries are explicit.)
+  const DICT_CMD = [
+    { re: /(?:^|\s)(?:नई|नयी|न्यू|अगली|next|new)\s*(?:लाइन|लाईन|पंक्ति|line)(?=\s|$)/i, cmd: 'line' },
+    { re: /(?:^|\s)(?:मुखड़ा|मुखडा|मुखरा|mukhda|नया\s*पैरा|न्यू\s*पैरा|new\s*para(?:graph)?|अंतरा\s*शुरू)(?=\s|$)/i, cmd: 'para' },
+    { re: /(?:^|\s)(?:रुको|रुक\s*जाओ|बंद\s*करो|stop|स्टॉप)(?=\s|$)/i, cmd: 'stop' },
+  ];
+  const parseDictCommand = (t) => {
+    for (const { re, cmd } of DICT_CMD) {
+      const m = t.match(re);
+      if (m) return { text: (t.slice(0, m.index) + ' ' + t.slice(m.index + m[0].length)).replace(/\s+/g, ' ').trim(), cmd, cmdFirst: !t.slice(0, m.index).trim() };
+    }
+    return { text: t, cmd: null, cmdFirst: false };
+  };
+  // Transliterate any Latin words in a chunk (cached, best effort).
+  const hindifyText = async (text) => {
+    const words = text.split(' ');
+    const out = await Promise.all(words.map(async (w) => {
+      if (!/^[A-Za-z]{2,}$/.test(w)) return w;
+      const cached = getCachedSuggestions(w);
+      if (cached && cached[0]) return cached[0];
+      try {
+        const url = `https://inputtools.google.com/request?text=${encodeURIComponent(w)}&itc=hi-t-i0-und&num=1&cp=0&cs=1&ie=utf-8&oe=utf-8`;
+        const res = await fetch(url);
+        const data = await res.json();
+        const hi = data && data[0] === 'SUCCESS' && data[1] && data[1][0] && data[1][0][1] && data[1][0][1][0];
+        if (hi) { suggestionsCacheRef.current[hiKey(w)] = [hi]; return hi; }
+      } catch (e) {}
+      return w;
+    }));
+    return out.join(' ');
+  };
   const toggleLyricsDictation = (which) => {
     if (lyricsDictatingRef.current) { stopLyricsDictation(); return; }
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -4968,37 +5017,57 @@ const App = () => {
     setLyricsUndoTick(t => t + 1);
     lyricsDictatingRef.current = which;
     setLyricsDictating(which);
-    let session = ''; // text already committed from this dictation
+    showToast('🎤 बोलिए… "नई लाइन" = line break · "मुखड़ा" = blank line · "रुको" = stop');
     const base = getLyrics(which).replace(/\s+$/, '');
+    const committed = [];   // finished lines
+    let cur = [];           // chunks of the line being spoken: { raw, hi }
+    const curText = () => cur.map(c => c.hi || c.raw).filter(Boolean).join(' ');
+    const render = (interim) => {
+      const shown = [curText(), interim].filter(Boolean).join(' ');
+      const body = [...committed, shown].join('\n').replace(/\n{3,}/g, '\n\n').replace(/^\n+|\n+$/g, '');
+      const next = base ? (body ? base + '\n\n' + body : base) : body;
+      if (which === 'public') setPublicBhajanForm(p => ({ ...p, lyrics: next }));
+      else setBhajanForm(p => ({ ...p, lyrics: next }));
+      const el = document.getElementById(lyricsInputId(which));
+      if (el) el.scrollTop = el.scrollHeight;
+    };
+    const endLine = () => { const t = curText(); if (t) committed.push(t); cur = []; };
     const start = () => {
       const rec = new SR();
       lyricsRecRef.current = rec;
       rec.lang = 'hi-IN';
       rec.continuous = true;
       rec.interimResults = true;
-      rec.maxAlternatives = 1;
+      rec.maxAlternatives = 3;
       rec.onresult = (e) => {
         let interim = '';
+        let stopAfter = false;
         for (let i = e.resultIndex; i < e.results.length; i++) {
-          const t = e.results[i][0].transcript.trim();
-          if (!t) continue;
-          if (e.results[i].isFinal) session += (session ? '\n' : '') + t;
-          else interim += (interim ? ' ' : '') + t;
+          if (!e.results[i].isFinal) { const t = (e.results[i][0].transcript || '').trim(); if (t) interim += (interim ? ' ' : '') + t; continue; }
+          const { text, cmd, cmdFirst } = parseDictCommand(pickDevanagariAlt(e.results[i]));
+          const applyBreak = () => { if (cmd === 'line') endLine(); else if (cmd === 'para') { endLine(); committed.push(''); } };
+          if (cmdFirst) applyBreak(); // "नई लाइन जाके सिर…" → break, then the words
+          if (text) {
+            const chunk = { raw: text, hi: null };
+            cur.push(chunk);
+            if (/[A-Za-z]{2,}/.test(text)) hindifyText(text).then(hi => { if (hi !== text) { chunk.hi = hi; if (lyricsDictatingRef.current === which) render(''); } });
+          }
+          if (!cmdFirst) applyBreak();
+          if (cmd === 'stop') stopAfter = true;
         }
-        const body = [session, interim].filter(Boolean).join('\n');
-        const next = base ? (body ? base + '\n\n' + body : base) : body;
-        if (which === 'public') setPublicBhajanForm(p => ({ ...p, lyrics: next }));
-        else setBhajanForm(p => ({ ...p, lyrics: next }));
-        const el = document.getElementById(lyricsInputId(which));
-        if (el) el.scrollTop = el.scrollHeight;
+        render(stopAfter ? '' : interim);
+        if (stopAfter) { endLine(); render(''); stopLyricsDictation(); showToast('🎤 Dictation stopped'); }
       };
       rec.onerror = (e) => {
         if (e.error === 'not-allowed') { showToast('Microphone access blocked. Please allow microphone in browser settings.', 'error'); stopLyricsDictation(); }
         else if (e.error && e.error !== 'no-speech' && e.error !== 'aborted') { showToast('Dictation error: ' + e.error, 'error'); stopLyricsDictation(); }
       };
-      // Android ends the session after a pause even in continuous mode —
-      // restart while the user still has dictation on.
-      rec.onend = () => { if (lyricsDictatingRef.current === which && lyricsRecRef.current === rec) { try { start(); } catch (e) { stopLyricsDictation(); } } };
+      // The engine ends its session on a pause — treat that as a line
+      // break and keep listening while the user still has dictation on.
+      rec.onend = () => {
+        endLine(); render('');
+        if (lyricsDictatingRef.current === which && lyricsRecRef.current === rec) { try { start(); } catch (e) { stopLyricsDictation(); } }
+      };
       rec.start();
     };
     try { start(); } catch (err) { stopLyricsDictation(); showToast('Could not start dictation', 'error'); }
