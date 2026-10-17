@@ -1082,16 +1082,9 @@ const DEFAULT_KEYWORDS = [
   'gujarati', 'filmy', 'folk', 'traditional', 'peaceful'
 ];
 
-// SESSION 111: first letter of a title for the A–Z jump rail.
-const libraryFirstLetter = (title) => {
-  const t = String(title || '').replace(/^[\s"'“‘([.…-]+/, '');
-  const ch = Array.from(t)[0] || '#';
-  return /[a-z]/i.test(ch) ? ch.toUpperCase() : ch;
-};
-
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.10.17.s111';
+const APP_VERSION = '2026.10.17.s112';
 const AUTO_SCROLL_VIEWS = ['live-program', 'bhajan-detail', 'public-bhajan-detail'];
 const LIVE_SCROLL_STEPS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 
@@ -8888,14 +8881,6 @@ const App = () => {
             const chipOff = darkMode ? 'bg-transparent text-teal-200 border-[#0B5A70]/40' : 'bg-white text-[#0B5A70] border-[#0B5A70]/25';
             const sortLabel = { az: 'A–Z', recent: 'Recently opened', sung: 'Most sung', added: 'Recently added' }[librarySort] || 'A–Z';
             const continueItems = !anyFilter ? recentlyRead.map(r => getBhajanById(r.id)).filter(Boolean).slice(0, 5) : [];
-            const showRail = librarySort === 'az' && !searchQuery && filteredBhajans.length > 40;
-            const railLetters = showRail ? Array.from(new Set(filteredBhajans.map(b => libraryFirstLetter(b.title)))) : [];
-            const jumpTo = (letter) => {
-              const idx = filteredBhajans.findIndex(b => libraryFirstLetter(b.title) === letter);
-              if (idx < 0) return;
-              const go = () => { const el = document.getElementById('lib-' + filteredBhajans[idx].id); if (el) el.scrollIntoView({ block: 'start', behavior: 'auto' }); };
-              if (idx >= libraryVisibleCount) { setLibraryVisibleCount(idx + PAGE_SIZE); setTimeout(go, 60); } else go();
-            };
             const sheetWrap = (title, body) => (
               <div onClick={() => setLibrarySheet(null)} className="fixed inset-0 bg-black/50 z-[100] flex items-end sm:items-center justify-center">
                 <div onClick={(e) => e.stopPropagation()} className={`w-full max-w-md rounded-t-3xl sm:rounded-3xl max-h-[75vh] flex flex-col overflow-hidden ${darkMode ? 'bg-[#162226] text-gray-100' : 'bg-white text-gray-900'}`}>
@@ -9076,9 +9061,9 @@ const App = () => {
                 </div>
               ) : (
                 <>
-                <div className={`${compactView ? 'space-y-2' : 'grid grid-cols-1 md:grid-cols-2 gap-4'} ${showRail ? 'pr-5' : ''}`}>
+                <div className={`${compactView ? 'space-y-2' : 'grid grid-cols-1 md:grid-cols-2 gap-4'} `}>
                   {filteredBhajans.slice(0, libraryVisibleCount).map((bhajan, cardIndex) => (
-                    <div key={bhajan.id} id={'lib-' + bhajan.id} className="scroll-mt-36">
+                    <div key={bhajan.id}>
                       <MyBhajanCard
                         bhajan={bhajan}
                         darkMode={darkMode}
@@ -9111,16 +9096,6 @@ const App = () => {
                   <p className="text-center text-xs text-gray-400 py-6">✨ You've seen all {filteredBhajans.length} bhajans</p>
                 )}
                 </>
-              )}
-
-              {/* A–Z jump rail */}
-              {showRail && railLetters.length > 1 && (
-                <div className="fixed right-0.5 top-1/2 -translate-y-1/2 z-30 flex flex-col items-center select-none" aria-label="Jump to letter"
-                  onTouchMove={(e) => { const t = e.touches[0]; const el = document.elementFromPoint(t.clientX, t.clientY); const l = el && el.getAttribute && el.getAttribute('data-letter'); if (l) jumpTo(l); }}>
-                  {railLetters.map(l => (
-                    <button key={l} data-letter={l} onClick={() => jumpTo(l)} className={`w-5 leading-[13px] text-[10px] font-semibold text-center ${darkMode ? 'text-teal-300' : 'text-[#0B5A70]'}`}>{l}</button>
-                  ))}
-                </div>
               )}
 
               {/* Floating + button */}
