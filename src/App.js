@@ -1084,7 +1084,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.10.17.s105';
+const APP_VERSION = '2026.10.17.s106';
 const AUTO_SCROLL_VIEWS = ['live-program', 'bhajan-detail', 'public-bhajan-detail'];
 const LIVE_SCROLL_STEPS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 
@@ -2895,17 +2895,32 @@ const App = () => {
   const ownedBhajans = useMemo(() => {
     if (rawBhajans.length === 0 || publicBhajans.length === 0) return rawBhajans;
     const pub = new Map(publicBhajans.map(b => [b.id, b]));
+    // SESSION 106: copies made before the app recorded where they came
+    // from (early imports) carry no savedFromPublicId. Link them to the
+    // public bhajan with the same title when that title is unique, so
+    // YouTube links, तर्ज़ etc. flow through and the library doesn't show
+    // the same bhajan twice. The link is persisted on next open.
+    const byTitle = new Map();
+    publicBhajans.forEach(b => {
+      const k = foldSearchKey(b.title);
+      if (!k) return;
+      byTitle.set(k, byTitle.has(k) ? null : b);   // null = ambiguous
+    });
     const INHERIT = ['source', 'dhun', 'scale', 'singer', 'lyricist'];
     const FOLLOW = ['title', 'lyrics', 'deity', 'category', 'dhun', 'scale', 'singer', 'lyricist', 'keywords', 'source', 'language'];
     let changed = false;
     const out = rawBhajans.map(b => {
-      const src = b.savedFromPublicId ? pub.get(b.savedFromPublicId) : null;
-      if (!src) return b;
+      let src = b.savedFromPublicId ? pub.get(b.savedFromPublicId) : null;
       let m = null;
+      if (!src && !b.savedFromPublicId) {
+        const cand = byTitle.get(foldSearchKey(b.title));
+        if (cand) { src = cand; m = { ...b, savedFromPublicId: cand.id, linkedByTitle: true }; }
+      }
+      if (!src) return b;
       // SESSION 85: public corrections flow into copies the user hasn't
       // edited themselves (admin chose "apply to personal libraries").
       if (!b.textEdited && (src.pushRev || 0) > (b.baseRev || 0)) {
-        m = { ...b, needsSync: true, baseRev: src.pushRev };
+        m = { ...(m || b), needsSync: true, baseRev: src.pushRev };
         for (const f of FOLLOW) { if (src[f] !== undefined) m[f] = src[f]; }
       }
       for (const f of INHERIT) {
@@ -5531,6 +5546,7 @@ const App = () => {
           ['title', 'lyrics', 'deity', 'category', 'dhun', 'scale', 'singer', 'lyricist', 'keywords', 'source', 'language'].forEach(f => { if (bhajan[f] !== undefined) patch[f] = bhajan[f]; });
           patch.baseRev = bhajan.baseRev || 0;
         }
+        if (bhajan.linkedByTitle && bhajan.savedFromPublicId) patch.savedFromPublicId = bhajan.savedFromPublicId;   // SESSION 106
         await db.collection('users').doc(user.uid).collection('bhajans').doc(bhajan.id).update(patch);
       }
 
