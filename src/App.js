@@ -1084,7 +1084,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.10.17.s118';
+const APP_VERSION = '2026.10.17.s119';
 const AUTO_SCROLL_VIEWS = ['live-program', 'bhajan-detail', 'public-bhajan-detail'];
 const LIVE_SCROLL_STEPS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 
@@ -2637,18 +2637,23 @@ const TransliterationChips = ({ currentWord, suggestions, onPick, darkMode, clas
 // one (which is unmounted while this is open) so the Hindi-typing helpers
 // that look the field up by id keep working.
 const LyricsEditorSheet = ({ open, onClose, onCancel, darkMode, inputId, value, onChange, onKeyDown, onFocus, onBlur, placeholder, toolbar, chips, mukhdaChip }) => {
+  // SESSION 119: `onClose` is a fresh arrow on every render, so having it in
+  // the deps re-ran this effect on EVERY keystroke — refocusing and moving
+  // the caret to the end of the text each time. Keep it in a ref instead.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
   useEffect(() => {
     if (!open) return;
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
-    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    const onKey = (e) => { if (e.key === 'Escape') onCloseRef.current(); };
     document.addEventListener('keydown', onKey);
     requestAnimationFrame(() => {
       const el = document.getElementById(inputId);
-      if (el) { el.focus(); const n = el.value.length; try { el.setSelectionRange(n, n); } catch (e) {} }
+      if (el) { el.focus({ preventScroll: true }); const n = el.value.length; try { el.setSelectionRange(n, n); } catch (e) {} }
     });
     return () => { document.body.style.overflow = prev; document.removeEventListener('keydown', onKey); };
-  }, [open, onClose, inputId]);
+  }, [open, inputId]);
   if (!open) return null;
   const lines = (value || '').split('\n').length;
   return (
