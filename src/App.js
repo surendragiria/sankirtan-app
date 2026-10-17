@@ -2674,6 +2674,7 @@ const App = () => {
   const [fetchResult, setFetchResult] = useState(null); // { title, lyrics, text, host } | { error }
   const [fetchShowFull, setFetchShowFull] = useState(false);
   const [notesDraft, setNotesDraft] = useState(null); // null = not editing
+  const [scaleDraft, setScaleDraft] = useState(null); // SESSION 84: null = not editing scale inline
   const [publicFilterDeity, setPublicFilterDeity] = useState('');
   const [publicFilterCategory, setPublicFilterCategory] = useState('');
   const [selectedPublicBhajan, setSelectedPublicBhajan] = useState(null);
@@ -6269,6 +6270,24 @@ const App = () => {
     }
   };
 
+  // SESSION 84: save scale/raag inline from the bhajan page — no full form.
+  // Writes the same `scale` field the Edit Bhajan form uses, so the form
+  // shows it next time it is opened.
+  const saveBhajanScale = async (bhajanIn, text) => {
+    if (!user || !bhajanIn) return;
+    const scale = (text || '').trim();
+    try {
+      const bhajan = await materializeBhajan(bhajanIn);
+      if (!bhajan) return;
+      await window.firebase.firestore().collection('users').doc(user.uid).collection('bhajans').doc(bhajan.id).update({ scale });
+      setSelectedBhajan(prev => (prev && (prev.id === bhajan.id || prev.id === bhajanIn.id) ? { ...prev, ...bhajan, scale, virtual: false } : prev));
+      setScaleDraft(null);
+      showToast(scale ? `🎵 Scale set: ${scale}` : 'Scale cleared');
+    } catch (error) {
+      showToast('Could not save scale: ' + error.message, 'error');
+    }
+  };
+
   // SESSION 70: share the setlist as plain text (WhatsApp-friendly).
   const shareProgramText = async (program) => {
     const pType = getProgramType(program);
@@ -6612,7 +6631,7 @@ const App = () => {
   );
   // SESSION 74: swipe between bhajans in Live mode too.
   const liveSwipe = useSwipe(liveNext, livePrev, { enabled: currentView === 'live-program', threshold: 80 });
-  useEffect(() => { setNotesDraft(null); setNotesOpen(false); }, [selectedBhajan?.id, currentView, liveProgramIndex]);
+  useEffect(() => { setNotesDraft(null); setNotesOpen(false); setScaleDraft(null); }, [selectedBhajan?.id, currentView, liveProgramIndex]);
 
   // Share handler with toast feedback
   // SESSION 13: isPublic flag determines whether we include a
@@ -8701,18 +8720,38 @@ const App = () => {
                   </div>
                 )}
 
-                <div className="mb-4 flex items-center gap-2">
-                  {selectedBhajan.scale ? (
+                <div className="mb-4 flex items-center gap-2 flex-wrap">
+                  {/* SESSION 84: scale is set inline — no detour via the full bhajan form */}
+                  {scaleDraft !== null ? (
+                    <form
+                      onSubmit={(e) => { e.preventDefault(); saveBhajanScale(selectedBhajan, scaleDraft); }}
+                      className="inline-flex items-center gap-1.5"
+                    >
+                      <span className="text-sm" aria-hidden="true">🎵</span>
+                      <input
+                        type="text"
+                        value={scaleDraft}
+                        onChange={(e) => setScaleDraft(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Escape') setScaleDraft(null); }}
+                        autoFocus
+                        placeholder="e.g. C#, Raag Yaman"
+                        aria-label="Scale / Raag"
+                        className={`w-36 text-xs px-2.5 py-1 rounded-full border outline-none ${darkMode ? 'bg-[#162226] border-purple-400/40 text-gray-100' : 'bg-white border-purple-300 text-gray-800'}`}
+                      />
+                      <button type="submit" className="px-2.5 py-1 rounded-full text-xs font-bold bg-[#E65100] text-white">Save</button>
+                      <button type="button" onClick={() => setScaleDraft(null)} className={`px-2 py-1 rounded-full text-xs font-semibold ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>Cancel</button>
+                    </form>
+                  ) : selectedBhajan.scale ? (
                     <button
-                      onClick={() => openEditBhajan(selectedBhajan)}
+                      onClick={() => setScaleDraft(selectedBhajan.scale || '')}
                       className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold transition-colors ${darkMode ? 'bg-purple-900 text-purple-200 hover:bg-purple-800' : 'bg-purple-100 text-purple-800 hover:bg-purple-200'}`}
-                      title="Click to change scale/raag"
+                      title="Tap to change scale/raag"
                     >
                       🎵 Scale: {selectedBhajan.scale}
                     </button>
                   ) : (
                     <button
-                      onClick={() => openEditBhajan(selectedBhajan)}
+                      onClick={() => setScaleDraft('')}
                       className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold border border-dashed transition-colors ${darkMode ? 'bg-transparent text-gray-400 border-[#0B5A70]/20 hover:bg-[#1e2e33] hover:text-gray-200' : 'bg-transparent text-gray-500 border-gray-400 hover:bg-purple-50 hover:text-purple-700 hover:border-purple-400'}`}
                       title="Add scale/raag for this bhajan"
                     >
