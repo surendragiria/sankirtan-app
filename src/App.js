@@ -1082,9 +1082,16 @@ const DEFAULT_KEYWORDS = [
   'gujarati', 'filmy', 'folk', 'traditional', 'peaceful'
 ];
 
+// SESSION 111: first letter of a title for the A–Z jump rail.
+const libraryFirstLetter = (title) => {
+  const t = String(title || '').replace(/^[\s"'“‘([.…-]+/, '');
+  const ch = Array.from(t)[0] || '#';
+  return /[a-z]/i.test(ch) ? ch.toUpperCase() : ch;
+};
+
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.10.17.s110';
+const APP_VERSION = '2026.10.17.s111';
 const AUTO_SCROLL_VIEWS = ['live-program', 'bhajan-detail', 'public-bhajan-detail'];
 const LIVE_SCROLL_STEPS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 
@@ -2106,13 +2113,45 @@ const UnreviewedChip = ({ darkMode }) => (
 );
 const unreviewedCardCls = (darkMode) => darkMode ? ' !border-amber-500/50 !bg-[#2a2214]' : ' !border-amber-300 !bg-amber-50/70';
 
+// SESSION 111: touch gestures shared by both card styles —
+// swipe right = star, swipe left = add to playlist, long-press = menu.
+function useCardGestures(bhajan, { onStar, onAddTo, onMenu }) {
+  const ref = React.useRef({ x: 0, y: 0, t: 0, timer: null, fired: false });
+  const clear = () => { if (ref.current.timer) { clearTimeout(ref.current.timer); ref.current.timer = null; } };
+  const onTouchStart = (e) => {
+    const t = e.touches[0]; if (!t) return;
+    ref.current = { x: t.clientX, y: t.clientY, t: Date.now(), timer: null, fired: false };
+    if (onMenu) ref.current.timer = setTimeout(() => { ref.current.fired = true; onMenu(bhajan); }, 550);
+  };
+  const onTouchMove = (e) => {
+    const t = e.touches[0]; if (!t) return;
+    if (Math.abs(t.clientX - ref.current.x) > 10 || Math.abs(t.clientY - ref.current.y) > 10) clear();
+  };
+  const onTouchEnd = (e) => {
+    clear();
+    const t = e.changedTouches && e.changedTouches[0]; if (!t) return;
+    const dx = t.clientX - ref.current.x, dy = t.clientY - ref.current.y;
+    if (Math.abs(dx) > 70 && Math.abs(dy) < 40 && Date.now() - ref.current.t < 600) {
+      ref.current.fired = true;
+      if (dx > 0 && onStar) onStar(bhajan); else if (dx < 0 && onAddTo) onAddTo(bhajan);
+    }
+  };
+  // suppress the click that follows a swipe / long-press
+  const onClickCapture = (e) => { if (ref.current.fired) { e.stopPropagation(); e.preventDefault(); ref.current.fired = false; } };
+  const onContextMenu = (e) => { if (onMenu) { e.preventDefault(); onMenu(bhajan); } };
+  return { onTouchStart, onTouchMove, onTouchEnd, onTouchCancel: clear, onClickCapture, onContextMenu };
+}
+
 const MyBhajanCard = React.memo(function MyBhajanCard({
-  bhajan, darkMode, compactView, cardIndex, onOpen, onRemove, unreviewed
+  bhajan, darkMode, compactView, cardIndex, onOpen, onRemove, unreviewed, onStar, onAddTo, onMenu
 }) {
+  const gestures = useCardGestures(bhajan, { onStar, onAddTo, onMenu });
   if (compactView) {
+    const hasYt = !!(bhajan.source && getYouTubeVideoId(bhajan.source));
     return (
       <button
         onClick={() => onOpen(bhajan)}
+        {...gestures}
         className={`w-full text-left rounded-xl p-3 border transition-all flex items-center gap-3 ${darkMode ? 'bg-[#162226] border-[#0B5A70]/15 hover:border-[#0B5A70]/30' : 'bg-[#FFFCF8] border-[#0B5A70]/8 shadow-[0_1px_4px_rgba(11,90,112,0.04)] hover:border-[#0B5A70]/25 hover:shadow-[0_2px_8px_rgba(11,90,112,0.10)]'}`}
       >
         <div className="flex-1 min-w-0">
@@ -2121,6 +2160,21 @@ const MyBhajanCard = React.memo(function MyBhajanCard({
             {bhajan.deity} · {bhajan.category}{bhajan.scale ? ` · 🎵 ${bhajan.scale}` : ''}
           </p>
         </div>
+        {(hasYt || bhajan.starred) && (
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            {bhajan.starred && <span className="text-[#E65100] text-sm" aria-label="Starred">⭐</span>}
+            {hasYt && (
+              <span
+                role="button"
+                tabIndex={-1}
+                onClick={(e) => { e.stopPropagation(); onOpen(bhajan, { autoplay: true }); }}
+                className="inline-flex items-center justify-center w-7 h-5 rounded bg-[#FF0000] text-white text-[10px]"
+                aria-label="Listen"
+                title="Listen"
+              >▶</span>
+            )}
+          </div>
+        )}
       </button>
     );
   }
@@ -2144,6 +2198,7 @@ const MyBhajanCard = React.memo(function MyBhajanCard({
       tabIndex={0}
       onClick={() => onOpen(bhajan)}
       onKeyDown={handleKey}
+      {...gestures}
       className={`sk-card-animate rounded-2xl p-5 border transition-all text-left cursor-pointer relative ${darkMode ? 'bg-[#162226] border-[#0B5A70]/15 shadow-[0_2px_12px_rgba(11,90,112,0.15)] hover:border-[#0B5A70]/30 hover:shadow-[0_4px_20px_rgba(11,90,112,0.25)]' : 'bg-[#FFFCF8] border-[#0B5A70]/8 shadow-[0_2px_12px_rgba(11,90,112,0.06)] hover:border-[#0B5A70]/25 hover:shadow-[0_4px_20px_rgba(11,90,112,0.12)]'}${unreviewed ? unreviewedCardCls(darkMode) : ''}`}
       style={{ animationDelay: `${Math.min(cardIndex, 8) * 0.04}s` }}
     >
@@ -2991,6 +3046,12 @@ const App = () => {
   const [libraryStarredOnly, setLibraryStarredOnly] = useState(false);
   // SESSION 85: admin review workflow
   const [unreviewedOnly, setUnreviewedOnly] = useState(false);
+  // SESSION 111: library page rework state
+  const [librarySort, setLibrarySort] = useState(() => { try { return localStorage.getItem('sankirtan-library-sort') || 'az'; } catch { return 'az'; } });
+  useEffect(() => { try { localStorage.setItem('sankirtan-library-sort', librarySort); } catch {} }, [librarySort]);
+  const [librarySheet, setLibrarySheet] = useState(null);     // 'deity' | 'type' | 'mood' | 'sort'
+  const [libraryFabOpen, setLibraryFabOpen] = useState(false);
+  const [libraryRowMenu, setLibraryRowMenu] = useState(null); // bhajan for the long-press menu
   // SESSION 88: admin "fetch lyrics from a web page" utility
   const [fetchUrl, setFetchUrl] = useState('');
   const [fetchBusy, setFetchBusy] = useState(false);
@@ -3292,13 +3353,16 @@ const App = () => {
       if (e.key !== 'Escape') return;
       if (confirmDialog) { setConfirmDialog(null); return; }
       if (addToProgramFor) { setAddToProgramFor(null); return; }
+      if (libraryRowMenu) { setLibraryRowMenu(null); return; }
+      if (librarySheet) { setLibrarySheet(null); return; }
+      if (libraryFabOpen) { setLibraryFabOpen(false); return; }
       if (showBhajanPicker) { setShowBhajanPicker(false); return; }
       if (showOnboarding) { setShowOnboarding(false); return; }
       if (showPhoneLogin) { setShowPhoneLogin(false); return; }
     };
     document.addEventListener('keydown', handleEsc);
     return () => document.removeEventListener('keydown', handleEsc);
-  }, [confirmDialog, showBhajanPicker, showOnboarding, showPhoneLogin, addToProgramFor]);
+  }, [confirmDialog, showBhajanPicker, showOnboarding, showPhoneLogin, addToProgramFor, libraryRowMenu, librarySheet, libraryFabOpen]);
 
   const PAGE_SIZE = 20;
   const [publicVisibleCount, setPublicVisibleCount] = useState(PAGE_SIZE);
@@ -6232,18 +6296,29 @@ const App = () => {
     // sing most often float to the top. Tiebreak by lastActive so
     // recently-opened bhajans beat older ones with the same view
     // count. Falls back to title A-Z for bhajans never opened.
+    // SESSION 111: user-chosen sort (A–Z default; was silent most-sung).
+    const ms = (x) => (x && x.toMillis ? x.toMillis() : 0);
+    const byTitle = (a, b) => (a.title || '').localeCompare(b.title || '', 'hi');
     const sorted = filtered.sort((a, b) => {
-      const va = a.viewCount || 0;
-      const vb = b.viewCount || 0;
-      if (vb !== va) return vb - va;
-      const la = a.lastActive?.toMillis ? a.lastActive.toMillis() : 0;
-      const lb = b.lastActive?.toMillis ? b.lastActive.toMillis() : 0;
-      if (lb !== la) return lb - la;
-      return (a.title || '').localeCompare(b.title || '');
+      if (librarySort === 'sung') {
+        const d = (b.viewCount || 0) - (a.viewCount || 0);
+        if (d) return d;
+        const l = ms(b.lastActive) - ms(a.lastActive);
+        return l || byTitle(a, b);
+      }
+      if (librarySort === 'recent') {
+        const l = ms(b.lastActive) - ms(a.lastActive);
+        return l || byTitle(a, b);
+      }
+      if (librarySort === 'added') {
+        const c = ms(b.createdAt) - ms(a.createdAt);
+        return c || byTitle(a, b);
+      }
+      return byTitle(a, b);
     });
     // SESSION 71: when searching, title matches come first.
     return rankByTier(sorted, q);
-  }, [bhajans, libraryStarredOnly, unreviewedOnly, publicBhajans, debouncedSearchQuery, filterDeity, filterCategory, libraryFilterKeyword]);
+  }, [bhajans, libraryStarredOnly, unreviewedOnly, publicBhajans, debouncedSearchQuery, filterDeity, filterCategory, libraryFilterKeyword, librarySort]);
 
   const filteredPrograms = useMemo(() => {
     if (!programSearchQuery) return programs;
@@ -8803,98 +8878,46 @@ const App = () => {
           {/* ==============================================
               MY LIBRARY VIEW
               ============================================== */}
-          {currentView === 'library' && (
+          {currentView === 'library' && (() => {
+            // SESSION 111: Library page rework — search first, one filter
+            // row, explicit sort, A–Z rail, Continue strip, FAB for adding.
+            const anyFilter = !!(searchQuery || filterDeity || filterCategory || libraryFilterKeyword || libraryStarredOnly || unreviewedOnly);
+            const clearAll = () => { setSearchQuery(''); setFilterDeity(''); setFilterCategory(''); setLibraryFilterKeyword(''); setLibraryStarredOnly(false); setUnreviewedOnly(false); };
+            const chipBase = 'px-3 py-1.5 rounded-full text-xs font-semibold border flex-shrink-0 transition-all flex items-center gap-1';
+            const chipOn = 'bg-[#0B5A70] text-white border-[#0B5A70] shadow-sm';
+            const chipOff = darkMode ? 'bg-transparent text-teal-200 border-[#0B5A70]/40' : 'bg-white text-[#0B5A70] border-[#0B5A70]/25';
+            const sortLabel = { az: 'A–Z', recent: 'Recently opened', sung: 'Most sung', added: 'Recently added' }[librarySort] || 'A–Z';
+            const continueItems = !anyFilter ? recentlyRead.map(r => getBhajanById(r.id)).filter(Boolean).slice(0, 5) : [];
+            const showRail = librarySort === 'az' && !searchQuery && filteredBhajans.length > 40;
+            const railLetters = showRail ? Array.from(new Set(filteredBhajans.map(b => libraryFirstLetter(b.title)))) : [];
+            const jumpTo = (letter) => {
+              const idx = filteredBhajans.findIndex(b => libraryFirstLetter(b.title) === letter);
+              if (idx < 0) return;
+              const go = () => { const el = document.getElementById('lib-' + filteredBhajans[idx].id); if (el) el.scrollIntoView({ block: 'start', behavior: 'auto' }); };
+              if (idx >= libraryVisibleCount) { setLibraryVisibleCount(idx + PAGE_SIZE); setTimeout(go, 60); } else go();
+            };
+            const sheetWrap = (title, body) => (
+              <div onClick={() => setLibrarySheet(null)} className="fixed inset-0 bg-black/50 z-[100] flex items-end sm:items-center justify-center">
+                <div onClick={(e) => e.stopPropagation()} className={`w-full max-w-md rounded-t-3xl sm:rounded-3xl max-h-[75vh] flex flex-col overflow-hidden ${darkMode ? 'bg-[#162226] text-gray-100' : 'bg-white text-gray-900'}`}>
+                  <div className={`px-5 py-3 flex items-center justify-between border-b ${darkMode ? 'border-[#0B5A70]/25' : 'border-[#0B5A70]/10'}`}>
+                    <h3 className="font-bold text-[#0B5A70]">{title}</h3>
+                    <button onClick={() => setLibrarySheet(null)} className="text-2xl leading-none px-2 opacity-70" aria-label="Close">×</button>
+                  </div>
+                  <div className="overflow-y-auto p-3">{body}</div>
+                </div>
+              </div>
+            );
+            const optionRow = (label, selected, onPick, count) => (
+              <button key={label} onClick={() => { onPick(); setLibrarySheet(null); }} className={`w-full text-left px-3 py-2.5 rounded-xl text-sm flex items-center justify-between ${selected ? 'bg-[#0B5A70] text-white font-semibold' : (darkMode ? 'hover:bg-[#0B5A70]/20' : 'hover:bg-[#0B5A70]/8')}`}>
+                <span>{label}</span>
+                {count != null && <span className={`text-xs ${selected ? 'text-white/80' : 'text-gray-400'}`}>{count}</span>}
+              </button>
+            );
+            return (
             <>
-              {(() => {
-                const myParodies = programs
-                  .filter(p => getProgramType(p) === 'parody')
-                  .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-                return (
-                  <>
-                    <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-                      <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-[#0B5A70]/70'}`}>
-                        {bhajans.length} bhajan{bhajans.length === 1 ? '' : 's'}
-                        {myParodies.length > 0 ? ` · ${myParodies.length} medley${myParodies.length === 1 ? '' : 's'}` : ''} in your library
-                      </p>
-                      {/* SESSION 43: "+ Add" is now a two-way choice — Bhajan
-                          or Parody. Parodies are performance units (a medley
-                          of mukhdas) so they're created here, next to
-                          bhajans, not in the Playlists tab. */}
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={openAddBhajan}
-                          className="bg-[#0B5A70] hover:bg-[#094a5d] text-white font-semibold px-4 py-2 rounded-xl shadow-md flex items-center gap-1.5 text-sm"
-                        >
-                          <span className="text-lg leading-none">+</span> Bhajan
-                        </button>
-                        {isAdmin && (
-                          <button
-                            onClick={openAddPublicBhajan}
-                            className="bg-purple-700 hover:bg-purple-800 text-white font-semibold px-4 py-2 rounded-xl shadow-md flex items-center gap-1.5 text-sm"
-                            title="Add a bhajan to the public library (all users)"
-                          >
-                            <span className="text-lg leading-none">+</span> Public
-                          </button>
-                        )}
-                        <button
-                          onClick={openCreateParody}
-                          className="bg-[#E65100] hover:bg-[#cc4700] text-white font-semibold px-4 py-2 rounded-xl shadow-md flex items-center gap-1.5 text-sm"
-                          title="A medley shows only the mukhda of each bhajan"
-                        >
-                          <span className="text-lg leading-none">+</span> 🎭 Medley
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* SESSION 43: PARODIES SECTION — collapsible, sits above the
-                        bhajan list. Hidden while searching/filtering. */}
-                    {myParodies.length > 0 && !searchQuery && !filterDeity && !filterCategory && !libraryFilterKeyword && !libraryStarredOnly && (
-                      <div className="mb-4">
-                        <button
-                          onClick={() => setLibraryParodiesOpen(v => !v)}
-                          aria-expanded={libraryParodiesOpen}
-                          className={`px-3 py-1.5 rounded-full text-sm font-semibold flex items-center gap-1.5 transition-colors ${
-                            libraryParodiesOpen
-                              ? 'bg-[#E65100] text-white shadow-sm'
-                              : (darkMode ? 'bg-[#162226] border border-[#0B5A70]/25 text-teal-200 hover:border-[#0B5A70]/50' : 'bg-[#FFFCF8] border border-[#0B5A70]/15 text-[#0B5A70] hover:border-[#0B5A70]/40')
-                          }`}
-                        >
-                          🎭 Medleys ({myParodies.length})
-                          <span className="text-xs opacity-70">{libraryParodiesOpen ? '▲' : '▼'}</span>
-                        </button>
-                        {libraryParodiesOpen && (
-                          <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2">
-                            {myParodies.map(p => (
-                              <button
-                                key={p.id}
-                                onClick={() => openProgramDetail(p)}
-                                className={`w-full text-left rounded-xl p-3 border transition-all flex items-center gap-3 ${darkMode ? 'bg-[#162226] border-[#E65100]/20 hover:border-[#E65100]/40' : 'bg-[#FFFCF8] border-[#E65100]/20 shadow-[0_1px_4px_rgba(11,90,112,0.04)] hover:border-[#E65100]/45 hover:shadow-[0_2px_8px_rgba(11,90,112,0.10)]'}`}
-                              >
-                                <div className="text-xl flex-shrink-0" aria-hidden="true">🎭</div>
-                                <div className="flex-1 min-w-0">
-                                  <p className={`text-sm font-bold truncate ${darkMode ? 'text-amber-100' : 'text-[#0B5A70]'}`}>{p.name}</p>
-                                  <p className={`text-xs truncate ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                                    {p.bhajanCount || (p.bhajanIds || []).length} mukhda{(p.bhajanCount || (p.bhajanIds || []).length) === 1 ? '' : 's'}
-                                    {p.purpose ? ` · ${p.purpose}` : ''}
-                                  </p>
-                                </div>
-                                <span className={`text-xs flex-shrink-0 ${darkMode ? 'text-gray-500' : 'text-[#0B5A70]/50'}`}>Open →</span>
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </>
-                );
-              })()}
-
-              {/* Search Bar */}
-              <div className="mb-4">
+              {/* Search — first thing on the page, sticky under the header */}
+              <div className={`sticky top-[64px] sm:top-[72px] z-30 -mx-4 px-4 pt-1 pb-2 ${darkMode ? 'bg-[#0f1a1c]' : 'bg-[#FFF8F0]'}`}>
                 <div className="relative">
-                  {/* SESSION 50: search icon moved out of placeholder into
-                      an absolute-positioned SVG so it stays visible when
-                      typing and doesn't get selected/deleted. */}
                   <div className={`absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none ${darkMode ? 'text-gray-400' : 'text-[#0B5A70]/50'}`}>
                     <IconSearch size={18} />
                   </div>
@@ -8904,7 +8927,7 @@ const App = () => {
                     onChange={(e) => setSearchQuery(e.target.value)}
                     onFocus={() => setSearchFocus('library')}
                     onBlur={() => setTimeout(() => setSearchFocus(f => (f === 'library' ? null : f)), 150)}
-                    placeholder="Search bhajans…"
+                    placeholder={`Search ${bhajans.length} bhajan${bhajans.length === 1 ? '' : 's'}…`}
                     aria-label="Search my library"
                     className={`w-full pl-10 pr-24 py-3 border rounded-xl focus:ring-4 outline-none ${
                       darkMode
@@ -8927,32 +8950,30 @@ const App = () => {
                             className={`w-full text-left px-3 py-2 text-sm flex items-center gap-2 ${darkMode ? 'hover:bg-[#0B5A70]/20 text-gray-100' : 'hover:bg-[#0B5A70]/8 text-gray-900'}`}
                           >
                             <span className="truncate flex-1">{b.title}</span>
-                            <span className={`text-[11px] flex-shrink-0 ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>{b.deity}</span>
+                            <span className="text-[11px] flex-shrink-0 text-gray-500">{b.deity}</span>
                           </button>
                         ))}
                       </div>
                     );
                   })()}
-                  <button
-                    onClick={() => setSpeechLang(speechLang === 'en-IN' ? 'hi-IN' : 'en-IN')}
-                    className={`absolute right-11 top-1/2 -translate-y-1/2 px-1.5 py-0.5 rounded text-[10px] font-bold border transition-colors ${
-                      speechLang === 'hi-IN'
-                        ? 'bg-[#0B5A70] text-white border-[#0B5A70]'
-                        : 'bg-white text-gray-600 border-gray-300 hover:border-[#0B5A70]/20'
-                    }`}
-                    title={`Voice search language: ${speechLang === 'hi-IN' ? 'Hindi' : 'English'} — tap to switch`}
-                    aria-label={`Voice input language: ${speechLang === 'hi-IN' ? 'Hindi' : 'English'}. Tap to switch.`}
-                  >
-{speechLang === 'hi-IN' ? 'हिं' : 'EN'}
-                  </button>
+                  {searchQuery ? (
+                    <button onClick={() => setSearchQuery('')} className="absolute right-11 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full flex items-center justify-center text-gray-500 hover:text-gray-800" aria-label="Clear search">✕</button>
+                  ) : (
+                    <button
+                      onClick={() => setSpeechLang(speechLang === 'en-IN' ? 'hi-IN' : 'en-IN')}
+                      className={`absolute right-11 top-1/2 -translate-y-1/2 px-1.5 py-0.5 rounded text-[10px] font-bold border transition-colors ${
+                        speechLang === 'hi-IN' ? 'bg-[#0B5A70] text-white border-[#0B5A70]' : 'bg-white text-gray-600 border-gray-300 hover:border-[#0B5A70]/20'
+                      }`}
+                      title={`Voice search language: ${speechLang === 'hi-IN' ? 'Hindi' : 'English'} — tap to switch`}
+                      aria-label={`Voice input language: ${speechLang === 'hi-IN' ? 'Hindi' : 'English'}. Tap to switch.`}
+                    >
+                      {speechLang === 'hi-IN' ? 'हिं' : 'EN'}
+                    </button>
+                  )}
                   <button
                     onClick={() => startVoiceSearch('library')}
                     className={`absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-lg transition-colors ${
-                      isListening
-                        ? 'bg-red-500 text-white animate-pulse'
-                        : darkMode
-                          ? 'text-[#0B5A70]/60 hover:text-[#0B5A70]/80 hover:bg-[#1e2e33]'
-                          : 'text-[#0B5A70]/60 hover:text-[#0B5A70] hover:bg-[#0B5A70]/5'
+                      isListening ? 'bg-red-500 text-white animate-pulse' : darkMode ? 'text-[#0B5A70]/60 hover:text-[#0B5A70]/80 hover:bg-[#1e2e33]' : 'text-[#0B5A70]/60 hover:text-[#0B5A70] hover:bg-[#0B5A70]/5'
                     }`}
                     title={isListening ? 'Listening...' : 'Voice search'}
                     aria-label={isListening ? 'Stop voice search' : 'Start voice search'}
@@ -8962,124 +8983,59 @@ const App = () => {
                     </svg>
                   </button>
                 </div>
+
+                {/* One filter row: Starred · Deity ▾ · Type ▾ · Mood ▾ · Sort · Clear */}
+                <div className="mt-2 -mx-4 px-4 overflow-x-auto [&::-webkit-scrollbar]:hidden" style={{scrollbarWidth: 'none'}}>
+                  <div className="flex flex-nowrap gap-2 items-center">
+                    <button onClick={() => setLibraryStarredOnly(v => !v)} aria-pressed={libraryStarredOnly} className={`${chipBase} ${libraryStarredOnly ? 'bg-[#E65100] text-white border-[#E65100] shadow-sm' : (darkMode ? 'bg-transparent text-orange-200 border-[#E65100]/40' : 'bg-white text-[#E65100] border-[#E65100]/30')}`}>⭐ Starred</button>
+                    <button onClick={() => setLibrarySheet('deity')} className={`${chipBase} ${filterDeity ? chipOn : chipOff}`}>{filterDeity || 'Deity'} <span className="opacity-70">▾</span></button>
+                    <button onClick={() => setLibrarySheet('type')} className={`${chipBase} ${filterCategory ? chipOn : chipOff}`}>{filterCategory || 'Type'} <span className="opacity-70">▾</span></button>
+                    <button onClick={() => setLibrarySheet('mood')} className={`${chipBase} ${libraryFilterKeyword ? chipOn : chipOff}`}>{libraryFilterKeyword ? `#${libraryFilterKeyword}` : 'Mood'} <span className="opacity-70">▾</span></button>
+                    {isAdmin && (
+                      <button onClick={() => setUnreviewedOnly(v => !v)} aria-pressed={unreviewedOnly} className={`${chipBase} ${unreviewedOnly ? 'bg-purple-700 text-white border-purple-700 shadow-sm' : (darkMode ? 'bg-transparent text-purple-200 border-purple-400/40' : 'bg-white text-purple-700 border-purple-300')}`} title="Admin: show only bhajans not yet reviewed">
+                        ⚠ Unreviewed {publicBhajans.filter(b => b.reviewStatus !== 'reviewed').length}
+                      </button>
+                    )}
+                    <button onClick={() => setLibrarySheet('sort')} className={`${chipBase} ${chipOff}`} title="Sort & view">⇅ {sortLabel}</button>
+                    {anyFilter && (
+                      <button onClick={clearAll} className={`${chipBase} border-red-300 text-red-600 bg-white`}>✕ Clear</button>
+                    )}
+                  </div>
+                </div>
               </div>
 
-              {(searchQuery || filterDeity || filterCategory || libraryFilterKeyword || libraryStarredOnly) && (
-                <div className="flex justify-end mb-1">
-                  <button
-                    onClick={() => {
-                      setSearchQuery('');
-                      setFilterDeity('');
-                      setFilterCategory('');
-                      setLibraryFilterKeyword('');
-                      setLibraryStarredOnly(false);
-                    }}
-                    className="text-xs text-red-600 hover:text-red-800 underline hover:no-underline"
-                  >
-                    ✕ Clear filters
-                  </button>
+              {/* Continue strip — last opened bhajans, one tap back */}
+              {continueItems.length > 0 && (
+                <div className="mt-3 mb-3 -mx-4 px-4 overflow-x-auto [&::-webkit-scrollbar]:hidden" style={{scrollbarWidth: 'none'}}>
+                  <div className="flex flex-nowrap gap-2 items-center">
+                    <span className={`text-[11px] font-semibold flex-shrink-0 ${darkMode ? 'text-gray-400' : 'text-[#0B5A70]/60'}`}>Continue</span>
+                    {continueItems.map(b => (
+                      <button key={b.id} onClick={() => openBhajanDetail(b)} className={`flex-shrink-0 max-w-[12rem] truncate px-3 py-1.5 rounded-full text-xs border ${darkMode ? 'bg-[#162226] border-[#0B5A70]/25 text-teal-100' : 'bg-[#FFFCF8] border-[#0B5A70]/15 text-[#0B5A70]'}`}>
+                        {(b.title || '').split(' / ')[0]}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
-
-              {/* SESSION 51: same treatment as Public Library. */}
-              <div className="grid grid-cols-2 gap-2 mb-3">
-                <select
-                  value={filterDeity}
-                  onChange={(e) => setFilterDeity(e.target.value)}
-                  aria-label="Filter by deity"
-                  className={`px-3 py-2 border rounded-xl outline-none text-sm ${darkMode ? 'bg-[#162226] border-[#0B5A70]/25 text-gray-200' : 'bg-white border-[#0B5A70]/20 text-[#0B5A70]'} ${filterDeity ? 'font-semibold border-[#0B5A70]/50' : ''}`}
-                >
-                  <option value="">All deities</option>
-                  {allDeityOptions.map(d => (
-                    <option key={d.value} value={d.value}>{d.value}{myDeityCounts[d.value] ? ` (${myDeityCounts[d.value]})` : ''}</option>
-                  ))}
-                </select>
-                <select
-                  value={filterCategory}
-                  onChange={(e) => setFilterCategory(e.target.value)}
-                  aria-label="Filter by type"
-                  className={`px-3 py-2 border rounded-xl outline-none text-sm ${darkMode ? 'bg-[#162226] border-[#0B5A70]/25 text-gray-200' : 'bg-white border-[#0B5A70]/20 text-[#0B5A70]'} ${filterCategory ? 'font-semibold border-[#0B5A70]/50' : ''}`}
-                >
-                  <option value="">All types</option>
-                  {allCategoryOptions.map(c => (
-                    <option key={c} value={c}>{c}{myCategoryCounts[c] ? ` (${myCategoryCounts[c]})` : ''}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* SESSION 51: all moods, horizontally scrollable. */}
-              <div className="mb-6 -mx-4 px-4 overflow-x-auto [&::-webkit-scrollbar]:hidden" style={{scrollbarWidth: 'none'}}>
-                <div className="flex flex-nowrap gap-2 items-center">
-                  {isAdmin && (
-                    <button
-                      onClick={() => setUnreviewedOnly(v => !v)}
-                      aria-pressed={unreviewedOnly}
-                      className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all border flex-shrink-0 ${
-                        unreviewedOnly
-                          ? 'bg-purple-700 text-white border-purple-700 shadow-md'
-                          : (darkMode ? 'bg-transparent text-purple-200 border-purple-400/40' : 'bg-white text-purple-700 border-purple-300')
-                      }`}
-                      title="Admin: show only bhajans not yet reviewed"
-                    >
-                      🔍 Unreviewed {publicBhajans.filter(b => b.reviewStatus !== 'reviewed').length}
-                    </button>
-                  )}
-                  {/* SESSION 75: Starred filter */}
-                  <button
-                    onClick={() => setLibraryStarredOnly(v => !v)}
-                    aria-pressed={libraryStarredOnly}
-                    className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all border flex-shrink-0 ${
-                      libraryStarredOnly
-                        ? 'bg-[#E65100] text-white border-[#E65100] shadow-md'
-                        : `${darkMode ? 'bg-transparent text-orange-200 border-[#E65100]/40 hover:border-[#E65100]/70' : 'bg-white text-[#E65100] border-[#E65100]/30 hover:border-[#E65100]/50'}`
-                    }`}
-                  >
-                    ⭐ Starred
-                  </button>
-                  {allKeywordOptions.map(kw => (
-                    <button
-                      key={kw}
-                      onClick={() => setLibraryFilterKeyword(libraryFilterKeyword === kw ? '' : kw)}
-                      className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all border flex-shrink-0 ${
-                        libraryFilterKeyword === kw
-                          ? 'bg-[#0B5A70] text-white border-[#0B5A70] shadow-md'
-                          : `${darkMode ? 'bg-transparent text-teal-200 border-[#0B5A70]/40 hover:border-[#0B5A70]/70 hover:bg-[#0B5A70]/15' : 'bg-white text-[#0B5A70] border-[#0B5A70]/25 hover:border-[#0B5A70]/45 hover:bg-[#0B5A70]/5'}`
-                      }`}
-                    >
-                      {libraryFilterKeyword === kw ? '✓ ' : ''}#{kw}
-                    </button>
-                  ))}
-                </div>
-              </div>
+              {continueItems.length === 0 && <div className="mt-3" />}
 
               {/* Bhajans List */}
               {bhajansLoading ? (
                 <div className={compactView ? 'space-y-2' : 'grid grid-cols-1 md:grid-cols-2 gap-4'}>
                   {[...Array(6)].map((_, i) => (
                     compactView ? (
-                      <div
-                        key={i}
-                        className={`rounded-xl p-3 border flex items-center gap-3 animate-pulse ${darkMode ? 'bg-[#162226] border-[#0B5A70]/15' : 'bg-[#FFFCF8] border-[#0B5A70]/8'}`}
-                      >
+                      <div key={i} className={`rounded-xl p-3 border flex items-center gap-3 animate-pulse ${darkMode ? 'bg-[#162226] border-[#0B5A70]/15' : 'bg-[#FFFCF8] border-[#0B5A70]/8'}`}>
                         <div className="flex-1 min-w-0 space-y-2">
                           <div className={`h-3 rounded w-3/4 ${darkMode ? 'bg-[#1e2e33]' : 'bg-[#0B5A70]/8'}`}></div>
                           <div className={`h-2 rounded w-1/2 ${darkMode ? 'bg-[#1e2e33]' : 'bg-[#0B5A70]/5'}`}></div>
                         </div>
                       </div>
                     ) : (
-                      <div
-                        key={i}
-                        className={`rounded-2xl shadow-[0_2px_12px_rgba(11,90,112,0.06)] p-5 border animate-pulse ${darkMode ? 'bg-[#162226] border-[#0B5A70]/15' : 'bg-[#FFFCF8] border-[#0B5A70]/8'}`}
-                      >
+                      <div key={i} className={`rounded-2xl shadow-[0_2px_12px_rgba(11,90,112,0.06)] p-5 border animate-pulse ${darkMode ? 'bg-[#162226] border-[#0B5A70]/15' : 'bg-[#FFFCF8] border-[#0B5A70]/8'}`}>
                         <div className={`h-5 rounded w-3/4 mb-3 ${darkMode ? 'bg-[#1e2e33]' : 'bg-[#0B5A70]/8'}`}></div>
-                        <div className="flex gap-2 mb-3">
-                          <div className={`h-5 w-16 rounded-full ${darkMode ? 'bg-[#1e2e33]' : 'bg-[#0B5A70]/8'}`}></div>
-                          <div className={`h-5 w-14 rounded-full ${darkMode ? 'bg-[#1e2e33]' : 'bg-[#E65100]/5'}`}></div>
-                        </div>
                         <div className="space-y-2">
                           <div className={`h-3 rounded ${darkMode ? 'bg-[#1e2e33]' : 'bg-gray-100'}`}></div>
                           <div className={`h-3 rounded w-5/6 ${darkMode ? 'bg-[#1e2e33]' : 'bg-gray-100'}`}></div>
-                          <div className={`h-3 rounded w-4/6 ${darkMode ? 'bg-[#1e2e33]' : 'bg-gray-100'}`}></div>
                         </div>
                       </div>
                     )
@@ -9092,18 +9048,15 @@ const App = () => {
                       <div className="text-6xl mb-4">📚</div>
                       <h3 className="text-lg font-bold text-[#0B5A70] mb-2">Your library is empty!</h3>
                       <p className="text-sm text-gray-600 mb-4">Start by adding your first bhajan</p>
-                      <button
-                        onClick={openAddBhajan}
-                        className="bg-[#0B5A70] hover:bg-[#094a5d] text-white font-semibold px-6 py-3 rounded-xl shadow-md inline-flex items-center gap-2"
-                      >
+                      <button onClick={openAddBhajan} className="bg-[#0B5A70] hover:bg-[#094a5d] text-white font-semibold px-6 py-3 rounded-xl shadow-md inline-flex items-center gap-2">
                         <span className="text-lg">+</span> Add Your First Bhajan
                       </button>
                     </>
                   ) : (
                     <>
                       <div className="text-4xl mb-3">🔍</div>
-                      <p className="text-[#0B5A70] font-semibold">No bhajans match your filters</p>
-                      <p className="text-sm text-gray-600 mt-1">Try adjusting your search or filters</p>
+                      <p className="text-[#0B5A70] font-semibold">No bhajans match</p>
+                      <button onClick={clearAll} className="text-sm text-[#E65100] font-semibold mt-2 underline">Clear filters</button>
                       {(() => {
                         const dym = didYouMean(bhajans, searchQuery);
                         if (dym.length === 0) return null;
@@ -9111,7 +9064,7 @@ const App = () => {
                           <div className="mt-3 flex flex-wrap justify-center gap-2 items-center">
                             <span className="text-sm text-gray-600">Did you mean</span>
                             {dym.map(b => (
-                              <button key={b.id} onClick={() => setSearchQuery((b.title || '').split(' / ')[0])} className="px-3 py-1 rounded-full text-sm font-semibold bg-[#E65100]/10 text-[#E65100] hover:bg-[#E65100]/20">
+                              <button key={b.id} onClick={() => setSearchQuery((b.title || '').split(' / ')[0])} className="px-3 py-1 rounded-full text-sm font-semibold bg-[#E65100]/10 text-[#E65100]">
                                 {(b.title || '').split(' / ')[0]}
                               </button>
                             ))}
@@ -9123,40 +9076,22 @@ const App = () => {
                 </div>
               ) : (
                 <>
-                  <div className="flex justify-end mb-2">
-                    <div className="inline-flex bg-[#0B5A70]/5 rounded-lg p-0.5 border border-[#0B5A70]/10">
-                      <button
-                        onClick={() => setCompactView(false)}
-                        className={`px-2 py-1 rounded text-xs font-semibold transition-colors ${!compactView ? 'bg-white text-[#0B5A70] shadow' : 'text-[#0B5A70]/60 hover:text-[#0B5A70]'}`}
-                        title="Full card view"
-                        aria-label="Full card view"
-                      >
-                        ▤
-                      </button>
-                      <button
-                        onClick={() => setCompactView(true)}
-                        className={`px-2 py-1 rounded text-xs font-semibold transition-colors ${compactView ? 'bg-white text-[#0B5A70] shadow' : 'text-[#0B5A70]/60 hover:text-[#0B5A70]'}`}
-                        title="Compact list view"
-                        aria-label="Compact list view"
-                      >
-                        ☰
-                      </button>
-                    </div>
-                  </div>
-
-                <div className={compactView ? 'space-y-2' : 'grid grid-cols-1 md:grid-cols-2 gap-4'}>
-                  {/* SESSION 6: MyBhajanCard is React.memo — unchanged rows skip re-render */}
+                <div className={`${compactView ? 'space-y-2' : 'grid grid-cols-1 md:grid-cols-2 gap-4'} ${showRail ? 'pr-5' : ''}`}>
                   {filteredBhajans.slice(0, libraryVisibleCount).map((bhajan, cardIndex) => (
-                    <MyBhajanCard
-                      key={bhajan.id}
-                      bhajan={bhajan}
-                      darkMode={darkMode}
-                      compactView={compactView}
-                      cardIndex={cardIndex}
-                      onOpen={openBhajanDetail}
-                      onRemove={deleteBhajan}
-                      unreviewed={isAdmin && !compactView && !isReviewed(bhajan)}
-                    />
+                    <div key={bhajan.id} id={'lib-' + bhajan.id} className="scroll-mt-36">
+                      <MyBhajanCard
+                        bhajan={bhajan}
+                        darkMode={darkMode}
+                        compactView={compactView}
+                        cardIndex={cardIndex}
+                        onOpen={openBhajanDetail}
+                        onRemove={deleteBhajan}
+                        onStar={toggleStarred}
+                        onAddTo={(b) => setAddToProgramFor(b)}
+                        onMenu={(b) => setLibraryRowMenu(b)}
+                        unreviewed={isAdmin && !compactView && !isReviewed(bhajan)}
+                      />
+                    </div>
                   ))}
                 </div>
 
@@ -9166,26 +9101,91 @@ const App = () => {
                       <div className="w-4 h-4 border-2 border-[#0B5A70]/40 border-t-transparent rounded-full animate-spin"></div>
                       Loading more bhajans...
                     </div>
-                    <p className="text-xs text-gray-400 mt-1">
-                      Showing {libraryVisibleCount} of {filteredBhajans.length}
-                    </p>
-                    <button
-                      onClick={() => setLibraryVisibleCount(prev => prev + PAGE_SIZE * 3)}
-                      className={`mt-2 text-xs font-semibold px-4 py-1.5 rounded-lg transition-all ${darkMode ? 'bg-[#0B5A70]/20 text-teal-300 hover:bg-[#0B5A70]/30' : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15'}`}
-                    >
+                    <p className="text-xs text-gray-400 mt-1">Showing {libraryVisibleCount} of {filteredBhajans.length}</p>
+                    <button onClick={() => setLibraryVisibleCount(prev => prev + PAGE_SIZE * 3)} className={`mt-2 text-xs font-semibold px-4 py-1.5 rounded-lg transition-all ${darkMode ? 'bg-[#0B5A70]/20 text-teal-300 hover:bg-[#0B5A70]/30' : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15'}`}>
                       ↻ Load more
                     </button>
                   </div>
                 )}
                 {libraryVisibleCount >= filteredBhajans.length && filteredBhajans.length > PAGE_SIZE && (
-                  <p className="text-center text-xs text-gray-400 py-6">
-                    ✨ You've seen all {filteredBhajans.length} bhajans
-                  </p>
+                  <p className="text-center text-xs text-gray-400 py-6">✨ You've seen all {filteredBhajans.length} bhajans</p>
                 )}
                 </>
               )}
+
+              {/* A–Z jump rail */}
+              {showRail && railLetters.length > 1 && (
+                <div className="fixed right-0.5 top-1/2 -translate-y-1/2 z-30 flex flex-col items-center select-none" aria-label="Jump to letter"
+                  onTouchMove={(e) => { const t = e.touches[0]; const el = document.elementFromPoint(t.clientX, t.clientY); const l = el && el.getAttribute && el.getAttribute('data-letter'); if (l) jumpTo(l); }}>
+                  {railLetters.map(l => (
+                    <button key={l} data-letter={l} onClick={() => jumpTo(l)} className={`w-5 leading-[13px] text-[10px] font-semibold text-center ${darkMode ? 'text-teal-300' : 'text-[#0B5A70]'}`}>{l}</button>
+                  ))}
+                </div>
+              )}
+
+              {/* Floating + button */}
+              <div className="fixed right-4 bottom-24 z-40 flex flex-col items-end gap-2">
+                {libraryFabOpen && (
+                  <>
+                    <div className="fixed inset-0 z-[-1]" onClick={() => setLibraryFabOpen(false)} />
+                    {isAdmin && (
+                      <button onClick={() => { setLibraryFabOpen(false); openAddPublicBhajan(); }} className="bg-purple-700 text-white font-semibold px-4 py-2 rounded-full shadow-lg text-sm flex items-center gap-2">🌐 Public bhajan</button>
+                    )}
+                    <button onClick={() => { setLibraryFabOpen(false); openCreateParody(); }} className="bg-[#E65100] text-white font-semibold px-4 py-2 rounded-full shadow-lg text-sm flex items-center gap-2">🎭 Medley</button>
+                    <button onClick={() => { setLibraryFabOpen(false); openAddBhajan(); }} className="bg-[#0B5A70] text-white font-semibold px-4 py-2 rounded-full shadow-lg text-sm flex items-center gap-2">🎵 Bhajan</button>
+                  </>
+                )}
+                <button onClick={() => setLibraryFabOpen(v => !v)} aria-expanded={libraryFabOpen} aria-label="Add" className={`w-14 h-14 rounded-full shadow-xl text-white text-3xl leading-none flex items-center justify-center transition-transform ${libraryFabOpen ? 'bg-gray-700 rotate-45' : 'bg-[#0B5A70]'}`}>+</button>
+              </div>
+
+              {/* Filter / sort sheets */}
+              {librarySheet === 'deity' && sheetWrap('Deity', <>
+                {optionRow('All deities', !filterDeity, () => setFilterDeity(''), bhajans.length)}
+                {allDeityOptions.map(d => optionRow(d.value, filterDeity === d.value, () => setFilterDeity(d.value), myDeityCounts[d.value] || 0))}
+              </>)}
+              {librarySheet === 'type' && sheetWrap('Type', <>
+                {optionRow('All types', !filterCategory, () => setFilterCategory(''), bhajans.length)}
+                {allCategoryOptions.map(c => optionRow(c, filterCategory === c, () => setFilterCategory(c), myCategoryCounts[c] || 0))}
+              </>)}
+              {librarySheet === 'mood' && sheetWrap('Mood', <>
+                {optionRow('Any mood', !libraryFilterKeyword, () => setLibraryFilterKeyword(''))}
+                {allKeywordOptions.map(kw => optionRow('#' + kw, libraryFilterKeyword === kw, () => setLibraryFilterKeyword(kw), bhajans.filter(b => (b.keywords || []).includes(kw)).length))}
+              </>)}
+              {librarySheet === 'sort' && sheetWrap('Sort & view', <>
+                <p className="px-3 pt-1 pb-1 text-[11px] font-semibold uppercase tracking-wide text-gray-400">Sort by</p>
+                {optionRow('A–Z', librarySort === 'az', () => setLibrarySort('az'))}
+                {optionRow('Recently opened', librarySort === 'recent', () => setLibrarySort('recent'))}
+                {optionRow('Most sung', librarySort === 'sung', () => setLibrarySort('sung'))}
+                {optionRow('Recently added', librarySort === 'added', () => setLibrarySort('added'))}
+                <p className="px-3 pt-3 pb-1 text-[11px] font-semibold uppercase tracking-wide text-gray-400">View</p>
+                {optionRow('☰ Compact list', compactView, () => setCompactView(true))}
+                {optionRow('▤ Full cards', !compactView, () => setCompactView(false))}
+              </>)}
+
+              {/* Long-press quick menu */}
+              {libraryRowMenu && (
+                <div onClick={() => setLibraryRowMenu(null)} className="fixed inset-0 bg-black/50 z-[100] flex items-end sm:items-center justify-center">
+                  <div onClick={(e) => e.stopPropagation()} className={`w-full max-w-md rounded-t-3xl sm:rounded-3xl overflow-hidden ${darkMode ? 'bg-[#162226] text-gray-100' : 'bg-white text-gray-900'}`}>
+                    <div className={`px-5 py-3 border-b ${darkMode ? 'border-[#0B5A70]/25' : 'border-[#0B5A70]/10'}`}>
+                      <p className="font-bold text-[#0B5A70] truncate">{libraryRowMenu.title}</p>
+                    </div>
+                    <div className="p-2">
+                      {[
+                        [libraryRowMenu.starred ? '⭐ Unstar' : '⭐ Star', () => toggleStarred(libraryRowMenu)],
+                        ['📋 Add to playlist / program', () => setAddToProgramFor(libraryRowMenu)],
+                        ['🔗 Share', () => handleShareBhajan(libraryRowMenu)],
+                        ['✏️ Edit', () => openEditBhajan(libraryRowMenu)],
+                        ...(libraryRowMenu.virtual ? [] : [[libraryRowMenu.savedFromPublicId ? '🗑 Remove from library' : '🗑 Delete', () => deleteBhajan(libraryRowMenu)]])
+                      ].map(([label, fn]) => (
+                        <button key={label} onClick={() => { setLibraryRowMenu(null); fn(); }} className={`w-full text-left px-4 py-3 rounded-xl text-sm font-medium ${darkMode ? 'hover:bg-[#0B5A70]/20' : 'hover:bg-[#0B5A70]/8'}`}>{label}</button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
             </>
-          )}
+            );
+          })()}
 
           {/* ==============================================
               BHAJAN DETAIL VIEW
@@ -10026,6 +10026,44 @@ const App = () => {
                 />
               </div>
               )}
+
+              {/* SESSION 111: medleys moved here from the Library page. */}
+              {isPlaylistView && !programSearchQuery && (() => {
+                const myParodies = programs.filter(p => getProgramType(p) === 'parody').sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+                return (
+                  <div className="mb-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <button
+                        onClick={() => setLibraryParodiesOpen(v => !v)}
+                        aria-expanded={libraryParodiesOpen}
+                        className={`px-3 py-1.5 rounded-full text-sm font-semibold flex items-center gap-1.5 transition-colors ${libraryParodiesOpen ? 'bg-[#E65100] text-white shadow-sm' : (darkMode ? 'bg-[#162226] border border-[#0B5A70]/25 text-teal-200' : 'bg-[#FFFCF8] border border-[#0B5A70]/15 text-[#0B5A70]')}`}
+                      >
+                        🎭 Medleys ({myParodies.length})
+                        <span className="text-xs opacity-70">{libraryParodiesOpen ? '▲' : '▼'}</span>
+                      </button>
+                      <button onClick={openCreateParody} className={`text-xs font-semibold px-2.5 py-1.5 rounded-full border ${darkMode ? 'border-[#E65100]/40 text-orange-200' : 'border-[#E65100]/30 text-[#E65100]'}`} title="A medley shows only the mukhda of each bhajan">+ Medley</button>
+                    </div>
+                    {libraryParodiesOpen && (myParodies.length === 0 ? (
+                      <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>No medleys yet — a medley strings together the mukhda of several bhajans.</p>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        {myParodies.map(p => (
+                          <button key={p.id} onClick={() => openProgramDetail(p)} className={`w-full text-left rounded-xl p-3 border transition-all flex items-center gap-3 ${darkMode ? 'bg-[#162226] border-[#E65100]/20' : 'bg-[#FFFCF8] border-[#E65100]/20'}`}>
+                            <div className="text-xl flex-shrink-0" aria-hidden="true">🎭</div>
+                            <div className="flex-1 min-w-0">
+                              <p className={`text-sm font-bold truncate ${darkMode ? 'text-amber-100' : 'text-[#0B5A70]'}`}>{p.name}</p>
+                              <p className={`text-xs truncate ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                                {p.bhajanCount || (p.bhajanIds || []).length} mukhda{(p.bhajanCount || (p.bhajanIds || []).length) === 1 ? '' : 's'}{p.purpose ? ` · ${p.purpose}` : ''}
+                              </p>
+                            </div>
+                            <span className={`text-xs flex-shrink-0 ${darkMode ? 'text-gray-500' : 'text-[#0B5A70]/50'}`}>Open →</span>
+                          </button>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
 
               {programsLoading ? (
                 <div className="text-center py-12">
