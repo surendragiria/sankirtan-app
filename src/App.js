@@ -1084,7 +1084,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.10.17.s95';
+const APP_VERSION = '2026.10.17.s96';
 const AUTO_SCROLL_VIEWS = ['live-program', 'bhajan-detail', 'public-bhajan-detail'];
 const LIVE_SCROLL_STEPS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 
@@ -2671,6 +2671,7 @@ const App = () => {
   const [filterCategory, setFilterCategory] = useState('');
   const [bhajansLoading, setBhajansLoading] = useState(false);
   const [bhajanFormError, setBhajanFormError] = useState('');
+  const [bhajanFormMore, setBhajanFormMore] = useState(false); // SESSION 96: collapsed extras
   const [bhajanFormSaving, setBhajanFormSaving] = useState(false);
 
   // Programs states
@@ -5284,6 +5285,7 @@ const App = () => {
     setOcrMessage('');
     setOcrProgress(0);
     setOcrProcessing(false);
+    setBhajanFormMore(false);
     setCurrentView('add-bhajan');
   };
 
@@ -5305,6 +5307,7 @@ const App = () => {
       source: bhajan.source || ''
     });
     setBhajanFormError('');
+    setBhajanFormMore(!!(bhajan.singer || bhajan.lyricist || bhajan.source));
     setEditingBhajan(bhajan);
     setCurrentView('edit-bhajan');
   };
@@ -9515,391 +9518,101 @@ const App = () => {
             const fCard = darkMode
               ? 'bg-[#162226] rounded-2xl shadow-[0_2px_12px_rgba(11,90,112,0.15)] p-6 md:p-8 border border-[#0B5A70]/15'
               : 'bg-[#FFFCF8] rounded-2xl shadow-[0_2px_12px_rgba(11,90,112,0.06)] p-6 md:p-8 border border-[#0B5A70]/8';
-            const fTitle = darkMode ? 'text-2xl font-bold text-amber-100 mb-6' : 'text-2xl font-bold text-[#0B5A70] mb-6';
+            const fTitle = darkMode ? 'text-xl font-bold text-amber-100' : 'text-xl font-bold text-[#0B5A70]';
+            const isEdit = currentView === 'edit-bhajan';
+            const goBack = () => setCurrentView(isEdit && selectedBhajan ? 'bhajan-detail' : 'library');
+            const hint = darkMode ? 'text-gray-400' : 'text-gray-500';
+            const sectionTitle = `text-[11px] font-semibold uppercase tracking-wide mb-2 ${darkMode ? 'text-gray-500' : 'text-[#0B5A70]/60'}`;
+            // SESSION 96: one set of Hindi-typing props per field; suggestions
+            // use the shared TransliterationChips (was three inline copies).
+            const hindiProps = (field) => ({
+              id: `hindi-input-${field}`,
+              value: bhajanForm[field],
+              onChange: (e) => handleHindiInput(e, field),
+              onKeyDown: (e) => handleHindiKeyDown(e, field),
+              onBlur: () => setTimeout(() => setShowSuggestions(false), 300),
+              onFocus: () => setActiveTypingField(field)
+            });
+            const chipsFor = (field) => (
+              hindiTypingEnabled && showSuggestions && activeTypingField === field && transliterationSuggestions.length > 0 ? (
+                <TransliterationChips
+                  className="absolute bottom-full left-0 right-0 mb-2 z-30"
+                  currentWord={currentWord}
+                  suggestions={transliterationSuggestions}
+                  onPick={(s) => applySuggestion(s, field)}
+                  darkMode={darkMode}
+                />
+              ) : null
+            );
+            const toolBtn = `w-9 h-9 rounded-lg flex items-center justify-center text-base transition-colors disabled:opacity-40 ${darkMode ? 'bg-[#1e2e33] hover:bg-[#0B5A70]/25 text-gray-200' : 'bg-[#0B5A70]/8 hover:bg-[#0B5A70]/15 text-[#0B5A70]'}`;
+            const mukhdaInfo = (() => {
+              if (!bhajanForm.lyrics || !bhajanForm.lyrics.trim()) return null;
+              const m = getMukhda({ lyrics: bhajanForm.lyrics });
+              const n = m ? m.split('\n').length : 0;
+              const hasBlank = /\n\s*\n/.test(bhajanForm.lyrics.replace(/^\s+/, ''));
+              return { n, hasBlank };
+            })();
             return (
             <>
               <div className="flex items-center justify-between mb-4">
-                <button
-                  onClick={() => {
-                    if (currentView === 'edit-bhajan' && selectedBhajan) {
-                      setCurrentView('bhajan-detail');
-                    } else {
-                      setCurrentView('library');
-                    }
-                  }}
-                  className={darkMode ? 'text-teal-200 hover:text-teal-100 flex items-center gap-1 text-sm' : 'text-[#0B5A70] hover:text-[#0B5A70]/80 flex items-center gap-1 text-sm'}
-                >
+                <button onClick={goBack} className={darkMode ? 'text-teal-200 hover:text-teal-100 text-sm' : 'text-[#0B5A70] hover:text-[#0B5A70]/80 text-sm'}>
                   ← Cancel
                 </button>
+                <h2 className={fTitle}>{isEdit ? 'Edit bhajan' : 'New bhajan'}</h2>
+                <span className="w-14" aria-hidden="true" />
               </div>
 
               <div className={fCard}>
-                <h2 className={fTitle}>
-                  {currentView === 'edit-bhajan' ? '✏️ Edit Bhajan' : '➕ Add New Bhajan'}
-                </h2>
-
-                {/* Title */}
-                <div className="mb-4">
-                  <label className={fLabel}>
-                    Title <span className="text-red-500">*</span>
-                  </label>
-                  <div className="relative">
-                    <input
-                      id="hindi-input-title"
-                      type="text"
-                      value={bhajanForm.title}
-                      onChange={(e) => handleHindiInput(e, 'title')}
-                      onKeyDown={(e) => handleHindiKeyDown(e, 'title')}
-                      onBlur={() => setTimeout(() => setShowSuggestions(false), 300)}
-                      onFocus={() => setActiveTypingField('title')}
-                      className={fInput + " text-lg"}
-                      placeholder={hindiTypingEnabled ? "Type: om jai jagdish hare" : "e.g., जय जगदीश हरे"}
-                    />
-                    {hindiTypingEnabled && showSuggestions && activeTypingField === 'title' && transliterationSuggestions.length > 0 && (
-                      <div className={`absolute bottom-full left-0 right-0 mb-2 border rounded-lg shadow-[0_8px_30px_rgba(11,90,112,0.18)] p-2 flex flex-wrap gap-2 items-center z-30 ${darkMode ? "bg-[#1e2e33] border-[#0B5A70]/30" : "bg-[#FFFCF8] border-[#0B5A70]/15"}`}>
-                        <span className="text-xs text-gray-500 mr-1">
-                          <strong>"{currentWord}"</strong> →
-                        </span>
-                        {transliterationSuggestions.map((suggestion, idx) => (
-                          <button
-                            key={idx}
-                            type="button"
-                            onMouseDown={(e) => {
-                              e.preventDefault();
-                              applySuggestion(suggestion, 'title');
-                            }}
-                            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                              idx === 0
-                                ? 'bg-[#0B5A70] text-white hover:bg-[#094a5d] shadow-md'
-                                : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15'
-                            }`}
-                          >
-                            {idx === 0 && '⭐ '}{suggestion}
-                          </button>
-                        ))}
-                        <button
-                          type="button"
-                          onMouseDown={(e) => {
-                            e.preventDefault();
-                            applySuggestion(currentWord, 'title');
-                          }}
-                          className="px-3 py-1.5 rounded-lg text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition-all border border-gray-300"
-                          title="Keep as English"
-                        >
-                          {currentWord}
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Deity and Category */}
-                <div className="grid grid-cols-2 gap-3 mb-4">
-                  <div>
-                    <label className={fLabel}>
-                      Deity
-                      <span className={`block text-xs font-normal mt-0.5 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Who the bhajan is about</span>
-                    </label>
-                    <select
-                      value={bhajanForm.deity}
-                      onChange={(e) => setBhajanForm({...bhajanForm, deity: e.target.value})}
-                      className={fSelect}
-                    >
-                      {allDeityOptions.map(d => (
-                        <option key={d.value} value={d.value}>{d.value}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className={fLabel}>
-                      Category
-                      <span className={`block text-xs font-normal mt-0.5 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Type: bhajan, aarti, chalisa…</span>
-                    </label>
-                    <select
-                      value={bhajanForm.category}
-                      onChange={(e) => setBhajanForm({...bhajanForm, category: e.target.value})}
-                      className={fSelect}
-                    >
-                      {allCategoryOptions.map(c => (
-                        <option key={c} value={c}>{c}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                {/* Dhun / Tarz */}
-                <div className="mb-4">
-                  <label className={fLabel}>
-                    तर्ज़ / धुन (Tune)
-                    <span className={`block text-xs font-normal mt-0.5 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>The song or bhajan whose tune this is sung to</span>
-                  </label>
-                  <div className="relative">
-                    <input
-                      id="hindi-input-dhun"
-                      type="text"
-                      value={bhajanForm.dhun}
-                      onChange={(e) => handleHindiInput(e, 'dhun')}
-                      onKeyDown={(e) => handleHindiKeyDown(e, 'dhun')}
-                      onBlur={() => setTimeout(() => setShowSuggestions(false), 300)}
-                      onFocus={() => setActiveTypingField('dhun')}
-                      className={fInput}
-                      placeholder={hindiTypingEnabled ? "Type: tujhe dekha to" : "e.g., तुझे देखा तो..."}
-                    />
-                    {hindiTypingEnabled && showSuggestions && activeTypingField === 'dhun' && transliterationSuggestions.length > 0 && (
-                      <div className={`absolute bottom-full left-0 right-0 mb-2 border rounded-lg shadow-[0_8px_30px_rgba(11,90,112,0.18)] p-2 flex flex-wrap gap-2 items-center z-30 ${darkMode ? "bg-[#1e2e33] border-[#0B5A70]/30" : "bg-[#FFFCF8] border-[#0B5A70]/15"}`}>
-                        <span className="text-xs text-gray-500 mr-1">
-                          <strong>"{currentWord}"</strong> →
-                        </span>
-                        {transliterationSuggestions.map((suggestion, idx) => (
-                          <button
-                            key={idx}
-                            type="button"
-                            onMouseDown={(e) => {
-                              e.preventDefault();
-                              applySuggestion(suggestion, 'dhun');
-                            }}
-                            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                              idx === 0
-                                ? 'bg-[#0B5A70] text-white hover:bg-[#094a5d] shadow-md'
-                                : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15'
-                            }`}
-                          >
-                            {idx === 0 && '⭐ '}{suggestion}
-                          </button>
-                        ))}
-                        <button
-                          type="button"
-                          onMouseDown={(e) => {
-                            e.preventDefault();
-                            applySuggestion(currentWord, 'dhun');
-                          }}
-                          className="px-3 py-1.5 rounded-lg text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition-all border border-gray-300"
-                          title="Keep as English"
-                        >
-                          {currentWord}
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Scale */}
-                <div className="mb-4">
-                  <label className={fLabel}>
-                    Scale / Raag
-                  </label>
+                {/* ---------- Title ---------- */}
+                <div className="mb-5 relative">
                   <input
                     type="text"
-                    value={bhajanForm.scale}
-                    onChange={(e) => setBhajanForm({...bhajanForm, scale: e.target.value})}
-                    className={fInput}
-                    placeholder="e.g., Raag Yaman, C# Scale"
+                    {...hindiProps('title')}
+                    className={fInput + ' text-lg font-semibold'}
+                    placeholder={hindiTypingEnabled ? 'Title — type in English, space converts to Hindi' : 'Title · शीर्षक'}
+                    aria-label="Title (required)"
                   />
+                  {chipsFor('title')}
                 </div>
 
-                {/* SESSION 11: Singer (गायक) + Lyricist (रचनाकार) */}
-                <div className="grid grid-cols-2 gap-3 mb-4">
-                  <div>
-                    <label className={fLabel}>
-                      गायक / Singer
-                    </label>
-                    <input
-                      type="text"
-                      value={bhajanForm.singer}
-                      onChange={(e) => setBhajanForm({...bhajanForm, singer: e.target.value})}
-                      className={fInput}
-                      placeholder="e.g., Anup Jalota"
-                    />
+                {/* ---------- Lyrics ---------- */}
+                <div className="mb-5">
+                  <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
+                    <label className={fLabel + ' mb-0'}>Lyrics</label>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setHindiTypingEnabled(!hindiTypingEnabled)}
+                        className={`h-9 px-3 rounded-lg text-xs font-bold transition-colors ${hindiTypingEnabled ? 'bg-[#0B5A70] text-white' : (darkMode ? 'bg-[#1e2e33] text-gray-300' : 'bg-[#0B5A70]/8 text-[#0B5A70]')}`}
+                        title={hindiTypingEnabled ? 'Hindi typing is on — type in English, space converts' : 'Turn on Hindi typing'}
+                        aria-pressed={hindiTypingEnabled}
+                      >
+                        अ {hindiTypingEnabled ? 'on' : 'off'}
+                      </button>
+                      <span className={`mx-0.5 h-5 w-px ${darkMode ? 'bg-white/15' : 'bg-[#0B5A70]/15'}`} aria-hidden="true" />
+                      <button type="button" disabled={ocrProcessing} onClick={() => cameraInputRef.current && cameraInputRef.current.click()} className={toolBtn} title="Read lyrics with the camera" aria-label="Scan lyrics with camera">📷</button>
+                      <button type="button" disabled={ocrProcessing} onClick={() => imageInputRef.current && imageInputRef.current.click()} className={toolBtn} title="Read lyrics from a photo" aria-label="Read lyrics from a photo">🖼️</button>
+                      <button type="button" disabled={ocrProcessing} onClick={() => pdfInputRef.current && pdfInputRef.current.click()} className={toolBtn} title="Read lyrics from a PDF" aria-label="Read lyrics from a PDF">📄</button>
+                    </div>
                   </div>
-                  <div>
-                    <label className={fLabel}>
-                      रचनाकार / Lyricist
-                    </label>
-                    {/* SESSION 35: Hindi typing wired on lyricist — Terapanth
-                        composers like साध्वी कनकश्रीजी need Devanagari names. */}
-                    <div className="relative">
-                      <input
-                        id="hindi-input-lyricist"
-                        type="text"
-                        value={bhajanForm.lyricist}
-                        onChange={(e) => handleHindiInput(e, 'lyricist')}
-                        onKeyDown={(e) => handleHindiKeyDown(e, 'lyricist')}
-                        onBlur={() => setTimeout(() => setShowSuggestions(false), 300)}
-                        onFocus={() => setActiveTypingField('lyricist')}
-                        className={fInput}
-                        placeholder={hindiTypingEnabled ? "Type: meera bai" : "e.g., मीरा बाई"}
-                      />
-                      {hindiTypingEnabled && showSuggestions && activeTypingField === 'lyricist' && transliterationSuggestions.length > 0 && (
-                        <div className={`absolute bottom-full left-0 right-0 mb-2 border rounded-lg shadow-[0_8px_30px_rgba(11,90,112,0.18)] p-2 flex flex-wrap gap-2 items-center z-30 ${darkMode ? "bg-[#1e2e33] border-[#0B5A70]/30" : "bg-[#FFFCF8] border-[#0B5A70]/15"}`}>
-                          <span className="text-xs text-gray-500 mr-1">
-                            <strong>"{currentWord}"</strong> →
-                          </span>
-                          {transliterationSuggestions.map((suggestion, idx) => (
-                            <button
-                              key={idx}
-                              type="button"
-                              onMouseDown={(e) => {
-                                e.preventDefault();
-                                applySuggestion(suggestion, 'lyricist');
-                              }}
-                              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                                idx === 0
-                                  ? 'bg-[#0B5A70] text-white hover:bg-[#094a5d] shadow-md'
-                                  : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15'
-                              }`}
-                            >
-                              {idx === 0 && '⭐ '}{suggestion}
-                            </button>
-                          ))}
-                          <button
-                            type="button"
-                            onMouseDown={(e) => {
-                              e.preventDefault();
-                              applySuggestion(currentWord, 'lyricist');
-                            }}
-                            className="px-3 py-1.5 rounded-lg text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition-all border border-gray-300"
-                            title="Keep as English"
-                          >
-                            {currentWord}
-                          </button>
-                        </div>
+                  <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden"
+                    onChange={(e) => { const f = e.target.files && e.target.files[0]; if (f) handleImageFileForOcr(f, 'photo'); e.target.value = ''; }} />
+                  <input ref={imageInputRef} type="file" accept="image/*" className="hidden"
+                    onChange={(e) => { const f = e.target.files && e.target.files[0]; if (f) handleImageFileForOcr(f, 'image'); e.target.value = ''; }} />
+                  <input ref={pdfInputRef} type="file" accept="application/pdf,.pdf" className="hidden"
+                    onChange={(e) => { const f = e.target.files && e.target.files[0]; if (f) handlePdfFileForOcr(f); e.target.value = ''; }} />
+
+                  {ocrProcessing && (
+                    <div className={`mb-2 p-3 border rounded-lg ${darkMode ? 'bg-[#1e2e33] border-[#0B5A70]/30' : 'bg-[#FFFCF8] border-[#0B5A70]/15'}`}>
+                      <div className="w-full bg-[#0B5A70]/10 rounded-full h-2 mb-2"><div className="bg-[#0B5A70] h-2 rounded-full transition-all" style={{ width: ocrProgress + '%' }} /></div>
+                      <p className="text-xs font-semibold text-[#0B5A70]">{ocrMessage || 'Reading…'}</p>
+                      {!localStorage.getItem('sankirtan-tesseract-langs-cached') && (
+                        <p className={`text-[11px] mt-1 ${hint}`}>First use downloads the reader (~15 MB) once; later scans are quick.</p>
                       )}
                     </div>
-                  </div>
-                </div>
-
-                {/* Lyrics with Hindi Typing */}
-                <div className="mb-4">
-                  <div className="flex items-center justify-between mb-1">
-                    <label className={fLabel + " mb-0"}>
-                      Lyrics <span className="text-red-500">*</span>
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => setHindiTypingEnabled(!hindiTypingEnabled)}
-                      className={`text-xs font-semibold px-3 py-1 rounded-full transition-all ${
-                        hindiTypingEnabled
-                          ? 'bg-[#0B5A70] text-white shadow-md'
-                          : 'bg-gray-100 text-gray-600 border border-gray-300'
-                      }`}
-                      title={hindiTypingEnabled ? 'Turn off Hindi typing' : 'Turn on Hindi typing'}
-                    >
-                      {hindiTypingEnabled ? '🇮🇳 हिंदी ON' : '🔤 Hindi OFF'}
-                    </button>
-                  </div>
-
-                  {/* OCR import block */}
-                  <div className="mb-3 p-3 bg-[#0B5A70]/5 border border-[#0B5A70]/12 rounded-xl">
-                    <p className="text-xs font-semibold text-[#0B5A70] mb-2">
-                      📥 Auto-fill lyrics from a photo, PDF, or camera — text is read on your device, nothing is uploaded or stored as a file
-                    </p>
-
-                    {!localStorage.getItem('sankirtan-tesseract-langs-cached') && !ocrProcessing && (
-                      <div className="mb-2 p-2 bg-[#E65100]/5 border border-[#E65100]/20 rounded-lg text-xs text-[#0B5A70]">
-                        ⚠️ <strong>First-time use:</strong> The OCR engine (~15 MB) will download once and be cached. Please use WiFi if possible.
-                      </div>
-                    )}
-
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        disabled={ocrProcessing}
-                        onClick={() => cameraInputRef.current && cameraInputRef.current.click()}
-                        className="bg-[#0B5A70] hover:bg-[#094a5d] text-white font-semibold px-3 py-2 rounded-lg text-sm disabled:opacity-50 flex items-center gap-1"
-                      >
-                        📷 Camera
-                      </button>
-                      <button
-                        type="button"
-                        disabled={ocrProcessing}
-                        onClick={() => imageInputRef.current && imageInputRef.current.click()}
-                        className="bg-[#0B5A70] hover:bg-[#094a5d] text-white font-semibold px-3 py-2 rounded-lg text-sm disabled:opacity-50 flex items-center gap-1"
-                      >
-                        🖼️ Upload Image
-                      </button>
-                      <button
-                        type="button"
-                        disabled={ocrProcessing}
-                        onClick={() => pdfInputRef.current && pdfInputRef.current.click()}
-                        className="bg-[#0B5A70] hover:bg-[#094a5d] text-white font-semibold px-3 py-2 rounded-lg text-sm disabled:opacity-50 flex items-center gap-1"
-                      >
-                        📄 Upload PDF
-                      </button>
-                    </div>
-
-                    <input
-                      ref={cameraInputRef}
-                      type="file"
-                      accept="image/*"
-                      capture="environment"
-                      className="hidden"
-                      onChange={(e) => {
-                        const f = e.target.files && e.target.files[0];
-                        if (f) handleImageFileForOcr(f, 'photo');
-                        e.target.value = '';
-                      }}
-                    />
-                    <input
-                      ref={imageInputRef}
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      onChange={(e) => {
-                        const f = e.target.files && e.target.files[0];
-                        if (f) handleImageFileForOcr(f, 'image');
-                        e.target.value = '';
-                      }}
-                    />
-                    <input
-                      ref={pdfInputRef}
-                      type="file"
-                      accept="application/pdf,.pdf"
-                      className="hidden"
-                      onChange={(e) => {
-                        const f = e.target.files && e.target.files[0];
-                        if (f) handlePdfFileForOcr(f);
-                        e.target.value = '';
-                      }}
-                    />
-
-                    {ocrProcessing && (
-                      <div className={`mt-3 p-3 border rounded-lg ${darkMode ? "bg-[#1e2e33] border-[#0B5A70]/30" : "bg-[#FFFCF8] border-[#0B5A70]/15"}`}>
-                        <div className="w-full bg-[#0B5A70]/10 rounded-full h-3 mb-2">
-                          <div
-                            className="bg-[#0B5A70] h-3 rounded-full transition-all"
-                            style={{ width: ocrProgress + '%' }}
-                          ></div>
-                        </div>
-                        <p className="text-xs font-semibold text-[#0B5A70]">{ocrMessage || 'Processing...'}</p>
-                        {!localStorage.getItem('sankirtan-tesseract-langs-cached') && (
-                          <p className="text-[10px] text-[#0B5A70]/80 mt-1">
-                            💡 First-time setup takes 30-60 seconds. Future uses will be instant.
-                          </p>
-                        )}
-                      </div>
-                    )}
-                    {!ocrProcessing && ocrMessage && (
-                      <p className="text-xs font-semibold text-[#0B5A70] mt-2">{ocrMessage}</p>
-                    )}
-                    <p className="text-xs text-[#0B5A70]/80 mt-2">
-                      💡 Works best with clear, printed Hindi/English text. Handwriting may need manual correction. Scanned PDFs supported (up to 10 pages).
-                    </p>
-                  </div>
-
-                  {hindiTypingEnabled && (
-                    <div className="mb-2 p-2 bg-[#0B5A70]/5 border border-[#0B5A70]/12 rounded-lg">
-                      <p className="text-xs text-[#E65100]">
-                        ✨ Type in English, press <kbd className="bg-white px-1.5 py-0.5 rounded border text-xs">space</kbd> to auto-convert to Hindi
-                      </p>
-                      <p className="text-xs text-[#0B5A70]/60 mt-1">
-                        Example: <code className="bg-white px-1 rounded">jai shri babosa</code> → जय श्री बाबोसा
-                      </p>
-                    </div>
                   )}
+                  {!ocrProcessing && ocrMessage && <p className="text-xs font-semibold text-[#0B5A70] mb-2">{ocrMessage}</p>}
 
-                  {/* SESSION 90: toolbar + auto-growing textarea in the lyrics font;
-                      ⛶ opens the full-screen sheet (which takes over the same id). */}
                   <div className="mb-2">
                     <LyricsToolbar {...lyricsToolbarProps('bhajan')} darkMode={darkMode} />
                   </div>
@@ -9907,31 +9620,18 @@ const App = () => {
                     {lyricsSheet !== 'bhajan' && (
                       <textarea
                         ref={lyricsTextareaRef}
-                        id="hindi-input-lyrics"
-                        value={bhajanForm.lyrics}
-                        onChange={(e) => handleHindiInput(e, 'lyrics')}
-                        onKeyDown={(e) => handleHindiKeyDown(e, 'lyrics')}
-                        onBlur={() => setTimeout(() => setShowSuggestions(false), 300)}
-                        onFocus={() => setActiveTypingField('lyrics')}
+                        {...hindiProps('lyrics')}
                         rows={8}
-                        className={fInput + " text-lg resize-none overflow-hidden"}
-                        placeholder={hindiTypingEnabled ? "Type: jai shri babosa (press space to convert)" : "भजन के बोल यहाँ लिखें…\nया 🎤 Dictate / 📋 Paste ऊपर से"}
+                        className={fInput + ' text-lg resize-none overflow-hidden'}
+                        placeholder={hindiTypingEnabled ? 'jai shri babosa … (space converts to Hindi)' : 'भजन के बोल यहाँ लिखें…'}
                         style={{ lineHeight: '1.9', fontFamily: LYRICS_FONT }}
+                        aria-label="Lyrics (required)"
                       />
                     )}
                     {lyricsSheet === 'bhajan' && (
                       <div className={`rounded-xl border border-dashed p-4 text-sm text-center ${darkMode ? 'border-[#0B5A70]/30 text-gray-400' : 'border-[#0B5A70]/20 text-gray-500'}`}>Editing in full screen…</div>
                     )}
-
-                    {lyricsSheet !== 'bhajan' && hindiTypingEnabled && showSuggestions && activeTypingField === 'lyrics' && transliterationSuggestions.length > 0 && (
-                      <TransliterationChips
-                        className="absolute bottom-full left-0 right-0 mb-2 z-30"
-                        currentWord={currentWord}
-                        suggestions={transliterationSuggestions}
-                        onPick={(s) => applySuggestion(s, 'lyrics')}
-                        darkMode={darkMode}
-                      />
-                    )}
+                    {lyricsSheet !== 'bhajan' && chipsFor('lyrics')}
                   </div>
                   <LyricsEditorSheet
                     open={lyricsSheet === 'bhajan'}
@@ -9943,86 +9643,102 @@ const App = () => {
                     onKeyDown={(e) => handleHindiKeyDown(e, 'lyrics')}
                     onBlur={() => setTimeout(() => setShowSuggestions(false), 300)}
                     onFocus={() => setActiveTypingField('lyrics')}
-                    placeholder={hindiTypingEnabled ? "Type: jai shri babosa (press space to convert)" : "भजन के बोल यहाँ लिखें…"}
+                    placeholder={hindiTypingEnabled ? 'jai shri babosa … (space converts to Hindi)' : 'भजन के बोल यहाँ लिखें…'}
                     toolbar={lyricsToolbarProps('bhajan')}
                     mukhdaChip={mukhdaChipText(bhajanForm.lyrics)}
                     chips={hindiTypingEnabled && showSuggestions && activeTypingField === 'lyrics' && transliterationSuggestions.length > 0 ? (
                       <TransliterationChips currentWord={currentWord} suggestions={transliterationSuggestions} onPick={(s) => applySuggestion(s, 'lyrics')} darkMode={darkMode} />
                     ) : null}
                   />
-
-                  {/* SESSION 42: two hints under Lyrics.
-                      (a) How Hindi typing works — shown only while ON.
-                      (b) The mukhda blank-line rule that Parody view
-                          depends on, plus a live chip showing how many
-                          lines are currently being read as the mukhda. */}
-                  <div className={`mt-2 space-y-1 text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                    {hindiTypingEnabled && (
-                      <p>⌨️ Type in English letters — e.g. <strong>shyam</strong> → <strong>श्याम</strong>. Press space or tap a suggestion.</p>
+                  <p className={`mt-1.5 text-xs flex flex-wrap items-center gap-x-2 gap-y-1 ${hint}`}>
+                    <span>Blank line after the mukhda.</span>
+                    {mukhdaInfo && (
+                      <span className={`px-2 py-0.5 rounded-full font-semibold ${mukhdaInfo.hasBlank ? (darkMode ? 'bg-[#0B5A70]/20 text-teal-200' : 'bg-[#0B5A70]/8 text-[#0B5A70]') : (darkMode ? 'bg-[#E65100]/20 text-orange-200' : 'bg-[#E65100]/10 text-[#E65100]')}`}>
+                        {mukhdaInfo.hasBlank ? `Mukhda · ${mukhdaInfo.n} line${mukhdaInfo.n === 1 ? '' : 's'}` : 'No blank line yet'}
+                      </span>
                     )}
-                    <p className="flex flex-wrap items-center gap-2">
-                      <span>🎭 Leave a <strong>blank line after the mukhda</strong> so Medley view shows it correctly.</span>
-                      {bhajanForm.lyrics && bhajanForm.lyrics.trim() && (() => {
-                        const m = getMukhda({ lyrics: bhajanForm.lyrics });
-                        const n = m ? m.split('\n').length : 0;
-                        const hasBlank = /\n\s*\n/.test(bhajanForm.lyrics.replace(/^\s+/, ''));
-                        return (
-                          <span className={`px-2 py-0.5 rounded-full font-semibold ${hasBlank ? (darkMode ? 'bg-[#0B5A70]/20 text-teal-200' : 'bg-[#0B5A70]/8 text-[#0B5A70]') : (darkMode ? 'bg-[#E65100]/20 text-orange-200' : 'bg-[#E65100]/10 text-[#E65100]')}`}>
-                            {hasBlank ? `Mukhda: ${n} line${n === 1 ? '' : 's'}` : 'No blank line — first line will be used as mukhda'}
-                          </span>
-                        );
-                      })()}
-                    </p>
+                    {hindiTypingEnabled && <span>· <strong>shyam</strong> → श्याम on space</span>}
+                  </p>
+                </div>
+
+                {/* ---------- Details ---------- */}
+                <p className={sectionTitle}>Details</p>
+                <div className="grid grid-cols-2 gap-3 mb-3">
+                  <div>
+                    <label className={fLabel}>Deity</label>
+                    <select value={bhajanForm.deity} onChange={(e) => setBhajanForm({ ...bhajanForm, deity: e.target.value })} className={fSelect}>
+                      {allDeityOptions.map(d => <option key={d.value} value={d.value}>{d.value}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className={fLabel}>Type</label>
+                    <select value={bhajanForm.category} onChange={(e) => setBhajanForm({ ...bhajanForm, category: e.target.value })} className={fSelect}>
+                      {allCategoryOptions.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3 mb-3">
+                  <div className="relative">
+                    <label className={fLabel}>तर्ज़ / Tune</label>
+                    <input type="text" {...hindiProps('dhun')} className={fInput} placeholder="e.g. तुझे देखा तो" />
+                    {chipsFor('dhun')}
+                  </div>
+                  <div>
+                    <label className={fLabel}>Scale / Raag</label>
+                    <input type="text" value={bhajanForm.scale} onChange={(e) => setBhajanForm({ ...bhajanForm, scale: e.target.value })} className={fInput} placeholder="e.g. C#, Yaman" />
                   </div>
                 </div>
 
-                {/* Keywords */}
-                <div className="mb-4">
-                  <label className={fLabel + " mb-2"}>
-                    Moods (tap to select)
-                    <span className={`block text-xs font-normal mt-0.5 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Moods and occasions — helps others find it by #diwali, #morning, #parody…</span>
-                  </label>
-                  <div className="flex flex-wrap gap-2">
-                    {allKeywordOptions.map(kw => (
-                      <button
-                        key={kw}
-                        type="button"
-                        onClick={() => toggleKeyword(kw)}
-                        className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
-                          bhajanForm.keywords.includes(kw)
-                            ? 'bg-[#0B5A70] text-white shadow-md'
-                            : `${darkMode ? 'bg-[#0B5A70]/15 text-teal-300 border border-[#0B5A70]/25 hover:bg-[#0B5A70]/25' : 'bg-[#0B5A70]/5 text-[#0B5A70] border border-[#0B5A70]/12 hover:bg-[#0B5A70]/10'}`
-                        }`}
-                      >
-                        {bhajanForm.keywords.includes(kw) ? '✓ ' : ''}#{kw}
-                      </button>
-                    ))}
+                {/* ---------- More (collapsed unless filled) ---------- */}
+                <button
+                  type="button"
+                  onClick={() => setBhajanFormMore(v => !v)}
+                  aria-expanded={bhajanFormMore}
+                  className={`text-xs font-semibold mb-3 ${darkMode ? 'text-teal-200' : 'text-[#0B5A70]'}`}
+                >
+                  {bhajanFormMore ? '▾' : '▸'} Singer, lyricist, link
+                </button>
+                {bhajanFormMore && (
+                  <div className="mb-3 space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className={fLabel}>गायक / Singer</label>
+                        <input type="text" value={bhajanForm.singer} onChange={(e) => setBhajanForm({ ...bhajanForm, singer: e.target.value })} className={fInput} placeholder="e.g. Anup Jalota" />
+                      </div>
+                      <div className="relative">
+                        <label className={fLabel}>रचनाकार / Lyricist</label>
+                        <input type="text" {...hindiProps('lyricist')} className={fInput} placeholder="e.g. मीरा बाई" />
+                        {chipsFor('lyricist')}
+                      </div>
+                    </div>
+                    <div>
+                      <label className={fLabel}>YouTube or reference link</label>
+                      <input type="url" value={bhajanForm.source} onChange={(e) => setBhajanForm({ ...bhajanForm, source: e.target.value })} className={fInput} placeholder="https://youtube.com/…" />
+                    </div>
                   </div>
-                  {bhajanForm.keywords.length > 0 && (
-                    <p className="text-xs text-[#0B5A70]/60 mt-2">
-                      {bhajanForm.keywords.length} selected
-                    </p>
-                  )}
-                </div>
+                )}
 
-                {/* Source URL */}
-                <div className="mb-6">
-                  <label className={fLabel}>
-                    Source URL (optional)
-                  </label>
-                  <input
-                    type="url"
-                    value={bhajanForm.source}
-                    onChange={(e) => setBhajanForm({...bhajanForm, source: e.target.value})}
-                    className={fInput}
-                    placeholder="https://youtube.com/... or reference URL"
-                  />
+                {/* ---------- Moods ---------- */}
+                <p className={sectionTitle + ' mt-2'}>Moods{bhajanForm.keywords.length ? ` · ${bhajanForm.keywords.length}` : ''}</p>
+                <div className="flex flex-wrap gap-1.5 mb-6">
+                  {allKeywordOptions.map(kw => (
+                    <button
+                      key={kw}
+                      type="button"
+                      onClick={() => toggleKeyword(kw)}
+                      className={`px-2.5 py-1 rounded-full text-xs font-medium transition-all ${
+                        bhajanForm.keywords.includes(kw)
+                          ? 'bg-[#0B5A70] text-white'
+                          : (darkMode ? 'bg-[#0B5A70]/15 text-teal-300 border border-[#0B5A70]/25' : 'bg-[#0B5A70]/5 text-[#0B5A70] border border-[#0B5A70]/12')
+                      }`}
+                    >
+                      #{kw}
+                    </button>
+                  ))}
                 </div>
 
                 {bhajanFormError && (
-                  <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
-                    ⚠️ {bhajanFormError}
-                  </div>
+                  <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">⚠️ {bhajanFormError}</div>
                 )}
 
                 <div className="flex gap-3">
@@ -10031,18 +9747,9 @@ const App = () => {
                     disabled={bhajanFormSaving || !bhajanForm.title.trim() || !bhajanForm.lyrics.trim()}
                     className="flex-1 bg-[#0B5A70] hover:bg-[#094a5d] text-white font-bold py-3 rounded-xl shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {bhajanFormSaving ? 'Saving...' : '💾 Save'}
+                    {bhajanFormSaving ? 'Saving…' : 'Save'}
                   </button>
-                  <button
-                    onClick={() => {
-                      if (currentView === 'edit-bhajan' && selectedBhajan) {
-                        setCurrentView('bhajan-detail');
-                      } else {
-                        setCurrentView('library');
-                      }
-                    }}
-                    className="px-6 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 font-semibold"
-                  >
+                  <button onClick={goBack} className="px-6 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 font-semibold">
                     Cancel
                   </button>
                 </div>
