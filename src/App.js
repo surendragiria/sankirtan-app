@@ -1084,7 +1084,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.10.17.s106';
+const APP_VERSION = '2026.10.17.s107';
 const AUTO_SCROLL_VIEWS = ['live-program', 'bhajan-detail', 'public-bhajan-detail'];
 const LIVE_SCROLL_STEPS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 
@@ -9230,9 +9230,9 @@ const App = () => {
                       into an overflow menu. Same behavior; less visual weight
                       — destructive actions shouldn't share space with routine
                       Edit/View/Add-to buttons. */}
-                  {selectedBhajan.virtual && isAdmin && (
+                  {isAdmin && publicBhajans.some(b => b.id === (selectedBhajan.savedFromPublicId || selectedBhajan.id)) && (
                     <button
-                      onClick={() => openEditPublicBhajan(publicBhajans.find(b => b.id === selectedBhajan.id) || selectedBhajan)}
+                      onClick={() => openEditPublicBhajan(publicBhajans.find(b => b.id === (selectedBhajan.savedFromPublicId || selectedBhajan.id)) || selectedBhajan)}
                       className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors ${darkMode ? 'bg-purple-900/40 text-purple-200' : 'bg-purple-100 text-purple-800 hover:bg-purple-200'}`}
                       title="Edit public bhajan"
                       aria-label="Edit public bhajan"
