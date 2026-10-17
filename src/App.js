@@ -1084,7 +1084,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.10.17.s98';
+const APP_VERSION = '2026.10.17.s99';
 const AUTO_SCROLL_VIEWS = ['live-program', 'bhajan-detail', 'public-bhajan-detail'];
 const LIVE_SCROLL_STEPS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 
@@ -9606,11 +9606,12 @@ const App = () => {
                       <button
                         type="button"
                         onClick={() => setHindiTypingEnabled(!hindiTypingEnabled)}
-                        className={`h-9 px-3 rounded-lg text-xs font-bold transition-colors ${hindiTypingEnabled ? 'bg-[#0B5A70] text-white' : (darkMode ? 'bg-[#1e2e33] text-gray-300' : 'bg-[#0B5A70]/8 text-[#0B5A70]')}`}
-                        title={hindiTypingEnabled ? 'Hindi typing is on — type in English, space converts' : 'Turn on Hindi typing'}
+                        className={`px-1.5 py-0.5 rounded text-[10px] font-bold border transition-colors ${hindiTypingEnabled ? 'bg-[#0B5A70] text-white border-[#0B5A70]' : (darkMode ? 'bg-[#1e2e33] text-gray-300 border-[#0B5A70]/30' : 'bg-white text-gray-600 border-gray-300 hover:border-[#0B5A70]/20')}`}
+                        title={`Typing language: ${hindiTypingEnabled ? 'Hindi (type in English, space converts)' : 'English'} — tap to switch`}
+                        aria-label={`Typing language: ${hindiTypingEnabled ? 'Hindi' : 'English'}. Tap to switch.`}
                         aria-pressed={hindiTypingEnabled}
                       >
-                        अ {hindiTypingEnabled ? 'on' : 'off'}
+                        {hindiTypingEnabled ? 'हिं' : 'EN'}
                       </button>
                       <span className={`mx-0.5 h-5 w-px ${darkMode ? 'bg-white/15' : 'bg-[#0B5A70]/15'}`} aria-hidden="true" />
                       <AttachBtn kind="camera" disabled={ocrProcessing} onClick={() => cameraInputRef.current && cameraInputRef.current.click()} title="Camera — photograph the lyrics" />
@@ -12455,8 +12456,8 @@ const App = () => {
                   <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
                     <label className={pLabel + ' mb-0'}>Lyrics</label>
                     <div className="flex items-center gap-1.5">
-                      <button type="button" onClick={() => setHindiTypingEnabled(!hindiTypingEnabled)} className={`h-9 px-3 rounded-lg text-xs font-bold transition-colors ${hindiTypingEnabled ? 'bg-[#0B5A70] text-white' : 'bg-[#0B5A70]/8 text-[#0B5A70]'}`} title={hindiTypingEnabled ? 'Hindi typing is on — type in English, space converts' : 'Turn on Hindi typing'} aria-pressed={hindiTypingEnabled}>
-                        अ {hindiTypingEnabled ? 'on' : 'off'}
+                      <button type="button" onClick={() => setHindiTypingEnabled(!hindiTypingEnabled)} className={`px-1.5 py-0.5 rounded text-[10px] font-bold border transition-colors ${hindiTypingEnabled ? 'bg-[#0B5A70] text-white border-[#0B5A70]' : 'bg-white text-gray-600 border-gray-300 hover:border-[#0B5A70]/20'}`} title={`Typing language: ${hindiTypingEnabled ? 'Hindi (type in English, space converts)' : 'English'} — tap to switch`} aria-label={`Typing language: ${hindiTypingEnabled ? 'Hindi' : 'English'}. Tap to switch.`} aria-pressed={hindiTypingEnabled}>
+                        {hindiTypingEnabled ? 'हिं' : 'EN'}
                       </button>
                       <span className="mx-0.5 h-5 w-px bg-[#0B5A70]/15" aria-hidden="true" />
                       <AttachBtn kind="camera" disabled={ocrProcessing} onClick={() => publicCameraInputRef.current && publicCameraInputRef.current.click()} title="Camera — photograph the lyrics" />
