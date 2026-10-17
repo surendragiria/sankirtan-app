@@ -1084,7 +1084,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.10.17.s89';
+const APP_VERSION = '2026.10.17.s90';
 const AUTO_SCROLL_VIEWS = ['live-program', 'bhajan-detail', 'public-bhajan-detail'];
 const LIVE_SCROLL_STEPS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 
@@ -2300,6 +2300,130 @@ const PublicBhajanCard = React.memo(function PublicBhajanCard({
   );
 });
 
+// ==============================================
+// SESSION 90: LYRICS EDITOR
+// The lyrics box in Add/Edit Bhajan was a fixed 10-row monospace textarea.
+// Now: auto-growing in the lyrics font, a toolbar (full screen, mukhda
+// break, paste & clean, dictate, clean up, undo) and a full-screen sheet.
+// ==============================================
+
+// Strip the junk that comes with lyrics pasted from WhatsApp / YouTube.
+const cleanLyricsText = (raw) => {
+  if (!raw) return '';
+  let t = String(raw).replace(/\r\n?/g, '\n');
+  t = t.replace(/[​-‍﻿ ]/g, ' ');            // zero-width, nbsp
+  t = t.replace(/\[?\b\d{1,2}:\d{2}(?::\d{2})?\]?/g, '');         // timestamps 0:12 / [01:02:03]
+  t = t.replace(/\p{Extended_Pictographic}️?|[☀-➿]/gu, ''); // emoji
+  t = t.replace(/^\s*(lyrics?|बोल|भजन के बोल|song|title)\s*[:：-]\s*$/gim, '');
+  t = t.replace(/^\s*[-=_*~·•]{3,}\s*$/gm, '');                   // divider lines
+  t = t.split('\n').map(l => l.replace(/[ \t]+/g, ' ').replace(/\s+([।॥,.!?])/g, '$1').trim()).join('\n');
+  t = t.replace(/\n{3,}/g, '\n\n');
+  return t.trim();
+};
+
+// Grow a textarea with its content (no inner scrollbar).
+const useAutoGrow = (ref, value, minPx = 220) => {
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = Math.max(minPx, el.scrollHeight + 2) + 'px';
+  }, [ref, value, minPx]);
+};
+
+const LyricsToolbar = ({ darkMode, fullscreen, onFullscreen, onMukhda, onPaste, onDictate, dictating, onClean, onUndo, canUndo }) => {
+  const btn = `inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors ${darkMode ? 'bg-[#1e2e33] text-gray-200 hover:bg-[#0B5A70]/30' : 'bg-[#0B5A70]/6 text-[#0B5A70] hover:bg-[#0B5A70]/12 border border-[#0B5A70]/12'}`;
+  return (
+    <div className="flex items-center gap-1.5 overflow-x-auto pb-1 -mx-1 px-1" style={{ scrollbarWidth: 'none' }}>
+      <button type="button" onClick={onDictate} className={`${btn} ${dictating ? '!bg-red-600 !text-white !border-red-600 animate-pulse' : ''}`} title={dictating ? 'Stop dictation' : 'Dictate lyrics (Hindi)'} aria-pressed={dictating}>
+        🎤 {dictating ? 'Listening… tap to stop' : 'Dictate'}
+      </button>
+      <button type="button" onClick={onPaste} className={btn} title="Paste from clipboard and clean up">📋 Paste</button>
+      <button type="button" onClick={onMukhda} className={btn} title="Insert a blank line here (marks the end of the mukhda)">¶ Mukhda break</button>
+      <button type="button" onClick={onClean} className={btn} title="Remove timestamps, emoji, extra spaces and blank lines">🧹 Clean up</button>
+      <button type="button" onClick={onUndo} disabled={!canUndo} className={`${btn} disabled:opacity-40`} title="Undo last toolbar action">↶ Undo</button>
+      {!fullscreen && (
+        <button type="button" onClick={onFullscreen} className={`${btn} ml-auto`} title="Open full-screen editor">⛶ Full screen</button>
+      )}
+    </div>
+  );
+};
+
+const TransliterationChips = ({ currentWord, suggestions, onPick, darkMode, className = '' }) => (
+  <div className={`border rounded-xl shadow-[0_8px_30px_rgba(11,90,112,0.18)] p-2 flex flex-wrap gap-2 items-center ${darkMode ? 'bg-[#1e2e33] border-[#0B5A70]/30' : 'bg-[#FFFCF8] border-[#0B5A70]/15'} ${className}`}>
+    <span className="text-xs text-gray-500 mr-1"><strong>"{currentWord}"</strong> →</span>
+    {suggestions.map((s, idx) => (
+      <button
+        key={idx}
+        type="button"
+        onMouseDown={(e) => { e.preventDefault(); onPick(s); }}
+        className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${idx === 0 ? 'bg-[#0B5A70] text-white hover:bg-[#094a5d] shadow-md' : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15'}`}
+        title={idx === 0 ? 'Default (press space)' : `Alternative ${idx + 1}`}
+      >
+        {idx === 0 && '⭐ '}{s}
+      </button>
+    ))}
+    <button
+      type="button"
+      onMouseDown={(e) => { e.preventDefault(); onPick(currentWord); }}
+      className="px-3 py-1.5 rounded-lg text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition-all border border-gray-300"
+      title="Keep as English"
+    >
+      {currentWord}
+    </button>
+  </div>
+);
+
+// Full-screen lyrics sheet. The textarea keeps the same `id` as the inline
+// one (which is unmounted while this is open) so the Hindi-typing helpers
+// that look the field up by id keep working.
+const LyricsEditorSheet = ({ open, onClose, darkMode, inputId, value, onChange, onKeyDown, onFocus, onBlur, placeholder, toolbar, chips, mukhdaChip }) => {
+  useEffect(() => {
+    if (!open) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    requestAnimationFrame(() => {
+      const el = document.getElementById(inputId);
+      if (el) { el.focus(); const n = el.value.length; try { el.setSelectionRange(n, n); } catch (e) {} }
+    });
+    return () => { document.body.style.overflow = prev; document.removeEventListener('keydown', onKey); };
+  }, [open, onClose, inputId]);
+  if (!open) return null;
+  const lines = (value || '').split('\n').length;
+  return (
+    <div className={`fixed inset-0 z-[70] flex flex-col ${darkMode ? 'bg-[#0f1a1e] text-gray-100' : 'bg-[#FFF8F0] text-gray-900'}`} role="dialog" aria-modal="true" aria-label="Lyrics editor">
+      <div className={`flex items-center justify-between gap-3 px-4 py-3 border-b ${darkMode ? 'border-[#0B5A70]/25' : 'border-[#0B5A70]/12'}`} style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }}>
+        <div className="min-w-0">
+          <p className={`text-sm font-bold ${darkMode ? 'text-teal-200' : 'text-[#0B5A70]'}`}>भजन के बोल</p>
+          <p className={`text-[11px] ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{lines} line{lines === 1 ? '' : 's'}{mukhdaChip ? ` · ${mukhdaChip}` : ''}</p>
+        </div>
+        <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl text-sm font-bold bg-[#E65100] text-white shadow-md">Done</button>
+      </div>
+      <div className={`px-4 pt-2 ${darkMode ? '' : ''}`}>
+        <LyricsToolbar {...toolbar} darkMode={darkMode} fullscreen />
+      </div>
+      <textarea
+        id={inputId}
+        value={value}
+        onChange={onChange}
+        onKeyDown={onKeyDown}
+        onFocus={onFocus}
+        onBlur={onBlur}
+        placeholder={placeholder}
+        className={`flex-1 w-full px-5 py-4 outline-none resize-none bg-transparent text-lg ${darkMode ? 'text-gray-100 placeholder:text-gray-500' : 'text-gray-900 placeholder:text-gray-400'}`}
+        style={{ fontFamily: LYRICS_FONT, lineHeight: '1.9' }}
+      />
+      {chips && (
+        <div className="px-3 pb-2" style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}>
+          {chips}
+        </div>
+      )}
+    </div>
+  );
+};
+
 const App = () => {
   // Auth states
   const [user, setUser] = useState(null);
@@ -2768,13 +2892,27 @@ const App = () => {
 
   // Hindi Typing states
   const [hindiTypingEnabled, setHindiTypingEnabled] = useState(() => {
+    // SESSION 90: default OFF on phones — Gboard's Hindi keyboard and
+    // voice typing do this better and the popup fought with them. Stays
+    // ON by default on desktop, where there's usually no Hindi keyboard.
+    const isTouchPhone = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(pointer: coarse) and (max-width: 900px)').matches;
     try {
       const saved = localStorage.getItem('sankirtan-hindi-typing');
-      return saved === null ? true : saved === 'true';
+      return saved === null ? !isTouchPhone : saved === 'true';
     } catch {
-      return true;
+      return !isTouchPhone;
     }
   });
+
+  // SESSION 90: lyrics editor state (shared by the library and public forms)
+  const [lyricsSheet, setLyricsSheet] = useState(null);       // null | 'bhajan' | 'public'
+  const [lyricsDictating, setLyricsDictating] = useState(null); // null | 'bhajan' | 'public'
+  const lyricsUndoRef = useRef({ bhajan: null, public: null });
+  const [lyricsUndoTick, setLyricsUndoTick] = useState(0);
+  const lyricsRecRef = useRef(null);
+  const lyricsDictatingRef = useRef(null);
+  const lyricsTextareaRef = useRef(null);
+  const publicLyricsTextareaRef = useRef(null);
   const [transliterationSuggestions, setTransliterationSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [currentWord, setCurrentWord] = useState('');
@@ -4728,6 +4866,136 @@ const App = () => {
       setOcrProcessing(false);
     }
   };
+
+  // ==============================================
+  // SESSION 90: LYRICS EDITOR ACTIONS
+  // `which` is 'bhajan' (library form) or 'public' (public-library form).
+  // ==============================================
+  const lyricsInputId = (which) => (which === 'public' ? 'public-hindi-input-lyrics' : 'hindi-input-lyrics');
+  const getLyrics = (which) => (which === 'public' ? publicBhajanForm.lyrics : bhajanForm.lyrics) || '';
+  // Replace the lyrics, remembering the previous text for Undo.
+  const setLyricsWithUndo = (which, next) => {
+    const prev = getLyrics(which);
+    if (next === prev) return;
+    lyricsUndoRef.current[which] = prev;
+    setLyricsUndoTick(t => t + 1);
+    if (which === 'public') setPublicBhajanForm(p => ({ ...p, lyrics: next }));
+    else setBhajanForm(p => ({ ...p, lyrics: next }));
+  };
+  const undoLyrics = (which) => {
+    const prev = lyricsUndoRef.current[which];
+    if (prev === null || prev === undefined) return;
+    lyricsUndoRef.current[which] = null;
+    setLyricsUndoTick(t => t + 1);
+    if (which === 'public') setPublicBhajanForm(p => ({ ...p, lyrics: prev }));
+    else setBhajanForm(p => ({ ...p, lyrics: prev }));
+  };
+  // Insert a blank line at the end of the line the cursor is on.
+  const insertMukhdaBreak = (which) => {
+    const el = document.getElementById(lyricsInputId(which));
+    const text = getLyrics(which);
+    let pos = el && typeof el.selectionStart === 'number' ? el.selectionStart : text.length;
+    const lineEnd = text.indexOf('\n', pos);
+    pos = lineEnd === -1 ? text.length : lineEnd;
+    const before = text.slice(0, pos).replace(/\s+$/, '');
+    const after = text.slice(pos).replace(/^\n+/, '');
+    const next = before + '\n\n' + after;
+    setLyricsWithUndo(which, next);
+    const cursor = before.length + 2;
+    requestAnimationFrame(() => { if (el) { el.focus(); try { el.setSelectionRange(cursor, cursor); } catch (e) {} } });
+  };
+  const cleanLyrics = (which) => {
+    const next = cleanLyricsText(getLyrics(which));
+    if (next === getLyrics(which)) { showToast('Already clean ✨'); return; }
+    setLyricsWithUndo(which, next);
+    showToast('🧹 Cleaned up');
+  };
+  const pasteLyrics = async (which) => {
+    try {
+      if (!navigator.clipboard || !navigator.clipboard.readText) throw new Error('unsupported');
+      const raw = await navigator.clipboard.readText();
+      const pasted = cleanLyricsText(raw);
+      if (!pasted) { showToast('Clipboard is empty', 'error'); return; }
+      const cur = getLyrics(which).trim();
+      setLyricsWithUndo(which, cur ? cur + '\n\n' + pasted : pasted);
+      showToast('📋 Pasted & cleaned');
+    } catch (err) {
+      showToast('Could not read clipboard — long-press in the box and tap Paste, then use Clean up.', 'error');
+    }
+  };
+  // Dictation: continuous Hindi speech → appended lines. Tap again to stop.
+  const stopLyricsDictation = () => {
+    lyricsDictatingRef.current = null;
+    setLyricsDictating(null);
+    const rec = lyricsRecRef.current;
+    lyricsRecRef.current = null;
+    if (rec) { try { rec.stop(); } catch (e) {} }
+  };
+  const toggleLyricsDictation = (which) => {
+    if (lyricsDictatingRef.current) { stopLyricsDictation(); return; }
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) { showToast('Dictation is not supported in this browser. Please use Chrome or Safari.', 'error'); return; }
+    lyricsUndoRef.current[which] = getLyrics(which);
+    setLyricsUndoTick(t => t + 1);
+    lyricsDictatingRef.current = which;
+    setLyricsDictating(which);
+    let session = ''; // text already committed from this dictation
+    const base = getLyrics(which).replace(/\s+$/, '');
+    const start = () => {
+      const rec = new SR();
+      lyricsRecRef.current = rec;
+      rec.lang = 'hi-IN';
+      rec.continuous = true;
+      rec.interimResults = true;
+      rec.maxAlternatives = 1;
+      rec.onresult = (e) => {
+        let interim = '';
+        for (let i = e.resultIndex; i < e.results.length; i++) {
+          const t = e.results[i][0].transcript.trim();
+          if (!t) continue;
+          if (e.results[i].isFinal) session += (session ? '\n' : '') + t;
+          else interim += (interim ? ' ' : '') + t;
+        }
+        const body = [session, interim].filter(Boolean).join('\n');
+        const next = base ? (body ? base + '\n\n' + body : base) : body;
+        if (which === 'public') setPublicBhajanForm(p => ({ ...p, lyrics: next }));
+        else setBhajanForm(p => ({ ...p, lyrics: next }));
+        const el = document.getElementById(lyricsInputId(which));
+        if (el) el.scrollTop = el.scrollHeight;
+      };
+      rec.onerror = (e) => {
+        if (e.error === 'not-allowed') { showToast('Microphone access blocked. Please allow microphone in browser settings.', 'error'); stopLyricsDictation(); }
+        else if (e.error && e.error !== 'no-speech' && e.error !== 'aborted') { showToast('Dictation error: ' + e.error, 'error'); stopLyricsDictation(); }
+      };
+      // Android ends the session after a pause even in continuous mode —
+      // restart while the user still has dictation on.
+      rec.onend = () => { if (lyricsDictatingRef.current === which && lyricsRecRef.current === rec) { try { start(); } catch (e) { stopLyricsDictation(); } } };
+      rec.start();
+    };
+    try { start(); } catch (err) { stopLyricsDictation(); showToast('Could not start dictation', 'error'); }
+  };
+  // Leaving the form or closing the sheet stops the mic.
+  useEffect(() => { if (lyricsDictatingRef.current) stopLyricsDictation(); setLyricsSheet(null); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [currentView, showPublicBhajanForm]);
+  useEffect(() => () => stopLyricsDictation(), []);
+  const lyricsToolbarProps = (which) => ({
+    onFullscreen: () => setLyricsSheet(which),
+    onMukhda: () => insertMukhdaBreak(which),
+    onPaste: () => pasteLyrics(which),
+    onDictate: () => toggleLyricsDictation(which),
+    dictating: lyricsDictating === which,
+    onClean: () => cleanLyrics(which),
+    onUndo: () => undoLyrics(which),
+    canUndo: lyricsUndoTick >= 0 && lyricsUndoRef.current[which] !== null && lyricsUndoRef.current[which] !== undefined,
+  });
+  const mukhdaChipText = (lyrics) => {
+    if (!lyrics || !lyrics.trim()) return '';
+    const m = getMukhda({ lyrics });
+    const n = m ? m.split('\n').length : 0;
+    const hasBlank = /\n\s*\n/.test(lyrics.replace(/^\s+/, ''));
+    return hasBlank ? `Mukhda: ${n} line${n === 1 ? '' : 's'}` : 'No blank line yet — first 3 lines used as mukhda';
+  };
+  useAutoGrow(lyricsTextareaRef, bhajanForm.lyrics);
+  useAutoGrow(publicLyricsTextareaRef, publicBhajanForm.lyrics);
 
   // ==============================================
   // VOICE SEARCH (Web Speech API)
@@ -9435,57 +9703,58 @@ const App = () => {
                     </div>
                   )}
 
+                  {/* SESSION 90: toolbar + auto-growing textarea in the lyrics font;
+                      ⛶ opens the full-screen sheet (which takes over the same id). */}
+                  <div className="mb-2">
+                    <LyricsToolbar {...lyricsToolbarProps('bhajan')} darkMode={darkMode} />
+                  </div>
                   <div className="relative">
-                    <textarea
-                      id="hindi-input-lyrics"
-                      value={bhajanForm.lyrics}
-                      onChange={(e) => handleHindiInput(e, 'lyrics')}
-                      onKeyDown={(e) => handleHindiKeyDown(e, 'lyrics')}
-                      onBlur={() => setTimeout(() => setShowSuggestions(false), 300)}
-                      onFocus={() => setActiveTypingField('lyrics')}
-                      rows={10}
-                      className={fInput + " font-mono text-base"}
-                      placeholder={hindiTypingEnabled ? "Type: jai shri babosa (press space to convert)" : "भजन के बोल यहाँ लिखें..."}
-                      style={{ lineHeight: '1.8' }}
-                    />
+                    {lyricsSheet !== 'bhajan' && (
+                      <textarea
+                        ref={lyricsTextareaRef}
+                        id="hindi-input-lyrics"
+                        value={bhajanForm.lyrics}
+                        onChange={(e) => handleHindiInput(e, 'lyrics')}
+                        onKeyDown={(e) => handleHindiKeyDown(e, 'lyrics')}
+                        onBlur={() => setTimeout(() => setShowSuggestions(false), 300)}
+                        onFocus={() => setActiveTypingField('lyrics')}
+                        rows={8}
+                        className={fInput + " text-lg resize-none overflow-hidden"}
+                        placeholder={hindiTypingEnabled ? "Type: jai shri babosa (press space to convert)" : "भजन के बोल यहाँ लिखें…\nया 🎤 Dictate / 📋 Paste ऊपर से"}
+                        style={{ lineHeight: '1.9', fontFamily: LYRICS_FONT }}
+                      />
+                    )}
+                    {lyricsSheet === 'bhajan' && (
+                      <div className={`rounded-xl border border-dashed p-4 text-sm text-center ${darkMode ? 'border-[#0B5A70]/30 text-gray-400' : 'border-[#0B5A70]/20 text-gray-500'}`}>Editing in full screen…</div>
+                    )}
 
-                    {hindiTypingEnabled && showSuggestions && activeTypingField === 'lyrics' && transliterationSuggestions.length > 0 && (
-                      <div className={`absolute bottom-full left-0 right-0 mb-2 border rounded-xl shadow-[0_8px_30px_rgba(11,90,112,0.18)] p-2 flex flex-wrap gap-2 items-center z-30 ${darkMode ? "bg-[#1e2e33] border-[#0B5A70]/30" : "bg-[#FFFCF8] border-[#0B5A70]/15"}`}>
-                        <span className="text-xs text-gray-500 mr-1">
-                          <strong>"{currentWord}"</strong> →
-                        </span>
-                        {transliterationSuggestions.map((suggestion, idx) => (
-                          <button
-                            key={idx}
-                            type="button"
-                            onMouseDown={(e) => {
-                              e.preventDefault();
-                              applySuggestion(suggestion, 'lyrics');
-                            }}
-                            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                              idx === 0
-                                ? 'bg-[#0B5A70] text-white hover:bg-[#094a5d] shadow-md'
-                                : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15'
-                            }`}
-                            title={idx === 0 ? 'Default (press space)' : `Alternative ${idx + 1}`}
-                          >
-                            {idx === 0 && '⭐ '}{suggestion}
-                          </button>
-                        ))}
-                        <button
-                          type="button"
-                          onMouseDown={(e) => {
-                            e.preventDefault();
-                            applySuggestion(currentWord, 'lyrics');
-                          }}
-                          className="px-3 py-1.5 rounded-lg text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition-all border border-gray-300"
-                          title="Keep as English"
-                        >
-                          {currentWord}
-                        </button>
-                      </div>
+                    {lyricsSheet !== 'bhajan' && hindiTypingEnabled && showSuggestions && activeTypingField === 'lyrics' && transliterationSuggestions.length > 0 && (
+                      <TransliterationChips
+                        className="absolute bottom-full left-0 right-0 mb-2 z-30"
+                        currentWord={currentWord}
+                        suggestions={transliterationSuggestions}
+                        onPick={(s) => applySuggestion(s, 'lyrics')}
+                        darkMode={darkMode}
+                      />
                     )}
                   </div>
+                  <LyricsEditorSheet
+                    open={lyricsSheet === 'bhajan'}
+                    onClose={() => setLyricsSheet(null)}
+                    darkMode={darkMode}
+                    inputId="hindi-input-lyrics"
+                    value={bhajanForm.lyrics}
+                    onChange={(e) => handleHindiInput(e, 'lyrics')}
+                    onKeyDown={(e) => handleHindiKeyDown(e, 'lyrics')}
+                    onBlur={() => setTimeout(() => setShowSuggestions(false), 300)}
+                    onFocus={() => setActiveTypingField('lyrics')}
+                    placeholder={hindiTypingEnabled ? "Type: jai shri babosa (press space to convert)" : "भजन के बोल यहाँ लिखें…"}
+                    toolbar={lyricsToolbarProps('bhajan')}
+                    mukhdaChip={mukhdaChipText(bhajanForm.lyrics)}
+                    chips={hindiTypingEnabled && showSuggestions && activeTypingField === 'lyrics' && transliterationSuggestions.length > 0 ? (
+                      <TransliterationChips currentWord={currentWord} suggestions={transliterationSuggestions} onPick={(s) => applySuggestion(s, 'lyrics')} darkMode={darkMode} />
+                    ) : null}
+                  />
 
                   {/* SESSION 42: two hints under Lyrics.
                       (a) How Hindi typing works — shown only while ON.
@@ -12582,56 +12851,56 @@ const App = () => {
                       </p>
                     </div>
                   )}
+                  {/* SESSION 90: same lyrics editor as the library form */}
+                  <div className="mb-2">
+                    <LyricsToolbar {...lyricsToolbarProps('public')} darkMode={false} />
+                  </div>
                   <div className="relative">
-                    <textarea
-                      id="public-hindi-input-lyrics"
-                      value={publicBhajanForm.lyrics}
-                      onChange={(e) => handlePublicHindiInput(e, 'lyrics')}
-                      onKeyDown={(e) => handlePublicHindiKeyDown(e, 'lyrics')}
-                      onBlur={() => setTimeout(() => setShowSuggestions(false), 300)}
-                      onFocus={() => setActiveTypingField('lyrics')}
-                      rows={10}
-                      className="w-full px-4 py-3 border border-[#0B5A70]/15 rounded-xl outline-none font-mono text-base"
-                      placeholder={hindiTypingEnabled ? "Type: jai shri babosa (press space to convert)" : "भजन के बोल यहाँ लिखें..."}
-                      style={{ lineHeight: '1.8' }}
-                    />
-                    {hindiTypingEnabled && showSuggestions && activeTypingField === 'lyrics' && transliterationSuggestions.length > 0 && (
-                      <div className="absolute bottom-full left-0 right-0 mb-2 bg-[#FFFCF8] border border-[#0B5A70]/15 rounded-xl shadow-[0_8px_30px_rgba(11,90,112,0.18)] p-2 flex flex-wrap gap-2 items-center z-30">
-                        <span className="text-xs text-gray-500 mr-1">
-                          <strong>"{currentWord}"</strong> →
-                        </span>
-                        {transliterationSuggestions.map((suggestion, idx) => (
-                          <button
-                            key={idx}
-                            type="button"
-                            onMouseDown={(e) => {
-                              e.preventDefault();
-                              applyPublicSuggestion(suggestion, 'lyrics');
-                            }}
-                            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                              idx === 0
-                                ? 'bg-[#0B5A70] text-white hover:bg-[#094a5d] shadow-md'
-                                : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15'
-                            }`}
-                            title={idx === 0 ? 'Default (press space)' : `Alternative ${idx + 1}`}
-                          >
-                            {idx === 0 && '⭐ '}{suggestion}
-                          </button>
-                        ))}
-                        <button
-                          type="button"
-                          onMouseDown={(e) => {
-                            e.preventDefault();
-                            applyPublicSuggestion(currentWord, 'lyrics');
-                          }}
-                          className="px-3 py-1.5 rounded-lg text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition-all border border-gray-300"
-                          title="Keep as English"
-                        >
-                          {currentWord}
-                        </button>
-                      </div>
+                    {lyricsSheet !== 'public' && (
+                      <textarea
+                        ref={publicLyricsTextareaRef}
+                        id="public-hindi-input-lyrics"
+                        value={publicBhajanForm.lyrics}
+                        onChange={(e) => handlePublicHindiInput(e, 'lyrics')}
+                        onKeyDown={(e) => handlePublicHindiKeyDown(e, 'lyrics')}
+                        onBlur={() => setTimeout(() => setShowSuggestions(false), 300)}
+                        onFocus={() => setActiveTypingField('lyrics')}
+                        rows={8}
+                        className="w-full px-4 py-3 border border-[#0B5A70]/15 rounded-xl outline-none text-lg resize-none overflow-hidden"
+                        placeholder={hindiTypingEnabled ? "Type: jai shri babosa (press space to convert)" : "भजन के बोल यहाँ लिखें…\nया 🎤 Dictate / 📋 Paste ऊपर से"}
+                        style={{ lineHeight: '1.9', fontFamily: LYRICS_FONT }}
+                      />
+                    )}
+                    {lyricsSheet === 'public' && (
+                      <div className="rounded-xl border border-dashed border-[#0B5A70]/20 p-4 text-sm text-center text-gray-500">Editing in full screen…</div>
+                    )}
+                    {lyricsSheet !== 'public' && hindiTypingEnabled && showSuggestions && activeTypingField === 'lyrics' && transliterationSuggestions.length > 0 && (
+                      <TransliterationChips
+                        className="absolute bottom-full left-0 right-0 mb-2 z-30"
+                        currentWord={currentWord}
+                        suggestions={transliterationSuggestions}
+                        onPick={(s) => applyPublicSuggestion(s, 'lyrics')}
+                        darkMode={false}
+                      />
                     )}
                   </div>
+                  <LyricsEditorSheet
+                    open={lyricsSheet === 'public'}
+                    onClose={() => setLyricsSheet(null)}
+                    darkMode={false}
+                    inputId="public-hindi-input-lyrics"
+                    value={publicBhajanForm.lyrics}
+                    onChange={(e) => handlePublicHindiInput(e, 'lyrics')}
+                    onKeyDown={(e) => handlePublicHindiKeyDown(e, 'lyrics')}
+                    onBlur={() => setTimeout(() => setShowSuggestions(false), 300)}
+                    onFocus={() => setActiveTypingField('lyrics')}
+                    placeholder={hindiTypingEnabled ? "Type: jai shri babosa (press space to convert)" : "भजन के बोल यहाँ लिखें…"}
+                    toolbar={lyricsToolbarProps('public')}
+                    mukhdaChip={mukhdaChipText(publicBhajanForm.lyrics)}
+                    chips={hindiTypingEnabled && showSuggestions && activeTypingField === 'lyrics' && transliterationSuggestions.length > 0 ? (
+                      <TransliterationChips currentWord={currentWord} suggestions={transliterationSuggestions} onPick={(s) => applyPublicSuggestion(s, 'lyrics')} darkMode={false} />
+                    ) : null}
+                  />
                 </div>
 
                 {/* Keywords */}
