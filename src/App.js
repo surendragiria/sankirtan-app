@@ -1084,7 +1084,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.10.17.s104';
+const APP_VERSION = '2026.10.17.s105';
 const AUTO_SCROLL_VIEWS = ['live-program', 'bhajan-detail', 'public-bhajan-detail'];
 const LIVE_SCROLL_STEPS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 
@@ -5378,7 +5378,7 @@ const App = () => {
       source: bhajan.source || ''
     });
     setBhajanFormError('');
-    setBhajanFormMore(!!(bhajan.singer || bhajan.lyricist || bhajan.source));
+    setBhajanFormMore(!!(bhajan.singer || bhajan.lyricist));
     setBhajanFormMoods(false);
     setEditingBhajan(bhajan);
     setCurrentView('edit-bhajan');
@@ -9715,7 +9715,7 @@ const App = () => {
                   )}
                   {!ocrProcessing && ocrMessage && <p className="text-xs font-semibold text-[#0B5A70] mb-2">{ocrMessage}</p>}
 
-                  <div className="mb-2">
+                  <div className="mt-4 mb-2">
                     <LyricsToolbar {...lyricsToolbarProps('bhajan')} darkMode={darkMode} />
                   </div>
                   <div className="relative">
@@ -9789,6 +9789,11 @@ const App = () => {
                   </div>
                 </div>
 
+                <div className="mb-3">
+                  <label className={fLabel}>YouTube link</label>
+                  <input type="url" value={bhajanForm.source} onChange={(e) => setBhajanForm({ ...bhajanForm, source: e.target.value })} className={fInput} placeholder="https://youtube.com/…" />
+                </div>
+
                 {/* ---------- More (collapsed unless filled) ---------- */}
                 <button
                   type="button"
@@ -9808,10 +9813,6 @@ const App = () => {
                         <input type="text" {...hindiProps('lyricist')} className={fInput} placeholder="रचनाकार / Lyricist" aria-label="Lyricist" />
                         {chipsFor('lyricist')}
                       </div>
-                    </div>
-                    <div>
-                      <label className={fLabel}>YouTube link</label>
-                      <input type="url" value={bhajanForm.source} onChange={(e) => setBhajanForm({ ...bhajanForm, source: e.target.value })} className={fInput} placeholder="https://youtube.com/…" />
                     </div>
                   </div>
                 )}
@@ -12511,7 +12512,7 @@ const App = () => {
             const m = getMukhda({ lyrics: publicBhajanForm.lyrics });
             return { n: m ? m.split('\n').length : 0, hasBlank: /\n\s*\n/.test(publicBhajanForm.lyrics.replace(/^\s+/, '')) };
           })();
-          const moreOpen = publicFormMore || !!(publicBhajanForm.singer || publicBhajanForm.lyricist || publicBhajanForm.source);
+          const moreOpen = publicFormMore || !!(publicBhajanForm.singer || publicBhajanForm.lyricist);
           return (
           <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 overflow-y-auto">
             <div className="bg-[#FFFCF8] rounded-2xl shadow-[0_8px_40px_rgba(11,90,112,0.15)] max-w-2xl w-full my-8 max-h-[90vh] overflow-y-auto">
@@ -12563,7 +12564,7 @@ const App = () => {
                   )}
                   {!ocrProcessing && ocrMessage && <p className="text-xs font-semibold text-[#0B5A70] mb-2">{ocrMessage}</p>}
 
-                  <div className="mb-2">
+                  <div className="mt-4 mb-2">
                     <LyricsToolbar {...lyricsToolbarProps('public')} darkMode={false} />
                   </div>
                   <div className="relative">
@@ -12629,6 +12630,11 @@ const App = () => {
                   </div>
                 </div>
 
+                <div className="mb-3">
+                  <label className={pLabel}>YouTube link</label>
+                  <input type="url" value={publicBhajanForm.source} onChange={(e) => setPublicBhajanForm({ ...publicBhajanForm, source: e.target.value })} className={pIn} placeholder="https://youtube.com/…" />
+                </div>
+
                 {/* ---------- More ---------- */}
                 <button type="button" onClick={() => setPublicFormMore(v => !v)} aria-expanded={moreOpen} className="text-xs font-semibold mb-3 text-[#0B5A70]">
                   {moreOpen ? '▾' : '+'} Add singer, lyricist…
@@ -12643,10 +12649,6 @@ const App = () => {
                         <input type="text" {...hp('lyricist')} className={pIn} placeholder="रचनाकार / Lyricist" aria-label="Lyricist" />
                         {chips('lyricist')}
                       </div>
-                    </div>
-                    <div>
-                      <label className={pLabel}>YouTube link</label>
-                      <input type="url" value={publicBhajanForm.source} onChange={(e) => setPublicBhajanForm({ ...publicBhajanForm, source: e.target.value })} className={pIn} placeholder="https://youtube.com/…" />
                     </div>
                   </div>
                 )}
