@@ -1084,7 +1084,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.10.17.s119';
+const APP_VERSION = '2026.10.19.s120';
 const AUTO_SCROLL_VIEWS = ['live-program', 'bhajan-detail', 'public-bhajan-detail'];
 const LIVE_SCROLL_STEPS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 
@@ -2534,12 +2534,24 @@ const LYRICS_BOX_STYLE = { height: '320px', lineHeight: '1.9', fontFamily: LYRIC
 // SESSION 115: replace a range of text in a focused field the way the
 // keyboard would (execCommand) — keeps the caret and scroll position and
 // the browser's own undo, unlike re-setting the whole value from React.
-const replaceRangeInField = (el, start, end, text) => {
+// SESSION 120: verify the result — on some iOS builds insertText ignores the
+// programmatic selection and appends instead of replacing. Fall back to
+// setRangeText (no input event, so the caller's `onValue` syncs React state).
+const replaceRangeInField = (el, start, end, text, onValue) => {
   if (!el) return false;
+  const original = el.value;
+  const expected = original.slice(0, start) + text + original.slice(end);
   try {
     el.focus({ preventScroll: true });
     el.setSelectionRange(start, end);
-    return !!(document.execCommand && document.execCommand('insertText', false, text));
+    if (document.execCommand && document.execCommand('insertText', false, text) && el.value === expected) return true;
+  } catch {}
+  try {
+    if (el.value !== original) el.value = original;
+    el.setRangeText(text, start, end, 'end');
+    if (el.value !== expected) return false;
+    if (onValue) onValue(el.value);
+    return true;
   } catch { return false; }
 };
 
@@ -5810,7 +5822,7 @@ const App = () => {
       setShowSuggestions(false);
       setCurrentWord('');
       // SESSION 115: edit in place (no caret/scroll jump); fall back to state replace
-      if (replaceRangeInField(target, wordStart, cursorPos, replacement + separator)) return;
+      if (replaceRangeInField(target, wordStart, cursorPos, replacement + separator, (v) => setBhajanForm(prev => ({ ...prev, [fieldName]: v })))) return;
       const newValue = value.substring(0, wordStart) + replacement + separator + value.substring(cursorPos);
       setBhajanForm(prev => ({ ...prev, [fieldName]: newValue }));
       setTimeout(() => {
@@ -5862,7 +5874,7 @@ const App = () => {
           setCurrentWord('');
           // SESSION 115: swap the word in place after this input event settles
           requestAnimationFrame(() => {
-            if (replaceRangeInField(target, wordStart, value.length, replacement + separator)) return;
+            if (replaceRangeInField(target, wordStart, value.length, replacement + separator, (v) => setBhajanForm(prev => ({ ...prev, [fieldName]: v })))) return;
             setBhajanForm(prev => ({ ...prev, [fieldName]: newValue }));
             setTimeout(() => {
               const newCursor = wordStart + replacement.length + 1;
@@ -5918,7 +5930,7 @@ const App = () => {
 
     setShowSuggestions(false);
     setCurrentWord('');
-    if (replaceRangeInField(fieldElement, wordStart, cursorPos, suggestion + ' ')) return;
+    if (replaceRangeInField(fieldElement, wordStart, cursorPos, suggestion + ' ', (v) => setBhajanForm(prev => ({ ...prev, [fieldName]: v })))) return;
     const newValue = value.substring(0, wordStart) + suggestion + ' ' + value.substring(cursorPos);
     setBhajanForm(prev => ({ ...prev, [fieldName]: newValue }));
     requestAnimationFrame(() => {
@@ -5970,7 +5982,7 @@ const App = () => {
           setCurrentWord('');
           // SESSION 115: swap the word in place after this input event settles
           requestAnimationFrame(() => {
-            if (replaceRangeInField(target, wordStart, value.length, replacement + separator)) return;
+            if (replaceRangeInField(target, wordStart, value.length, replacement + separator, (v) => setPublicBhajanForm(prev => ({ ...prev, [fieldName]: v })))) return;
             setPublicBhajanForm(prev => ({ ...prev, [fieldName]: newValue }));
             setTimeout(() => {
               const newCursor = wordStart + replacement.length + 1;
@@ -6040,7 +6052,7 @@ const App = () => {
       setShowSuggestions(false);
       setCurrentWord('');
       // SESSION 115: edit in place (no caret/scroll jump); fall back to state replace
-      if (replaceRangeInField(target, wordStart, cursorPos, replacement + separator)) return;
+      if (replaceRangeInField(target, wordStart, cursorPos, replacement + separator, (v) => setPublicBhajanForm(prev => ({ ...prev, [fieldName]: v })))) return;
       const newValue = value.substring(0, wordStart) + replacement + separator + value.substring(cursorPos);
       setPublicBhajanForm(prev => ({ ...prev, [fieldName]: newValue }));
       setTimeout(() => {
@@ -6067,7 +6079,7 @@ const App = () => {
 
     setShowSuggestions(false);
     setCurrentWord('');
-    if (replaceRangeInField(fieldElement, wordStart, cursorPos, suggestion + ' ')) return;
+    if (replaceRangeInField(fieldElement, wordStart, cursorPos, suggestion + ' ', (v) => setPublicBhajanForm(prev => ({ ...prev, [fieldName]: v })))) return;
     const newValue = value.substring(0, wordStart) + suggestion + ' ' + value.substring(cursorPos);
     setPublicBhajanForm(prev => ({ ...prev, [fieldName]: newValue }));
     requestAnimationFrame(() => {
