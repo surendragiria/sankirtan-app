@@ -1084,7 +1084,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.10.22.s121';
+const APP_VERSION = '2026.10.22.s122';
 const AUTO_SCROLL_VIEWS = ['live-program', 'bhajan-detail', 'public-bhajan-detail'];
 const LIVE_SCROLL_STEPS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 
@@ -3182,6 +3182,73 @@ const App = () => {
     if (!user || !user.uid) return false;
     return user.uid.toString().trim() === ADMIN_UID;
   }, [user]);
+
+  // SESSION 122: contributors — members the admin allows to add public
+  // bhajans. Stored in Firestore `contributors/{uid}`. Contributors can add
+  // new public bhajans (saved as drafts for admin review) and edit the ones
+  // they added; only the admin reviews, deletes, or edits others' entries.
+  const [isContributor, setIsContributor] = useState(false);
+  const [contributors, setContributors] = useState([]);
+  const [contributorEmail, setContributorEmail] = useState('');
+  const [contributorBusy, setContributorBusy] = useState(false);
+  useEffect(() => {
+    if (!user || !user.uid || !window.firebase) { setIsContributor(false); return; }
+    const db = window.firebase.firestore();
+    const unsub = db.collection('contributors').doc(user.uid).onSnapshot(
+      (d) => setIsContributor(d.exists),
+      () => setIsContributor(false)
+    );
+    return () => unsub();
+  }, [user]);
+  useEffect(() => {
+    if (!isAdmin || !window.firebase) { setContributors([]); return; }
+    const db = window.firebase.firestore();
+    const unsub = db.collection('contributors').onSnapshot(
+      (snap) => setContributors(snap.docs.map(d => ({ id: d.id, ...d.data() }))),
+      () => setContributors([])
+    );
+    return () => unsub();
+  }, [isAdmin]);
+  const canContribute = isAdmin || isContributor;
+  const canEditPublic = (pb) => isAdmin || (isContributor && !!pb && pb.addedByUid === (user && user.uid));
+  const addContributor = async () => {
+    const key = contributorEmail.trim();
+    if (!key || !isAdmin) return;
+    setContributorBusy(true);
+    try {
+      const db = window.firebase.firestore();
+      let target = null;
+      if (key.includes('@')) {
+        const q = await db.collection('users').where('email', '==', key.toLowerCase()).limit(1).get();
+        if (q.empty) {
+          const q2 = await db.collection('users').where('email', '==', key).limit(1).get();
+          if (!q2.empty) target = { id: q2.docs[0].id, ...q2.docs[0].data() };
+        } else target = { id: q.docs[0].id, ...q.docs[0].data() };
+        if (!target) { showToast('No member found with that email — they must sign in to the app once first', 'error'); return; }
+      } else {
+        const d = await db.collection('users').doc(key).get();
+        target = d.exists ? { id: d.id, ...d.data() } : { id: key };
+      }
+      await db.collection('contributors').doc(target.id).set({
+        uid: target.id,
+        email: target.email || null,
+        displayName: target.displayName || null,
+        grantedAt: window.firebase.firestore.FieldValue.serverTimestamp(),
+        grantedBy: user.uid
+      });
+      setContributorEmail('');
+      showToast(`✓ ${target.displayName || target.email || target.id} can now add public bhajans`);
+    } catch (e) {
+      showToast('Could not add: ' + e.message, 'error');
+    } finally { setContributorBusy(false); }
+  };
+  const removeContributor = (c) => askConfirm(
+    { title: 'Remove contributor?', message: `${c.displayName || c.email || c.uid} will no longer be able to add public bhajans. Bhajans they already added stay.`, confirmLabel: 'Remove' },
+    async () => {
+      try { await window.firebase.firestore().collection('contributors').doc(c.id).delete(); showToast('Removed'); }
+      catch (e) { showToast('Could not remove: ' + e.message, 'error'); }
+    }
+  );
 
   // New/Edit bhajan form
   const [bhajanForm, setBhajanForm] = useState({
@@ -6636,7 +6703,7 @@ const App = () => {
   };
 
   const openAddPublicBhajan = (prefill = {}) => {
-    if (!isAdmin) return;
+    if (!canContribute) return;
     if (!(prefill && typeof prefill === 'object' && !prefill.nativeEvent && prefill.title !== undefined)) setPublishFromId(null);
     setPublicBhajanForm({
       title: '',
@@ -6663,7 +6730,7 @@ const App = () => {
   // library. Opens the public Add form prefilled; on save the personal
   // copy is linked to the new public doc.
   const publishBhajanToPublic = (bhajan) => {
-    if (!isAdmin || !bhajan) return;
+    if (!canContribute || !bhajan) return;
     setPublishFromId(bhajan.id);
     openAddPublicBhajan({
       title: bhajan.title || '',
@@ -6681,7 +6748,7 @@ const App = () => {
   };
 
   const openEditPublicBhajan = (bhajan) => {
-    if (!isAdmin) return;
+    if (!canEditPublic(bhajan)) return;
     setPublicBhajanForm({
       title: bhajan.title || '',
       lyrics: bhajan.lyrics || '',
@@ -6746,7 +6813,8 @@ const App = () => {
   };
 
   const savePublicBhajan = async () => {
-    if (!isAdmin) return;
+    if (!canContribute) return;
+    if (editingPublicBhajan && !canEditPublic(editingPublicBhajan)) return;
     if (!publicBhajanForm.title.trim()) {
       setPublicBhajanFormError('Please enter a title');
       return;
@@ -6773,7 +6841,7 @@ const App = () => {
         lyricist: (publicBhajanForm.lyricist || '').trim(), // SESSION 11
         keywords: publicBhajanForm.keywords,
         source: publicBhajanForm.source.trim(),
-        addedByUid: user.uid,
+        addedByUid: editingPublicBhajan ? (editingPublicBhajan.addedByUid || user.uid) : user.uid,
         updatedAt: window.firebase.firestore.FieldValue.serverTimestamp()
       };
       // SESSION 85: revision tracking. rev bumps on every save; pushRev is
@@ -6784,8 +6852,9 @@ const App = () => {
       const nextRev = prevRev + 1;
       bhajanData.rev = nextRev;
       bhajanData.pushRev = publicBhajanForm.applyToCopies ? nextRev : (editingPublicBhajan ? (editingPublicBhajan.pushRev || 0) : nextRev);
-      bhajanData.reviewStatus = publicBhajanForm.reviewed ? 'reviewed' : 'draft';
-      if (publicBhajanForm.reviewed && !(editingPublicBhajan && editingPublicBhajan.reviewStatus === 'reviewed')) {
+      // Contributors' entries always stay 'draft' until the admin reviews them.
+      bhajanData.reviewStatus = isAdmin && publicBhajanForm.reviewed ? 'reviewed' : 'draft';
+      if (isAdmin && publicBhajanForm.reviewed && !(editingPublicBhajan && editingPublicBhajan.reviewStatus === 'reviewed')) {
         bhajanData.reviewedAt = window.firebase.firestore.FieldValue.serverTimestamp();
       }
 
@@ -9246,7 +9315,7 @@ const App = () => {
                 {libraryFabOpen && (
                   <>
                     <div className="fixed inset-0 z-[-1]" onClick={() => setLibraryFabOpen(false)} />
-                    {isAdmin && (
+                    {canContribute && (
                       <button onClick={() => { setLibraryFabOpen(false); openAddPublicBhajan(); }} className="bg-purple-700 text-white font-semibold px-4 py-2 rounded-full shadow-lg text-sm flex items-center gap-2">🌐 Public bhajan</button>
                     )}
                     <button onClick={() => { setLibraryFabOpen(false); openCreateParody(); }} className="bg-[#E65100] text-white font-semibold px-4 py-2 rounded-full shadow-lg text-sm flex items-center gap-2">🎭 Medley</button>
@@ -9394,7 +9463,7 @@ const App = () => {
                       into an overflow menu. Same behavior; less visual weight
                       — destructive actions shouldn't share space with routine
                       Edit/View/Add-to buttons. */}
-                  {isAdmin && !selectedBhajan.virtual && !publicBhajans.some(b => b.id === (selectedBhajan.savedFromPublicId || selectedBhajan.id)) && (
+                  {canContribute && !selectedBhajan.virtual && !publicBhajans.some(b => b.id === (selectedBhajan.savedFromPublicId || selectedBhajan.id)) && (
                     <button
                       onClick={() => publishBhajanToPublic(selectedBhajan)}
                       className="h-9 px-3 rounded-full text-xs font-semibold flex items-center gap-1 bg-purple-700 text-white hover:bg-purple-800"
@@ -9403,7 +9472,7 @@ const App = () => {
                       🌐 Publish
                     </button>
                   )}
-                  {isAdmin && publicBhajans.some(b => b.id === (selectedBhajan.savedFromPublicId || selectedBhajan.id)) && (
+                  {canEditPublic(publicBhajans.find(b => b.id === (selectedBhajan.savedFromPublicId || selectedBhajan.id))) && (
                     <button
                       onClick={() => openEditPublicBhajan(publicBhajans.find(b => b.id === (selectedBhajan.savedFromPublicId || selectedBhajan.id)) || selectedBhajan)}
                       className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors ${darkMode ? 'bg-purple-900/40 text-purple-200' : 'bg-purple-100 text-purple-800 hover:bg-purple-200'}`}
@@ -11386,7 +11455,7 @@ const App = () => {
                     </svg>
                   </button>
                 </div>
-                {isAdmin && (
+                {canContribute && (
                   <button
                     onClick={openAddPublicBhajan}
                     className="bg-[#0B5A70] hover:bg-[#094a5d] text-white font-semibold px-4 rounded-xl text-sm flex items-center gap-1 shadow-md flex-shrink-0"
@@ -11748,7 +11817,7 @@ const App = () => {
                   </button>
 
 
-                  {isAdmin && (
+                  {canEditPublic(selectedPublicBhajan) && (
                     <>
                       <button
                         onClick={() => openEditPublicBhajan(selectedPublicBhajan)}
@@ -11758,7 +11827,7 @@ const App = () => {
                       >
 <IconPencil size={16} />
                       </button>
-                      <div className="relative">
+                      {isAdmin && <div className="relative">
                         <button
                           onClick={() => setShowDeleteMenu(showDeleteMenu === 'public' ? null : 'public')}
                           className={`w-9 h-9 rounded-full flex items-center justify-center text-lg leading-none transition-colors ${darkMode ? 'bg-[#1e2e33] text-gray-300 hover:bg-[#0B5A70]/20' : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15'}`}
@@ -11781,7 +11850,7 @@ const App = () => {
                             </div>
                           </>
                         )}
-                      </div>
+                      </div>}
                     </>
                   )}
                 </div>
@@ -12331,6 +12400,41 @@ const App = () => {
                 </div>
               </div>
 
+              {/* SESSION 122: CONTRIBUTORS */}
+              <div className="bg-[#FFFCF8] rounded-2xl shadow-[0_2px_12px_rgba(11,90,112,0.06)] p-6 mb-6 border border-purple-200/60">
+                <h3 className="text-lg font-bold text-[#0B5A70] mb-1">🤝 Contributors</h3>
+                <p className="text-sm text-gray-600 mb-3">Members who may add bhajans to the Public Library. Their additions are marked Unreviewed until you check them; they can edit only what they added.</p>
+                <div className="flex gap-2 mb-3">
+                  <input
+                    type="text"
+                    value={contributorEmail}
+                    onChange={(e) => setContributorEmail(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') addContributor(); }}
+                    placeholder="Member's email (must have signed in once)"
+                    className="flex-1 px-3 py-2 border border-[#0B5A70]/20 rounded-xl text-sm outline-none focus:border-[#0B5A70]/40"
+                    aria-label="Contributor email"
+                  />
+                  <button onClick={addContributor} disabled={contributorBusy || !contributorEmail.trim()} className="px-4 py-2 rounded-xl text-sm font-semibold bg-purple-700 text-white disabled:opacity-50">
+                    {contributorBusy ? '…' : '+ Add'}
+                  </button>
+                </div>
+                {contributors.length === 0 ? (
+                  <p className="text-xs text-gray-500">No contributors yet.</p>
+                ) : (
+                  <ul className="divide-y divide-[#0B5A70]/8">
+                    {contributors.map(c => (
+                      <li key={c.id} className="py-2 flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-[#0B5A70] truncate">{c.displayName || c.email || c.uid}</p>
+                          <p className="text-xs text-gray-500 truncate">{c.email || c.uid}{' · '}{publicBhajans.filter(b => b.addedByUid === c.id).length} added</p>
+                        </div>
+                        <button onClick={() => removeContributor(c)} className="text-xs font-semibold text-red-600 hover:text-red-800 flex-shrink-0">Remove</button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+
               {/* SESSION 88: FETCH LYRICS FROM A WEB PAGE */}
               <div className="bg-[#FFFCF8] rounded-2xl shadow-[0_2px_12px_rgba(11,90,112,0.06)] p-6 mb-6 border border-teal-200/60">
                 <h3 className="text-lg font-bold text-[#0B5A70] mb-1">🔗 Fetch lyrics from a web page</h3>
@@ -12716,7 +12820,7 @@ const App = () => {
         {/* ==============================================
             PUBLIC BHAJAN ADD/EDIT MODAL (Admin only)
             ============================================== */}
-        {showPublicBhajanForm && isAdmin && (() => {
+        {showPublicBhajanForm && canContribute && (() => {
           // SESSION 97: same simplified layout as the library form.
           const pIn = 'w-full px-4 py-3 border border-[#0B5A70]/15 rounded-xl focus:ring-4 focus:ring-[#0B5A70]/10 focus:border-[#0B5A70]/30 outline-none bg-[#FFFCF8] text-gray-900';
           const pLabel = 'block text-sm font-semibold text-[#0B5A70] mb-1';
@@ -12899,8 +13003,13 @@ const App = () => {
                   ))}
                 </div>
 
-                {/* ---------- Review + propagation ---------- */}
-                <div className="rounded-xl border border-purple-200 bg-purple-50/60 p-3 space-y-2 mb-4">
+                {/* ---------- Review + propagation (admin) ---------- */}
+                {!isAdmin && (
+                  <div className="rounded-xl border border-teal-200 bg-teal-50/60 p-3 mb-4 text-sm text-[#0B5A70]">
+                    🙏 Thank you for contributing. Your bhajan goes into the Public Library straight away and is marked <strong>Unreviewed</strong> until the admin checks it.
+                  </div>
+                )}
+                <div className={`rounded-xl border border-purple-200 bg-purple-50/60 p-3 space-y-2 mb-4 ${isAdmin ? '' : 'hidden'}`}>
                   <label className="flex items-center gap-3 cursor-pointer">
                     <input type="checkbox" checked={!!publicBhajanForm.reviewed} onChange={(e) => setPublicBhajanForm({ ...publicBhajanForm, reviewed: e.target.checked })} className="w-4 h-4 accent-purple-700" />
                     <span className="text-sm font-semibold text-[#0B5A70]">Reviewed &amp; finalised</span>
@@ -12928,7 +13037,7 @@ const App = () => {
                   <button onClick={close} className="px-6 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 font-semibold">Cancel</button>
                 </div>
                 {/* SESSION 113: delete from the edit form */}
-                {editingPublicBhajan && (
+                {editingPublicBhajan && isAdmin && (
                   <div className="mt-4 text-center">
                     <button
                       type="button"
