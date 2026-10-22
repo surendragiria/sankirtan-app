@@ -1,0 +1,167 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ============================================
+    // HELPERS
+    // ============================================
+    function isAdmin() {
+      return request.auth != null
+        && request.auth.uid == 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Session 122: a signed-in member the admin has listed under
+    // /contributors/{uid} may add public bhajans (as unreviewed drafts)
+    // and edit only the ones they added.
+    function isContributor() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/contributors/$(request.auth.uid));
+    }
+
+    // ============================================
+    // USER DATA - private to each user
+    // (admin may READ profiles — needed to look a member up by email
+    //  when granting contributor rights; admin never writes them)
+    // ============================================
+    match /users/{userId} {
+      allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow write: if isSignedIn() && request.auth.uid == userId;
+
+      match /bhajans/{bhajanId} {
+        allow read, write: if isSignedIn() && request.auth.uid == userId;
+      }
+      match /parodies/{parodyId} {
+        allow read, write: if isSignedIn() && request.auth.uid == userId;
+      }
+      match /programs/{programId} {
+        allow read, write: if isSignedIn() && request.auth.uid == userId;
+      }
+      match /saved/{savedId} {
+        allow read, write: if isSignedIn() && request.auth.uid == userId;
+      }
+    }
+
+    // ============================================
+    // CONTRIBUTORS - admin manages; each member can see their own entry
+    // ============================================
+    match /contributors/{uid} {
+      allow read: if isSignedIn() && (request.auth.uid == uid || isAdmin());
+      allow write: if isAdmin();
+    }
+
+    // ============================================
+    // PUBLIC BHAJANS - readable by everyone (including guests)
+    // ============================================
+    match /publicBhajans/{bhajanId} {
+      allow read: if true;
+
+      // Admin, or a contributor adding under their own uid as a draft.
+      allow create: if isAdmin()
+        || (
+          isContributor()
+          && request.resource.data.addedByUid == request.auth.uid
+          && request.resource.data.reviewStatus == 'draft'
+        );
+
+      allow delete: if isAdmin();
+
+      // Admin can update anything.
+      //
+      // A contributor can update a bhajan they added, but cannot mark it
+      // reviewed or hand it to someone else.
+      //
+      // Regular signed-in users can update EITHER saveCount OR
+      // readCount (Session 19), each on its own:
+      //
+      //   - saveCount: increment by exactly +1 (single tap = one
+      //     save). Same as before.
+      //   - readCount: forward-only integer. Any value strictly
+      //     greater than the current is accepted, which lets the
+      //     Session 19 one-shot backfill jump from undefined →
+      //     saveCount+1 in a single write. Regular reads increment
+      //     by 1. Decrements and arbitrary values are still denied.
+      //
+      // .get('field', 0) handles pre-existing docs that don't
+      // have the field yet (resource.data.field would throw).
+      //
+      // NOTE: no rate limiting. Both counters are SOFT popularity
+      // signals — a malicious client can loop and inflate. If
+      // either needs to be trustworthy, move the increment
+      // server-side via a Cloud Function that dedupes by
+      // user+bhajan+day.
+      allow update: if isSignedIn() && (
+        isAdmin()
+        ||
+        (
+          isContributor()
+          && resource.data.addedByUid == request.auth.uid
+          && request.resource.data.addedByUid == request.auth.uid
+          && request.resource.data.reviewStatus == 'draft'
+        )
+        ||
+        (
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['saveCount'])
+          && request.resource.data.saveCount == resource.data.get('saveCount', 0) + 1
+        )
+        ||
+        (
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readCount'])
+          && request.resource.data.readCount is int
+          && request.resource.data.readCount > resource.data.get('readCount', 0)
+        )
+      );
+    }
+
+    // ============================================
+    // DAILY BHAJANS - "आज का भजन · Today's Bhajan" (Session 16)
+    // ============================================
+    match /dailyBhajans/{dayKey} {
+      allow read: if true;
+
+      allow create, update: if isAdmin()
+        && request.resource.data.bhajanId is string
+        && request.resource.data.bhajanId.size() > 0
+        && request.resource.data.bhajanId.size() < 200
+        && request.resource.data.curatedByUid == request.auth.uid
+        && (
+          !('note' in request.resource.data)
+          || (request.resource.data.note is string
+              && request.resource.data.note.size() < 200)
+        );
+
+      allow delete: if isAdmin();
+    }
+
+    // ============================================
+    // FEEDBACK - users create, admin reads/deletes
+    // ============================================
+    match /feedback/{feedbackId} {
+      allow create: if isSignedIn()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.text is string
+        && request.resource.data.text.size() > 4
+        && request.resource.data.text.size() < 1001
+        && request.resource.data.status == 'new'
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.keys().hasOnly(
+             ['userId', 'userName', 'userEmail', 'userAgent',
+              'text', 'createdAt', 'status']
+           );
+
+      allow read, delete: if isAdmin();
+      allow update: if false;
+    }
+
+    // ============================================
+    // APP CONFIG - dropdown lists, deity/category options
+    // ============================================
+    match /appConfig/{doc} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+  }
+}
