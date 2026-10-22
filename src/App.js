@@ -1084,7 +1084,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.10.19.s120';
+const APP_VERSION = '2026.10.22.s121';
 const AUTO_SCROLL_VIEWS = ['live-program', 'bhajan-detail', 'public-bhajan-detail'];
 const LIVE_SCROLL_STEPS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 
@@ -3229,6 +3229,7 @@ const App = () => {
   dictationVocabRef.current = dictationVocab;
   const [transliterationSuggestions, setTransliterationSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const keepEnglishRef = useRef(null); // SESSION 121: word the user chose to keep in English
   const [currentWord, setCurrentWord] = useState('');
   const [activeTypingField, setActiveTypingField] = useState(null);
   const suggestionsAbortRef = useRef(null);
@@ -5813,6 +5814,7 @@ const App = () => {
       return;
     }
 
+    if (keepEnglishRef.current && currentWordText === keepEnglishRef.current) { keepEnglishRef.current = null; setShowSuggestions(false); return; }
     const cachedSuggestions = getCachedSuggestions(currentWordText);
 
     if (cachedSuggestions && cachedSuggestions.length > 0) {
@@ -5863,6 +5865,12 @@ const App = () => {
       }
       const lastWord = beforeSeparator.substring(wordStart);
 
+      if (keepEnglishRef.current && lastWord === keepEnglishRef.current) {
+        keepEnglishRef.current = null;
+        setShowSuggestions(false);
+        setCurrentWord('');
+        return;
+      }
       if (lastWord && /^[a-zA-Z]+$/.test(lastWord)) {
         const cachedSuggestions = getCachedSuggestions(lastWord);
 
@@ -5930,6 +5938,8 @@ const App = () => {
 
     setShowSuggestions(false);
     setCurrentWord('');
+    // SESSION 121: picking the plain English chip must not get re-converted on the space that follows
+    keepEnglishRef.current = /^[a-zA-Z]+$/.test(suggestion) ? suggestion : null;
     if (replaceRangeInField(fieldElement, wordStart, cursorPos, suggestion + ' ', (v) => setBhajanForm(prev => ({ ...prev, [fieldName]: v })))) return;
     const newValue = value.substring(0, wordStart) + suggestion + ' ' + value.substring(cursorPos);
     setBhajanForm(prev => ({ ...prev, [fieldName]: newValue }));
@@ -5971,6 +5981,12 @@ const App = () => {
       }
       const lastWord = beforeSeparator.substring(wordStart);
 
+      if (keepEnglishRef.current && lastWord === keepEnglishRef.current) {
+        keepEnglishRef.current = null;
+        setShowSuggestions(false);
+        setCurrentWord('');
+        return;
+      }
       if (lastWord && /^[a-zA-Z]+$/.test(lastWord)) {
         const cachedSuggestions = getCachedSuggestions(lastWord);
 
@@ -6043,6 +6059,7 @@ const App = () => {
       return;
     }
 
+    if (keepEnglishRef.current && currentWordText === keepEnglishRef.current) { keepEnglishRef.current = null; setShowSuggestions(false); return; }
     const cachedSuggestions = getCachedSuggestions(currentWordText);
 
     if (cachedSuggestions && cachedSuggestions.length > 0) {
@@ -6079,6 +6096,7 @@ const App = () => {
 
     setShowSuggestions(false);
     setCurrentWord('');
+    keepEnglishRef.current = /^[a-zA-Z]+$/.test(suggestion) ? suggestion : null;
     if (replaceRangeInField(fieldElement, wordStart, cursorPos, suggestion + ' ', (v) => setPublicBhajanForm(prev => ({ ...prev, [fieldName]: v })))) return;
     const newValue = value.substring(0, wordStart) + suggestion + ' ' + value.substring(cursorPos);
     setPublicBhajanForm(prev => ({ ...prev, [fieldName]: newValue }));
