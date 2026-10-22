@@ -27,7 +27,9 @@ const htmlToText = (html) => {
   let h = html
     .replace(/<!--[\s\S]*?-->/g, ' ')
     .replace(/<(script|style|noscript|svg|iframe|template)[\s\S]*?<\/\1>/gi, ' ')
-    .replace(/<(nav|header|footer|aside|form)[\s\S]*?<\/\1>/gi, ' ');
+    .replace(/<(nav|header|footer|aside|form|select)[\s\S]*?<\/\1>/gi, ' ')
+    // link-heavy lists are menus / category clouds, not lyrics
+    .replace(/<(ul|ol)\b[\s\S]*?<\/\1>/gi, (m) => ((m.match(/<a\b/gi) || []).length >= 4 ? ' ' : m));
   h = h.replace(/<br\s*\/?>/gi, '\n')
        .replace(/<\/(p|div|li|h[1-6]|tr|section|article|blockquote|pre|dd|dt)>/gi, '\n\n')
        .replace(/<(p|div|li|h[1-6]|tr|section|article|blockquote|pre)\b[^>]*>/gi, '\n')
@@ -49,9 +51,18 @@ const devCount = (s) => (s.match(DEV) || []).length;
 const pickLyrics = (text) => {
   const paras = text.split(/\n\s*\n/).map(p => p.trim()).filter(Boolean);
   if (paras.length === 0) return '';
+  const seen = {};
+  paras.forEach(p => { seen[p] = (seen[p] || 0) + 1; });
   const score = paras.map(p => {
     const d = devCount(p);
     const letters = (p.match(/\p{L}/gu) || []).length || 1;
+    const lines = p.split('\n').filter(l => l.trim());
+    const words = p.split(/\s+/).filter(Boolean).length;
+    // Menu items / category names: a single short line, often repeated
+    // elsewhere on the page (desktop + mobile menus). Lyrics are stanzas
+    // (several lines) or at least a full line of song.
+    if (seen[p] > 1) return 0;
+    if (lines.length < 2 && words < 4) return 0;
     return d / letters >= 0.5 && d >= 8 ? d : 0;
   });
   let best = { sum: 0, from: 0, to: -1 };
@@ -102,12 +113,28 @@ module.exports = async (req, res) => {
     const h1M = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
     const clean = (s) => decode(s.replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim();
     const title = (h1M && clean(h1M[1])) || (titleM && clean(titleM[1]).replace(/\s*[|\-–—]\s*[^|\-–—]*$/, '')) || '';
-    const text = htmlToText(html);
-    const lyrics = pickLyrics(text);
+    // Prefer the page's main content region when it has real Devanagari
+    // content; sidebars and menus live outside <article>/<main>.
+    const regions = [];
+    for (const re of [/<article\b[\s\S]*?<\/article>/gi, /<main\b[\s\S]*?<\/main>/gi, /<div\b[^>]*class="[^"]*(?:entry-content|post-content|td-post-content|post-body|lyrics|article-content)[^"]*"[^>]*>[\s\S]*?(?=<(?:footer|aside)\b|<div\b[^>]*class="[^"]*(?:comments|related|sidebar|post-navigation)[^"]*")/gi]) {
+      const m = html.match(re);
+      if (m) regions.push(...m);
+    }
+    const fullText = htmlToText(html);
+    let text = fullText;
+    let best = 0;
+    for (const r of regions) {
+      const t = htmlToText(r);
+      const d = devCount(pickLyrics(t));
+      if (d > best && d >= 40) { best = d; text = t; }
+    }
+    let lyrics = pickLyrics(text) || pickLyrics(fullText);
+    // Don't repeat the heading as the first stanza.
+    if (title && lyrics.split(/\n\s*\n/)[0].trim() === title.trim()) lyrics = lyrics.replace(/^[^\n]*\n\s*\n/, '');
     // A site's home/listing page has many short excerpts, not one song.
     const isRoot = url.pathname === '/' || url.pathname === '';
     const hint = isRoot ? 'That is the site\'s home page — open the bhajan you want and paste that page\'s link.' : (lyrics ? '' : 'No Hindi lyrics block was found on that page.');
-    return res.status(200).json({ ok: true, host: url.hostname, title: isRoot ? '' : title, lyrics: isRoot ? '' : lyrics, text: text.slice(0, 60000), hint });
+    return res.status(200).json({ ok: true, host: url.hostname, title: isRoot ? '' : title, lyrics: isRoot ? '' : lyrics, text: fullText.slice(0, 60000), hint });
   } catch (e) {
     const msg = e && e.name === 'AbortError' ? 'The page took too long to respond' : 'Could not fetch that page';
     return res.status(502).json({ ok: false, error: msg });
