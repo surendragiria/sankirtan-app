@@ -1084,7 +1084,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.10.22.s122';
+const APP_VERSION = '2026.10.22.s123';
 const AUTO_SCROLL_VIEWS = ['live-program', 'bhajan-detail', 'public-bhajan-detail'];
 const LIVE_SCROLL_STEPS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 
@@ -12438,7 +12438,7 @@ const App = () => {
               {/* SESSION 88: FETCH LYRICS FROM A WEB PAGE */}
               <div className="bg-[#FFFCF8] rounded-2xl shadow-[0_2px_12px_rgba(11,90,112,0.06)] p-6 mb-6 border border-teal-200/60">
                 <h3 className="text-lg font-bold text-[#0B5A70] mb-1">🔗 Fetch lyrics from a web page</h3>
-                <p className="text-sm text-gray-600 mb-3">Paste a link; the Devanagari block is picked out for you to check, then opened in the Add Public Bhajan form.</p>
+                <p className="text-sm text-gray-600 mb-3">Paste the link of a bhajan's own page (not the site's home page); the Devanagari block is picked out for you to check, then opened in the Add Public Bhajan form.</p>
                 <div className="flex gap-2">
                   <input
                     type="url"
@@ -12456,6 +12456,9 @@ const App = () => {
                     {fetchBusy ? 'Fetching…' : 'Fetch'}
                   </button>
                 </div>
+                {fetchResult && !fetchResult.error && fetchResult.hint && (
+                  <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-sm">💡 {fetchResult.hint}</div>
+                )}
                 {fetchResult && fetchResult.error && (
                   <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">⚠️ {fetchResult.error}</div>
                 )}

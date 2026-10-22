@@ -85,7 +85,9 @@ module.exports = async (req, res) => {
       signal: ctrl.signal,
       redirect: 'follow',
       headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; SankirtanLyricsFetcher/1.0; +https://sankirtan.app)',
+        // Some lyrics sites (Cloudflare "bot fight" mode) refuse unknown
+        // user-agents with a 403; present as an ordinary browser.
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.5',
         'Accept-Language': 'hi-IN,hi;q=0.9,en;q=0.8'
       }
@@ -102,7 +104,10 @@ module.exports = async (req, res) => {
     const title = (h1M && clean(h1M[1])) || (titleM && clean(titleM[1]).replace(/\s*[|\-–—]\s*[^|\-–—]*$/, '')) || '';
     const text = htmlToText(html);
     const lyrics = pickLyrics(text);
-    return res.status(200).json({ ok: true, host: url.hostname, title, lyrics, text: text.slice(0, 60000) });
+    // A site's home/listing page has many short excerpts, not one song.
+    const isRoot = url.pathname === '/' || url.pathname === '';
+    const hint = isRoot ? 'That is the site\'s home page — open the bhajan you want and paste that page\'s link.' : (lyrics ? '' : 'No Hindi lyrics block was found on that page.');
+    return res.status(200).json({ ok: true, host: url.hostname, title: isRoot ? '' : title, lyrics: isRoot ? '' : lyrics, text: text.slice(0, 60000), hint });
   } catch (e) {
     const msg = e && e.name === 'AbortError' ? 'The page took too long to respond' : 'Could not fetch that page';
     return res.status(502).json({ ok: false, error: msg });
