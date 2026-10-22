@@ -31,6 +31,7 @@ const htmlToText = (html) => {
     // link-heavy lists are menus / category clouds, not lyrics
     .replace(/<(ul|ol)\b[\s\S]*?<\/\1>/gi, (m) => ((m.match(/<a\b/gi) || []).length >= 4 ? ' ' : m));
   h = h.replace(/<br\s*\/?>/gi, '\n')
+       .replace(/<hr\b[^>]*>/gi, '\n\n')
        .replace(/<\/(p|div|li|h[1-6]|tr|section|article|blockquote|pre|dd|dt)>/gi, '\n\n')
        .replace(/<(p|div|li|h[1-6]|tr|section|article|blockquote|pre)\b[^>]*>/gi, '\n')
        .replace(/<[^>]+>/g, ' ');
@@ -61,8 +62,9 @@ const pickLyrics = (text) => {
     // Menu items / category names: a single short line, often repeated
     // elsewhere on the page (desktop + mobile menus). Lyrics are stanzas
     // (several lines) or at least a full line of song.
-    if (seen[p] > 1) return 0;
+    if (seen[p] > 1 && lines.length < 2) return 0;
     if (lines.length < 2 && words < 4) return 0;
+    if (lines.length < 2 && /(\.\.\.|…)\s*$/.test(p)) return 0; // post excerpt
     return d / letters >= 0.5 && d >= 8 ? d : 0;
   });
   let best = { sum: 0, from: 0, to: -1 };
@@ -79,6 +81,40 @@ const pickLyrics = (text) => {
   }
   if (best.to < best.from) return '';
   return paras.slice(best.from, best.to + 1).join('\n\n');
+};
+
+// Line-based fallback: the longest run of Devanagari lines (blank lines and
+// up to two stray lines allowed inside the run). Robust to pages that put the
+// whole song in one block or separate stanzas with <hr>.
+const pickLyricsByLines = (text, exclude = []) => {
+  const ex = new Set(exclude.map(x => x.trim()).filter(Boolean));
+  const lines = text.split('\n');
+  const good = lines.map(l => {
+    const t = l.trim();
+    if (!t) return false;
+    const d = devCount(t);
+    const letters = (t.match(/\p{L}/gu) || []).length || 1;
+    const words = t.split(/\s+/).length;
+    return d >= 6 && d / letters >= 0.6 && words >= 4 && !ex.has(t) && !/(\.\.\.|…)\s*$/.test(t);
+  });
+  let best = { sum: 0, from: 0, to: -1, n: 0 };
+  let i = 0;
+  while (i < lines.length) {
+    if (!good[i]) { i++; continue; }
+    let j = i, sum = 0, n = 0, stray = 0, last = i;
+    while (j < lines.length) {
+      const t = lines[j].trim();
+      if (good[j]) { sum += devCount(t); n++; last = j; stray = 0; }
+      else if (t) { stray++; if (stray > 2) break; }
+      j++;
+    }
+    if (sum > best.sum) best = { sum, from: i, to: last, n };
+    i = last + 1;
+  }
+  if (best.n < 4) return '';
+  return lines.slice(best.from, best.to + 1)
+    .filter((l, k) => good[best.from + k] || !l.trim() || (devCount(l) >= 3 && !ex.has(l.trim())))
+    .join('\n').replace(/\n{3,}/g, '\n\n').trim();
 };
 
 module.exports = async (req, res) => {
@@ -128,9 +164,17 @@ module.exports = async (req, res) => {
       const d = devCount(pickLyrics(t));
       if (d > best && d >= 40) { best = d; text = t; }
     }
-    let lyrics = pickLyrics(text) || pickLyrics(fullText);
-    // Don't repeat the heading as the first stanza.
-    if (title && lyrics.split(/\n\s*\n/)[0].trim() === title.trim()) lyrics = lyrics.replace(/^[^\n]*\n\s*\n/, '');
+    // Take whichever method finds the most song text.
+    const candidates = [pickLyrics(text), pickLyrics(fullText), pickLyricsByLines(fullText, [title, titleM ? clean(titleM[1]) : ''])];
+    let lyrics = candidates.reduce((a, b) => (devCount(b) > devCount(a) ? b : a), '');
+    // Tidy: drop heading/title lines and non-Devanagari lines at the edges
+    // (site name, credits, share buttons).
+    const headings = new Set([title, titleM ? clean(titleM[1]) : ''].map(x => x.trim()).filter(Boolean));
+    const isDev = (l) => { const d = devCount(l); const n = (l.match(/\p{L}/gu) || []).length || 1; return d / n >= 0.5; };
+    let ls = lyrics.split('\n').filter(l => !headings.has(l.trim()));
+    while (ls.length && (!ls[0].trim() || !isDev(ls[0]))) ls.shift();
+    while (ls.length && (!ls[ls.length - 1].trim() || !isDev(ls[ls.length - 1]))) ls.pop();
+    lyrics = ls.join('\n').replace(/\n{3,}/g, '\n\n').trim();
     // A site's home/listing page has many short excerpts, not one song.
     const isRoot = url.pathname === '/' || url.pathname === '';
     const hint = isRoot ? 'That is the site\'s home page — open the bhajan you want and paste that page\'s link.' : (lyrics ? '' : 'No Hindi lyrics block was found on that page.');
