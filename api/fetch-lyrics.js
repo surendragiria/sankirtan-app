@@ -24,7 +24,11 @@ const decode = (s) => s
   });
 
 const htmlToText = (html) => {
+  // Newlines in HTML source are just whitespace; only <br>, <hr> and block
+  // tags make line breaks. (A source newline after each <br> was turning
+  // every lyric line into its own paragraph.)
   let h = html
+    .replace(/[\r\n\t]+/g, ' ')
     .replace(/<!--[\s\S]*?-->/g, ' ')
     .replace(/<(script|style|noscript|svg|iframe|template)[\s\S]*?<\/\1>/gi, ' ')
     .replace(/<(nav|header|footer|aside|form|select)[\s\S]*?<\/\1>/gi, ' ')
@@ -95,7 +99,7 @@ const pickLyricsByLines = (text, exclude = []) => {
     const d = devCount(t);
     const letters = (t.match(/\p{L}/gu) || []).length || 1;
     const words = t.split(/\s+/).length;
-    return d >= 6 && d / letters >= 0.6 && words >= 4 && !ex.has(t) && !/(\.\.\.|…)\s*$/.test(t);
+    return d >= 6 && d / letters >= 0.6 && (words >= 4 || (words >= 2 && /[,।॥]\s*$/.test(t))) && !ex.has(t) && !/(\.\.\.|…)\s*$/.test(t);
   });
   let best = { sum: 0, from: 0, to: -1, n: 0 };
   let i = 0;
