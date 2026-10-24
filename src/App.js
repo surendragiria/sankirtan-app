@@ -1084,7 +1084,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.10.24.s129';
+const APP_VERSION = '2026.10.24.s130';
 const AUTO_SCROLL_VIEWS = ['live-program', 'bhajan-detail', 'public-bhajan-detail'];
 const LIVE_SCROLL_STEPS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 
@@ -6796,6 +6796,49 @@ const App = () => {
 
   // SESSION 88: server-side fetch (api/fetch-lyrics.js) — browsers can't
   // read other sites directly because of CORS.
+  // SESSION 130: some sites (Kavita Kosh etc.) refuse requests from our
+  // server but are MediaWiki installs whose API allows browser requests
+  // (origin=*). Read the page's wikitext straight from the browser.
+  const cleanWikitext = (wt) => {
+    let t = String(wt || '');
+    for (let i = 0; i < 6; i++) { const n = t.replace(/\{\{[^{}]*\}\}/g, ''); if (n === t) break; t = n; }
+    t = t.replace(/<!--[\s\S]*?-->/g, '')
+      .replace(/<ref[^>]*>[\s\S]*?<\/ref>|<ref[^>]*\/>/gi, '')
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<\/?(poem|div|span|p|center|small|big|b|i|u|nowiki)[^>]*>/gi, '')
+      .replace(/\[\[[^\]|]*\|([^\]]*)\]\]/g, '$1').replace(/\[\[([^\]]*)\]\]/g, '$1')
+      .replace(/\[https?:[^\s\]]*\s*([^\]]*)\]/g, '$1')
+      .replace(/'{2,}/g, '').replace(/^=+.*=+\s*$/gm, '').replace(/^[*#:;]+\s?/gm, '')
+      .replace(/&nbsp;/g, ' ').replace(/[ \t]+$/gm, '').replace(/\n{3,}/g, '\n\n').trim();
+    return t;
+  };
+  const fetchViaMediaWiki = async (u) => {
+    const url = new URL(u);
+    let title = url.searchParams.get('title') || '';
+    let prefix = '';
+    if (!title) {
+      const m = url.pathname.match(/^\/([^/]+)\/(.+)$/);
+      if (m) { prefix = m[1]; title = m[2]; } else title = url.pathname.replace(/^\//, '');
+    }
+    title = decodeURIComponent(title).replace(/_/g, ' ');
+    if (!title) throw new Error('no title');
+    const apis = [prefix ? `${url.origin}/${prefix}/api.php` : null, `${url.origin}/w/api.php`, `${url.origin}/api.php`].filter(Boolean);
+    for (const api of apis) {
+      try {
+        const r = await fetch(`${api}?action=parse&page=${encodeURIComponent(title)}&prop=wikitext&format=json&origin=*`);
+        if (!r.ok) continue;
+        const j = await r.json();
+        const wt = j && j.parse && j.parse.wikitext && j.parse.wikitext['*'];
+        if (!wt) continue;
+        const lyrics = cleanWikitext(wt);
+        if (!/[\u0900-\u097F]/.test(lyrics)) continue;
+        const pageTitle = (j.parse.title || title);
+        const parts = pageTitle.split(' / ');
+        return { title: parts[0].trim(), lyricist: (parts[1] || '').trim(), lyrics, text: lyrics, host: url.hostname, url: u, via: 'wiki' };
+      } catch { /* try next */ }
+    }
+    return null;
+  };
   const fetchLyricsFromWeb = async () => {
     const u = fetchUrl.trim();
     if (!u) return;
@@ -6803,10 +6846,18 @@ const App = () => {
     try {
       const r = await fetch('/api/fetch-lyrics?url=' + encodeURIComponent(u));
       const j = await r.json();
+      if (!j.ok || !j.lyrics) {
+        // Blocked for our server, or nothing found: try the site's wiki API from this browser.
+        let alt = null;
+        try { alt = await fetchViaMediaWiki(u); } catch { alt = null; }
+        if (alt) { setFetchResult(alt); return; }
+      }
       if (!j.ok) setFetchResult({ error: j.error || 'Could not fetch' });
-      else setFetchResult({ title: j.title || '', lyrics: j.lyrics || '', text: j.text || '', host: j.host, url: u });
+      else setFetchResult({ title: j.title || '', lyrics: j.lyrics || '', text: j.text || '', host: j.host, url: u, hint: j.hint });
     } catch (e) {
-      setFetchResult({ error: 'Could not reach the fetch service' });
+      let alt = null;
+      try { alt = await fetchViaMediaWiki(u); } catch { alt = null; }
+      if (alt) setFetchResult(alt); else setFetchResult({ error: 'Could not reach the fetch service' });
     } finally {
       setFetchBusy(false);
     }
@@ -12493,7 +12544,7 @@ const App = () => {
                     )}
                     <div className="flex gap-2">
                       <button
-                        onClick={() => openAddPublicBhajan({ title: fetchResult.title, lyrics: fetchResult.lyrics, source: /youtu\.?be/i.test(fetchResult.url) ? fetchResult.url : '' })}
+                        onClick={() => openAddPublicBhajan({ title: fetchResult.title, lyrics: fetchResult.lyrics, lyricist: fetchResult.lyricist || '', source: /youtu\.?be/i.test(fetchResult.url) ? fetchResult.url : '' })}
                         disabled={!fetchResult.lyrics.trim()}
                         className="flex-1 bg-[#0B5A70] hover:bg-[#094a5d] disabled:opacity-50 text-white font-bold py-3 rounded-xl"
                       >
