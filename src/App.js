@@ -1084,7 +1084,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.10.24.s131';
+const APP_VERSION = '2026.10.24.s132';
 const AUTO_SCROLL_VIEWS = ['live-program', 'bhajan-detail', 'public-bhajan-detail'];
 const LIVE_SCROLL_STEPS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 
@@ -4545,7 +4545,7 @@ const App = () => {
     // CACHE HYDRATION: instant paint from localStorage while
     // Firestore's listener delivers cached-then-fresh data.
     const CACHE_KEY = `sankirtan-my-bhajans-${user.uid}`;
-    const CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days — devotional content changes rarely, stale-but-instant beats blank-but-fresh
+    const CACHE_MAX_AGE_MS = 365 * 24 * 60 * 60 * 1000; // S132: effectively never expire — offline (esp. iPhone, no Firestore persistence) relies on this
     try {
       const raw = localStorage.getItem(CACHE_KEY);
       if (raw) {
@@ -4617,7 +4617,7 @@ const App = () => {
     const programsRef = db.collection('users').doc(user.uid).collection('programs');
 
     const PROG_CACHE_KEY = `sankirtan-programs-${user.uid}`;
-    const PROG_CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days — programs change rarely once created
+    const PROG_CACHE_MAX_AGE_MS = 365 * 24 * 60 * 60 * 1000; // S132: effectively never expire
     try {
       const raw = localStorage.getItem(PROG_CACHE_KEY);
       if (raw) {
@@ -4723,7 +4723,7 @@ const App = () => {
       const publicRef = db.collection('publicBhajans');
 
       const CACHE_KEY = 'sankirtan-public-bhajans-cache';
-      const CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days — public library changes rarely; extended TTL avoids blank-then-repaint on weekly visitors
+      const CACHE_MAX_AGE_MS = 365 * 24 * 60 * 60 * 1000; // S132: effectively never expire — the live listener replaces it whenever online
       let cacheHit = false;
       try {
         const raw = localStorage.getItem(CACHE_KEY);
