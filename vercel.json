@@ -1,0 +1,6 @@
+{
+  "functions": {
+    "api/fetch-lyrics.js": { "maxDuration": 30 },
+    "api/ocr.js": { "maxDuration": 60 }
+  }
+}

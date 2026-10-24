@@ -159,7 +159,7 @@ module.exports = async (req, res) => {
   if (PRIVATE_HOST.test(url.hostname)) return res.status(400).json({ ok: false, error: 'That address is not allowed' });
 
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 10000);
+  const timer = setTimeout(() => ctrl.abort(), 22000); // slow ad-heavy sites; function maxDuration is 30s (vercel.json)
   try {
     const r = await fetch(url.toString(), {
       signal: ctrl.signal,
@@ -205,7 +205,7 @@ module.exports = async (req, res) => {
     // (site name, credits, share buttons).
     const headings = new Set([title, titleM ? clean(titleM[1]) : ''].map(x => x.trim()).filter(Boolean));
     const isDev = (l) => { const d = devCount(l); const n = (l.match(/\p{L}/gu) || []).length || 1; return d / n >= 0.5; };
-    let ls = lyrics.split('\n').filter(l => !headings.has(l.trim()));
+    let ls = lyrics.split('\n').filter(l => !headings.has(l.trim()) && !/skip to content/i.test(l));
     while (ls.length && (!ls[0].trim() || !isDev(ls[0]))) ls.shift();
     while (ls.length && (!ls[ls.length - 1].trim() || !isDev(ls[ls.length - 1]))) ls.pop();
     lyrics = ls.join('\n').replace(/\n{3,}/g, '\n\n').trim();
@@ -215,7 +215,7 @@ module.exports = async (req, res) => {
     const outTitle = title || ld.title || '';
     return res.status(200).json({ ok: true, host: url.hostname, title: isRoot ? '' : outTitle, lyrics: isRoot ? '' : lyrics, text: fullText.slice(0, 60000), hint, source: ld.lyrics ? 'structured-data' : 'page-text' });
   } catch (e) {
-    const msg = e && e.name === 'AbortError' ? 'The page took too long to respond' : 'Could not fetch that page';
+    const msg = e && e.name === 'AbortError' ? 'The page took too long to respond (over 20 s)' : `Could not fetch that page (${(e && e.cause && e.cause.code) || (e && e.message) || 'network error'})`;
     return res.status(502).json({ ok: false, error: msg });
   } finally {
     clearTimeout(timer);
