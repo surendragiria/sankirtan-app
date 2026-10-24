@@ -69,6 +69,7 @@ const pickLyrics = (text) => {
     if (seen[p] > 1 && lines.length < 2) return 0;
     if (lines.length < 2 && words < 4) return 0;
     if (lines.length < 2 && /(\.\.\.|…)\s*$/.test(p)) return 0; // post excerpt
+    if (lines.length < 2 && words > 30) return 0; // prose paragraph (meaning / description), not a song
     return d / letters >= 0.5 && d >= 8 ? d : 0;
   });
   let best = { sum: 0, from: 0, to: -1 };
@@ -121,6 +122,34 @@ const pickLyricsByLines = (text, exclude = []) => {
     .join('\n').replace(/\n{3,}/g, '\n\n').trim();
 };
 
+// Structured data: many lyrics sites embed schema.org JSON-LD with a
+// MusicComposition whose `lyrics.text` holds the song verbatim. That is
+// far more reliable than scraping the visible page (and works even when
+// the page renders its lyrics with JavaScript).
+const lyricsFromJsonLd = (html) => {
+  const out = { lyrics: '', title: '' };
+  const blocks = html.match(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi) || [];
+  const nodes = [];
+  for (const b of blocks) {
+    const body = b.replace(/^<script[^>]*>/i, '').replace(/<\/script>$/i, '').trim();
+    try {
+      const j = JSON.parse(body);
+      const arr = Array.isArray(j) ? j : [j];
+      for (const x of arr) { nodes.push(x); if (Array.isArray(x['@graph'])) nodes.push(...x['@graph']); }
+    } catch {}
+  }
+  const walk = (n, depth) => {
+    if (!n || typeof n !== 'object' || depth > 4) return;
+    const l = n.lyrics;
+    const txt = typeof l === 'string' ? l : (l && typeof l.text === 'string' ? l.text : '');
+    if (txt && devCount(txt) >= 40 && devCount(txt) > devCount(out.lyrics)) { out.lyrics = txt; out.title = typeof n.name === 'string' ? n.name : out.title; }
+    for (const k of Object.keys(n)) if (k !== 'lyrics' && n[k] && typeof n[k] === 'object') walk(n[k], depth + 1);
+  };
+  nodes.forEach(n => walk(n, 0));
+  out.lyrics = out.lyrics.replace(/\r\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+  return out;
+};
+
 module.exports = async (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
   const raw = (req.query && req.query.url) || '';
@@ -168,9 +197,10 @@ module.exports = async (req, res) => {
       const d = devCount(pickLyrics(t));
       if (d > best && d >= 40) { best = d; text = t; }
     }
-    // Take whichever method finds the most song text.
+    // Structured data first; otherwise whichever text method finds the most song.
+    const ld = lyricsFromJsonLd(html);
     const candidates = [pickLyrics(text), pickLyrics(fullText), pickLyricsByLines(fullText, [title, titleM ? clean(titleM[1]) : ''])];
-    let lyrics = candidates.reduce((a, b) => (devCount(b) > devCount(a) ? b : a), '');
+    let lyrics = ld.lyrics || candidates.reduce((a, b) => (devCount(b) > devCount(a) ? b : a), '');
     // Tidy: drop heading/title lines and non-Devanagari lines at the edges
     // (site name, credits, share buttons).
     const headings = new Set([title, titleM ? clean(titleM[1]) : ''].map(x => x.trim()).filter(Boolean));
@@ -182,7 +212,8 @@ module.exports = async (req, res) => {
     // A site's home/listing page has many short excerpts, not one song.
     const isRoot = url.pathname === '/' || url.pathname === '';
     const hint = isRoot ? 'That is the site\'s home page — open the bhajan you want and paste that page\'s link.' : (lyrics ? '' : 'No Hindi lyrics block was found on that page.');
-    return res.status(200).json({ ok: true, host: url.hostname, title: isRoot ? '' : title, lyrics: isRoot ? '' : lyrics, text: fullText.slice(0, 60000), hint });
+    const outTitle = title || ld.title || '';
+    return res.status(200).json({ ok: true, host: url.hostname, title: isRoot ? '' : outTitle, lyrics: isRoot ? '' : lyrics, text: fullText.slice(0, 60000), hint, source: ld.lyrics ? 'structured-data' : 'page-text' });
   } catch (e) {
     const msg = e && e.name === 'AbortError' ? 'The page took too long to respond' : 'Could not fetch that page';
     return res.status(502).json({ ok: false, error: msg });
