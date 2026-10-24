@@ -6,7 +6,7 @@
    - Firestore / Google APIs / YouTube: never cached, network only
 */
 
-const CACHE = 'sankirtan-v1';
+const CACHE = 'sankirtan-v2'; // S129: bumped so stale /api/ responses are purged
 const SHELL = ['/', '/index.html', '/manifest.json', '/logo192.png', '/logo512.png', '/favicon.ico'];
 
 const CDN_HOSTS = ['cdn.tailwindcss.com', 'www.gstatic.com', 'fonts.googleapis.com', 'fonts.gstatic.com'];
@@ -55,6 +55,8 @@ self.addEventListener('fetch', (event) => {
 
   // Live data and third-party embeds: leave untouched
   if (NEVER_CACHE.some((h) => url.hostname === h || url.hostname.endsWith('.' + h))) return;
+  // Our own serverless API (fetch-lyrics, ocr): always live, never cached
+  if (url.pathname.startsWith('/api/')) return;
 
   // App navigations: network first, cached shell when offline
   if (request.mode === 'navigate') {
