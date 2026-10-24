@@ -21,6 +21,10 @@ if (process.env.NODE_ENV === 'production' && 'serviceWorker' in navigator) {
     // A new worker taking over a page that already had one means a new
     // build is live — App.js shows the "tap to update" banner.
     let hadController = !!navigator.serviceWorker.controller;
+    // S131: the worker tells us when a newer app shell was stored for next launch
+    navigator.serviceWorker.addEventListener('message', (e) => {
+      if (e.data && e.data.type === 'sankirtan-shell-updated') window.dispatchEvent(new Event('sankirtan:update'));
+    });
     navigator.serviceWorker.addEventListener('controllerchange', () => {
       if (hadController) window.dispatchEvent(new Event('sankirtan:update'));
       hadController = true;

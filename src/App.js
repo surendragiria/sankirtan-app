@@ -1084,7 +1084,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.10.24.s130';
+const APP_VERSION = '2026.10.24.s131';
 const AUTO_SCROLL_VIEWS = ['live-program', 'bhajan-detail', 'public-bhajan-detail'];
 const LIVE_SCROLL_STEPS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 
@@ -4479,14 +4479,12 @@ const App = () => {
           console.warn('Firestore config error:', configErr);
         }
 
-        try {
-          const result = await window.firebase.auth().getRedirectResult();
-          if (result && result.user) {
-            console.log('✅ Redirect sign-in successful');
-          }
-        } catch (redirectError) {
-          console.log('No redirect result:', redirectError.message);
-        }
+        // S131: not awaited — on a weak network this call can hang for many
+        // seconds while onAuthStateChanged already knows the signed-in user
+        // from local storage. Redirect sign-ins still complete in the background.
+        window.firebase.auth().getRedirectResult()
+          .then((result) => { if (result && result.user) console.log('✅ Redirect sign-in successful'); })
+          .catch((redirectError) => { console.log('No redirect result:', redirectError.message); });
 
         window.firebase.auth().onAuthStateChanged(async (firebaseUser) => {
           if (firebaseUser) {
@@ -4509,7 +4507,7 @@ const App = () => {
 
         setTimeout(() => {
           setLoading(false);
-        }, 8000);
+        }, 4000); // S131: was 8 s
 
         // SESSION 7: fetchUserCount() removed from init.
         // The vanity counter was awaited on the critical path AND

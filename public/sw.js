@@ -1,6 +1,6 @@
 /* Sankirtan service worker — offline app shell + asset caching.
    Strategy:
-   - Navigations (opening the app)  : network first, fall back to cached index.html
+   - Navigations (opening the app)  : cached shell first, refresh in background (S131)
    - Same-origin static assets       : stale-while-revalidate (serve cache, refresh in background)
    - CDN scripts (Tailwind, Firebase): stale-while-revalidate
    - Firestore / Google APIs / YouTube: never cached, network only
@@ -58,15 +58,34 @@ self.addEventListener('fetch', (event) => {
   // Our own serverless API (fetch-lyrics, ocr): always live, never cached
   if (url.pathname.startsWith('/api/')) return;
 
-  // App navigations: network first, cached shell when offline
+  // App navigations (S131): cached shell FIRST so the app opens instantly on
+  // weak or no network; the network copy is fetched in the background and,
+  // if it changed, stored for next launch and the app is told so it can show
+  // its "update available" banner. First-ever open (nothing cached) still
+  // goes to the network.
   if (request.mode === 'navigate') {
     event.respondWith(
-      fetch(request)
-        .then((res) => {
-          caches.open(CACHE).then((cache) => cache.put('/index.html', res.clone()));
-          return res;
-        })
-        .catch(() => caches.match('/index.html'))
+      caches.match('/index.html').then((cached) => {
+        const refresh = fetch(request)
+          .then(async (res) => {
+            if (!res || !res.ok) return res;
+            const copy = res.clone();
+            if (cached) {
+              const [a, b] = await Promise.all([cached.clone().text(), res.clone().text()]);
+              if (a !== b) {
+                await caches.open(CACHE).then((cache) => cache.put('/index.html', copy));
+                const clients = await self.clients.matchAll({ type: 'window' });
+                clients.forEach((c) => c.postMessage({ type: 'sankirtan-shell-updated' }));
+              }
+            } else {
+              await caches.open(CACHE).then((cache) => cache.put('/index.html', copy));
+            }
+            return res;
+          })
+          .catch(() => cached);
+        if (cached) { event.waitUntil(refresh.catch(() => {})); return cached; }
+        return refresh;
+      })
     );
     return;
   }
