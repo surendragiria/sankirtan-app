@@ -7,7 +7,7 @@
 */
 
 const CACHE = 'sankirtan-v2'; // S129: bumped so stale /api/ responses are purged
-const SHELL = ['/', '/index.html', '/manifest.json', '/logo192.png', '/logo512.png', '/favicon.ico'];
+const SHELL = ['/', '/index.html', '/manifest.json', '/logo192.png', '/logo512.png', '/favicon.ico', '/keepawake.mp4'];
 
 const CDN_HOSTS = ['cdn.tailwindcss.com', 'www.gstatic.com', 'fonts.googleapis.com', 'fonts.gstatic.com'];
 const NEVER_CACHE = [

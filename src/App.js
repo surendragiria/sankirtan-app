@@ -1084,7 +1084,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.10.24.s132';
+const APP_VERSION = '2026.10.28.s133';
 const AUTO_SCROLL_VIEWS = ['live-program', 'bhajan-detail', 'public-bhajan-detail'];
 const LIVE_SCROLL_STEPS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 
@@ -3332,7 +3332,6 @@ const App = () => {
   // SESSION 54: expanded inline YouTube player on reading views.
   // Reset to false when a different bhajan is opened.
   const [showAudioPlayer, setShowAudioPlayer] = useState(false);
-  const [readingWakeLock, setReadingWakeLock] = useState(null);
 
   // ==============================================
   // TOAST SYSTEM (SESSION 5: generalized from share toast —
@@ -3622,45 +3621,64 @@ const App = () => {
   }, [readingSettings]);
 
   // Reading wake lock
+  // SESSION 133: keep the screen on everywhere in the app, robustly.
+  //  - Wake Lock API (Chrome, Safari 16.4+): held in a ref, re-acquired
+  //    whenever the system releases it (tab hidden, phone locked) and on the
+  //    next user touch — Safari sometimes only grants it on a user gesture.
+  //  - Fallback (older iOS / WebViews without the API): a tiny silent looping
+  //    video, started on the first user interaction, keeps the display awake.
+  const wakeLockRef = useRef(null);
+  const keepAwakeVideoRef = useRef(null);
   useEffect(() => {
-    // SESSION 78: the screen stays on everywhere in the app (singers keep
-    // it open on a stand); the lock releases itself when the tab is hidden.
-    const shouldHoldLock = true;
-
-    let currentLock = readingWakeLock;
+    let disposed = false;
+    const hasApi = 'wakeLock' in navigator;
 
     const acquire = async () => {
-      if (currentLock) return;
-      if (!('wakeLock' in navigator)) return;
+      if (disposed || document.visibilityState !== 'visible') return;
+      if (!hasApi) { startVideoFallback(); return; }
+      if (wakeLockRef.current && !wakeLockRef.current.released) return;
       try {
         const lock = await navigator.wakeLock.request('screen');
-        setReadingWakeLock(lock);
+        wakeLockRef.current = lock;
         lock.addEventListener('release', () => {
-          setReadingWakeLock(null);
+          if (wakeLockRef.current === lock) wakeLockRef.current = null;
+          // System took it (screen locked / tab hidden): take it back as soon as we're visible again.
+          setTimeout(() => { if (document.visibilityState === 'visible') acquire(); }, 500);
         });
       } catch (err) {
-        console.log('Reading wake lock failed:', err);
+        // Not granted (low battery mode, or needs a gesture) — try again on the next touch.
+        console.log('Wake lock request failed:', err && err.message);
       }
     };
 
-    const release = async () => {
-      if (!currentLock) return;
-      try { await currentLock.release(); } catch (e) {}
-      setReadingWakeLock(null);
+    const startVideoFallback = () => {
+      if (keepAwakeVideoRef.current) { keepAwakeVideoRef.current.play().catch(() => {}); return; }
+      const v = document.createElement('video');
+      v.setAttribute('playsinline', ''); v.setAttribute('muted', ''); v.setAttribute('loop', '');
+      v.muted = true; v.loop = true; v.playsInline = true;
+      v.src = '/keepawake.mp4';
+      Object.assign(v.style, { position: 'fixed', width: '1px', height: '1px', opacity: '0.01', pointerEvents: 'none', left: '0', bottom: '0' });
+      document.body.appendChild(v);
+      keepAwakeVideoRef.current = v;
+      v.play().catch(() => {});
     };
 
-    if (shouldHoldLock) acquire();
-    else release();
-
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && shouldHoldLock) acquire();
-    };
-    document.addEventListener('visibilitychange', handleVisibilityChange);
+    acquire();
+    const onVisible = () => { if (document.visibilityState === 'visible') acquire(); };
+    const onGesture = () => { if (hasApi ? !wakeLockRef.current : true) acquire(); };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
+    document.addEventListener('touchstart', onGesture, { passive: true });
+    document.addEventListener('click', onGesture, { passive: true });
     return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      disposed = true;
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onVisible);
+      document.removeEventListener('touchstart', onGesture);
+      document.removeEventListener('click', onGesture);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentView]);
+  }, []);
 
   // Save dark mode
   useEffect(() => {
