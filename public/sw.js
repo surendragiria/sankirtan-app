@@ -95,7 +95,14 @@ self.addEventListener('fetch', (event) => {
   // if it changed, stored for next launch and the app is told so it can show
   // its "update available" banner. First-ever open (nothing cached) still
   // goes to the network.
-  if (request.mode === 'navigate') {
+  // Static pages (guide, privacy, install …) are real files, not app routes:
+  // fetch them normally (cache as a fallback), never the app shell.
+  const isAppRoute = request.mode === 'navigate' && !/\.[a-z0-9]+$/i.test(url.pathname) && !/^\/(install|guide|privacy-policy|terms|delete-account)\/?$/.test(url.pathname);
+  if (request.mode === 'navigate' && !isAppRoute) {
+    event.respondWith(staleWhileRevalidate(request));
+    return;
+  }
+  if (isAppRoute) {
     event.respondWith((async () => {
       const cache = await caches.open(CACHE);
       let cached = await cache.match('/index.html');
