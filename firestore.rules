@@ -46,6 +46,15 @@ service cloud.firestore {
     }
 
     // ============================================
+    // ADMIN REPORT (Session 134) - admin may read every user's bhajans
+    // (collection-group query) to find active authors to invite as
+    // contributors. Read-only; users' own rules above are unchanged.
+    // ============================================
+    match /{path=**}/bhajans/{bhajanId} {
+      allow read: if isAdmin();
+    }
+
+    // ============================================
     // CONTRIBUTORS - admin manages; each member can see their own entry
     // ============================================
     match /contributors/{uid} {

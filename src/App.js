@@ -1084,7 +1084,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.10.28.s133';
+const APP_VERSION = '2026.10.28.s134';
 const AUTO_SCROLL_VIEWS = ['live-program', 'bhajan-detail', 'public-bhajan-detail'];
 const LIVE_SCROLL_STEPS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 
@@ -3211,6 +3211,40 @@ const App = () => {
   }, [isAdmin]);
   const canContribute = isAdmin || isContributor;
   const canEditPublic = (pb) => isAdmin || (isContributor && !!pb && pb.addedByUid === (user && user.uid));
+  // SESSION 134: who is authoring new bhajans in their own library? Admin
+  // report over all users' libraries (collection-group read, admin-only in
+  // the rules). "Authored" = not saved from the public library and not a
+  // legacy copy of a public title.
+  const [authorReport, setAuthorReport] = useState(null); // null | 'loading' | { rows, totalUsers, totalAuthored, at }
+  const loadAuthorReport = async () => {
+    if (!isAdmin) return;
+    setAuthorReport('loading');
+    try {
+      const db = window.firebase.firestore();
+      const pubTitles = new Set(publicBhajans.map(b => foldSearchKey(b.title || '')).filter(Boolean));
+      const snap = await db.collectionGroup('bhajans').get();
+      const byUser = {};
+      snap.forEach(d => {
+        const data = d.data() || {};
+        const uid = d.ref.parent && d.ref.parent.parent ? d.ref.parent.parent.id : null;
+        if (!uid || uid === ADMIN_UID) return;
+        if (data.savedFromPublicId) return;
+        if (pubTitles.has(foldSearchKey(data.title || ''))) return;
+        const row = byUser[uid] || (byUser[uid] = { uid, count: 0, last: 0, titles: [] });
+        row.count += 1;
+        const ts = data.createdAt && data.createdAt.toMillis ? data.createdAt.toMillis() : 0;
+        if (ts > row.last) row.last = ts;
+        if (row.titles.length < 3 && data.title) row.titles.push(data.title);
+      });
+      const rows = Object.values(byUser).sort((a, b) => b.count - a.count || b.last - a.last).slice(0, 5);
+      await Promise.all(rows.map(async (r) => {
+        try { const u = await db.collection('users').doc(r.uid).get(); const p = u.data() || {}; r.name = p.displayName || ''; r.email = p.email || ''; r.phone = p.phoneNumber || ''; r.whatsapp = (p.contactInfo && p.contactInfo.whatsapp) || ''; } catch { /* profile unreadable */ }
+      }));
+      setAuthorReport({ rows, totalUsers: Object.keys(byUser).length, totalAuthored: Object.values(byUser).reduce((n, r) => n + r.count, 0), at: Date.now() });
+    } catch (e) {
+      setAuthorReport({ error: e.message });
+    }
+  };
   const addContributor = async () => {
     const key = contributorEmail.trim();
     if (!key || !isAdmin) return;
@@ -12465,6 +12499,53 @@ const App = () => {
                     Tip: batch-curate a week at a time — pick tomorrow, then use the arrow to jump ahead.
                   </div>
                 </div>
+              </div>
+
+              {/* SESSION 134: TOP AUTHORS REPORT */}
+              <div className="bg-[#FFFCF8] rounded-2xl shadow-[0_2px_12px_rgba(11,90,112,0.06)] p-6 mb-6 border border-amber-200/60">
+                <div className="flex items-start justify-between gap-3 mb-1">
+                  <h3 className="text-lg font-bold text-[#0B5A70]">✍️ Top 5 bhajan authors</h3>
+                  <button onClick={loadAuthorReport} disabled={authorReport === 'loading'} className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-[#0B5A70] text-white disabled:opacity-50">
+                    {authorReport === 'loading' ? 'Scanning…' : (authorReport && authorReport.rows ? '↻ Refresh' : 'Run report')}
+                  </button>
+                </div>
+                <p className="text-sm text-gray-600 mb-3">Members adding their own new bhajans (not copies of public ones) — good candidates to invite as contributors.</p>
+                {authorReport && authorReport.error && (
+                  <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">⚠️ {authorReport.error}{/permission/i.test(authorReport.error) ? ' — the Firestore rules need the admin collection-group read on bhajans (see firestore.rules).' : ''}</div>
+                )}
+                {authorReport && authorReport.rows && (
+                  authorReport.rows.length === 0 ? (
+                    <p className="text-xs text-gray-500">No member has added an original bhajan yet.</p>
+                  ) : (
+                    <>
+                      <ol className="divide-y divide-[#0B5A70]/8">
+                        {authorReport.rows.map((r, i) => {
+                          const isC = contributors.some(c => c.id === r.uid);
+                          return (
+                            <li key={r.uid} className="py-2.5 flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className="text-sm font-semibold text-[#0B5A70] truncate">{i + 1}. {r.name || r.email || r.phone || r.uid}</p>
+                                <p className="text-xs text-gray-500 truncate">{[r.email, r.whatsapp || r.phone].filter(Boolean).join(' · ') || r.uid}</p>
+                                <p className="text-xs text-gray-600 mt-0.5"><strong>{r.count}</strong> bhajan{r.count === 1 ? '' : 's'}{r.last ? ` · last ${new Date(r.last).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}` : ''}{r.titles.length ? ` · e.g. ${r.titles.join(', ')}` : ''}</p>
+                              </div>
+                              <div className="flex-shrink-0 flex flex-col items-end gap-1">
+                                {isC ? (
+                                  <span className="text-[11px] font-semibold text-green-700 bg-green-50 px-2 py-0.5 rounded-full">Contributor ✓</span>
+                                ) : (
+                                  <button onClick={() => { setContributorEmail(r.email || r.uid); }} className="text-xs font-semibold text-purple-700 hover:text-purple-900">Make contributor ↓</button>
+                                )}
+                                {(r.whatsapp || r.phone) && (
+                                  <a href={`https://wa.me/${String(r.whatsapp || r.phone).replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer" className="text-xs font-semibold text-green-700">WhatsApp ↗</a>
+                                )}
+                              </div>
+                            </li>
+                          );
+                        })}
+                      </ol>
+                      <p className="text-[11px] text-gray-400 mt-2">{authorReport.totalAuthored} original bhajans by {authorReport.totalUsers} members · scanned {new Date(authorReport.at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</p>
+                    </>
+                  )
+                )}
               </div>
 
               {/* SESSION 122: CONTRIBUTORS */}
