@@ -1084,7 +1084,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.10.28.s134';
+const APP_VERSION = '2026.10.28.s135';
 const AUTO_SCROLL_VIEWS = ['live-program', 'bhajan-detail', 'public-bhajan-detail'];
 const LIVE_SCROLL_STEPS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 
@@ -2828,10 +2828,8 @@ const App = () => {
   const [bhajansLoading, setBhajansLoading] = useState(false);
   const [bhajanFormError, setBhajanFormError] = useState('');
   const [bhajanFormMore, setBhajanFormMore] = useState(false); // SESSION 96: collapsed extras
-  const aiInputRef = useRef(null);        // SESSION 102
   const [bhajanFormMoods, setBhajanFormMoods] = useState(false);   // SESSION 104
   const [publicFormMoods, setPublicFormMoods] = useState(false);   // SESSION 104
-  const publicAiInputRef = useRef(null);  // SESSION 102
   const [publicFormMore, setPublicFormMore] = useState(false); // SESSION 97
   const [publishFromId, setPublishFromId] = useState(null); // SESSION 108: personal bhajan being published
   const [bhajanFormSaving, setBhajanFormSaving] = useState(false);
@@ -5107,24 +5105,6 @@ const App = () => {
   // ==============================================
   // OCR / FILE IMPORT (unchanged from Session 4)
   // ==============================================
-  const loadScriptOnce = (src, globalName) => {
-    return new Promise((resolve, reject) => {
-      if (globalName && window[globalName]) return resolve();
-      const existing = document.querySelector('script[data-ocr-src="' + src + '"]');
-      if (existing) {
-        existing.addEventListener('load', () => resolve());
-        existing.addEventListener('error', () => reject(new Error('Failed to load ' + src)));
-        return;
-      }
-      const s = document.createElement('script');
-      s.src = src;
-      s.async = true;
-      s.dataset.ocrSrc = src;
-      s.onload = () => resolve();
-      s.onerror = () => reject(new Error('Failed to load ' + src));
-      document.head.appendChild(s);
-    });
-  };
 
   const cleanupExtractedText = (text) => {
     return (text || '')
@@ -5179,48 +5159,6 @@ const App = () => {
     });
   };
 
-  const ocrImageSource = async (imageSource, sourceLabel) => {
-    const isFirstUse = !window.Tesseract;
-    if (isFirstUse) {
-      setOcrMessage('📥 Downloading OCR engine (~2 MB, one-time only). Next time will be instant...');
-      setOcrProgress(0);
-    }
-    await loadScriptOnce('https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js', 'Tesseract');
-
-    const langModelsCached = localStorage.getItem('sankirtan-tesseract-langs-cached');
-
-    const result = await window.Tesseract.recognize(imageSource, 'hin+eng', {
-      logger: (m) => {
-        if (m.status === 'recognizing text') {
-          const pct = Math.round((m.progress || 0) * 100);
-          setOcrProgress(pct);
-          setOcrMessage('🔍 Reading text from ' + sourceLabel + '... ' + pct + '%');
-        } else if (m.status === 'loading tesseract core') {
-          setOcrMessage('⏳ Loading OCR core engine...');
-        } else if (m.status === 'initializing tesseract') {
-          setOcrMessage('⚙️ Initializing OCR engine...');
-        } else if (m.status === 'loading language traineddata') {
-          const pct = Math.round((m.progress || 0) * 100);
-          if (!langModelsCached) {
-            setOcrMessage('📥 Downloading Hindi + English language data (~15 MB, one-time)... ' + pct + '%');
-          } else {
-            setOcrMessage('📚 Loading language data from cache... ' + pct + '%');
-          }
-          setOcrProgress(pct);
-        } else if (m.status === 'initializing api') {
-          setOcrMessage('⚙️ Preparing OCR engine...');
-        } else if (m.status && m.status.indexOf('loading') !== -1) {
-          setOcrMessage('⏳ ' + m.status + '...');
-        }
-      }
-    });
-
-    if (!langModelsCached) {
-      try { localStorage.setItem('sankirtan-tesseract-langs-cached', 'true'); } catch (e) {}
-    }
-
-    return result && result.data ? result.data.text : '';
-  };
 
   // SESSION 102: "Read with AI" — sends the photo/PDF to /api/ocr (Gemini,
   // key kept on the server). Better than Tesseract on photos and the only
@@ -5255,91 +5193,13 @@ const App = () => {
       setOcrMessage('');
     } catch (err) {
       console.error('AI read failed:', err);
-      setOcrMessage('❌ ' + (err.message || 'AI could not read this file') + ' — you can still use Camera / Gallery / Document.');
+      setOcrMessage('❌ ' + (err.message || 'AI could not read this file') + ' — try a clearer photo, or type/paste the lyrics.');
     } finally {
       setOcrProcessing(false);
     }
   };
 
-  const handleImageFileForOcr = async (file, sourceLabel, formSetter = setBhajanForm) => {
-    if (!file) return;
-    setOcrProcessing(true);
-    setOcrProgress(0);
-    setOcrMessage('⏳ Preparing ' + sourceLabel + '...');
-    try {
-      const dataUrl = await fileToOptimizedDataUrl(file);
-      const text = await ocrImageSource(dataUrl, sourceLabel);
-      applyExtractedText(text, sourceLabel, formSetter);
-    } catch (err) {
-      console.error('OCR failed:', err);
-      setOcrMessage('❌ Could not read text from this file. Check your internet (needed for first-time engine load) or type manually.');
-    } finally {
-      setOcrProcessing(false);
-    }
-  };
-
-  const handlePdfFileForOcr = async (file, formSetter = setBhajanForm) => {
-    if (!file) return;
-    setOcrProcessing(true);
-    setOcrProgress(0);
-    setOcrMessage('⏳ Reading PDF...');
-    try {
-      await loadScriptOnce('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js', 'pdfjsLib');
-      window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-
-      const buffer = await file.arrayBuffer();
-      const pdf = await window.pdfjsLib.getDocument({ data: buffer }).promise;
-      const PAGE_LIMIT = 10;
-      const maxPages = Math.min(pdf.numPages, PAGE_LIMIT);
-
-      if (pdf.numPages > PAGE_LIMIT) {
-        setOcrMessage('⚠️ PDF has ' + pdf.numPages + ' pages. Processing first ' + PAGE_LIMIT + ' only. To import more, split the PDF or upload the rest separately.');
-        await new Promise(r => setTimeout(r, 2500));
-      }
-
-      let extracted = '';
-
-      for (let p = 1; p <= maxPages; p++) {
-        setOcrMessage('📄 Reading page ' + p + ' of ' + maxPages + '...');
-        const page = await pdf.getPage(p);
-        const content = await page.getTextContent();
-        extracted += content.items.map(it => it.str).join(' ') + '\n\n';
-        try { page.cleanup && page.cleanup(); } catch (e) {}
-      }
-
-      if (cleanupExtractedText(extracted).length < 10) {
-        extracted = '';
-        for (let p = 1; p <= maxPages; p++) {
-          setOcrMessage('🔍 Scanning page ' + p + ' of ' + maxPages + ' for text...');
-          const page = await pdf.getPage(p);
-          const viewport = page.getViewport({ scale: 2 });
-          const canvas = document.createElement('canvas');
-          canvas.width = viewport.width;
-          canvas.height = viewport.height;
-          const ctx = canvas.getContext('2d');
-          await page.render({ canvasContext: ctx, viewport: viewport }).promise;
-          const dataUrl = canvas.toDataURL('image/png');
-          extracted += (await ocrImageSource(dataUrl, 'page ' + p)) + '\n\n';
-
-          try {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            canvas.width = 0;
-            canvas.height = 0;
-            page.cleanup && page.cleanup();
-          } catch (e) { /* best effort */ }
-        }
-      }
-
-      try { pdf.destroy && pdf.destroy(); } catch (e) {}
-
-      applyExtractedText(extracted, 'PDF', formSetter);
-    } catch (err) {
-      console.error('PDF import failed:', err);
-      setOcrMessage('❌ Could not read this PDF. Check your internet (needed for first-time engine load) or type manually.');
-    } finally {
-      setOcrProcessing(false);
-    }
-  };
+  // SESSION 135: on-device Tesseract/pdf.js paths retired — every upload goes through handleAiRead.
 
   // ==============================================
   // SESSION 90: LYRICS EDITOR ACTIONS
@@ -10048,28 +9908,22 @@ const App = () => {
                       </button>
                       <span className={`mx-0.5 h-5 w-px ${darkMode ? 'bg-white/15' : 'bg-[#0B5A70]/15'}`} aria-hidden="true" />
                       <span className={`text-[11px] font-semibold mr-0.5 ${darkMode ? 'text-gray-400' : 'text-[#0B5A70]/70'}`}>Upload</span>
-                      <AttachBtn kind="camera" disabled={ocrProcessing} onClick={() => cameraInputRef.current && cameraInputRef.current.click()} title="Camera — photograph the lyrics" />
-                      <AttachBtn kind="gallery" disabled={ocrProcessing} onClick={() => imageInputRef.current && imageInputRef.current.click()} title="Gallery — pick a photo of the lyrics" />
-                      <AttachBtn kind="document" disabled={ocrProcessing} onClick={() => pdfInputRef.current && pdfInputRef.current.click()} title="Document — PDF of the lyrics" />
-                      <AttachBtn kind="ai" disabled={ocrProcessing} onClick={() => aiInputRef.current && aiInputRef.current.click()} title="Read with AI — photo or PDF, including handwriting" />
+                      <AttachBtn kind="camera" disabled={ocrProcessing} onClick={() => cameraInputRef.current && cameraInputRef.current.click()} title="Camera — photograph the lyrics (read with AI)" />
+                      <AttachBtn kind="gallery" disabled={ocrProcessing} onClick={() => imageInputRef.current && imageInputRef.current.click()} title="Gallery — pick a photo of the lyrics (read with AI)" />
+                      <AttachBtn kind="document" disabled={ocrProcessing} onClick={() => pdfInputRef.current && pdfInputRef.current.click()} title="Document — PDF of the lyrics (read with AI)" />
                     </div>
                   </div>
-                  <input ref={aiInputRef} type="file" accept="image/*,application/pdf" className="hidden"
-                    onChange={(e) => { const f = e.target.files && e.target.files[0]; if (f) handleAiRead(f); e.target.value = ''; }} />
                   <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden"
-                    onChange={(e) => { const f = e.target.files && e.target.files[0]; if (f) handleImageFileForOcr(f, 'photo'); e.target.value = ''; }} />
+                    onChange={(e) => { const f = e.target.files && e.target.files[0]; if (f) handleAiRead(f); e.target.value = ''; }} />
                   <input ref={imageInputRef} type="file" accept="image/*" className="hidden"
-                    onChange={(e) => { const f = e.target.files && e.target.files[0]; if (f) handleImageFileForOcr(f, 'image'); e.target.value = ''; }} />
+                    onChange={(e) => { const f = e.target.files && e.target.files[0]; if (f) handleAiRead(f); e.target.value = ''; }} />
                   <input ref={pdfInputRef} type="file" accept="application/pdf,.pdf" className="hidden"
-                    onChange={(e) => { const f = e.target.files && e.target.files[0]; if (f) handlePdfFileForOcr(f); e.target.value = ''; }} />
+                    onChange={(e) => { const f = e.target.files && e.target.files[0]; if (f) handleAiRead(f); e.target.value = ''; }} />
 
                   {ocrProcessing && (
                     <div className={`mb-2 p-3 border rounded-lg ${darkMode ? 'bg-[#1e2e33] border-[#0B5A70]/30' : 'bg-[#FFFCF8] border-[#0B5A70]/15'}`}>
                       <div className="w-full bg-[#0B5A70]/10 rounded-full h-2 mb-2"><div className="bg-[#0B5A70] h-2 rounded-full transition-all" style={{ width: ocrProgress + '%' }} /></div>
                       <p className="text-xs font-semibold text-[#0B5A70]">{ocrMessage || 'Reading…'}</p>
-                      {!localStorage.getItem('sankirtan-tesseract-langs-cached') && (
-                        <p className={`text-[11px] mt-1 ${hint}`}>First use downloads the reader (~15 MB) once; later scans are quick.</p>
-                      )}
                     </div>
                   )}
                   {!ocrProcessing && ocrMessage && <p className="text-xs font-semibold text-[#0B5A70] mb-2">{ocrMessage}</p>}
@@ -13023,26 +12877,22 @@ const App = () => {
                       </button>
                       <span className="mx-0.5 h-5 w-px bg-[#0B5A70]/15" aria-hidden="true" />
                       <span className="text-[11px] font-semibold mr-0.5 text-[#0B5A70]/70">Upload</span>
-                      <AttachBtn kind="camera" disabled={ocrProcessing} onClick={() => publicCameraInputRef.current && publicCameraInputRef.current.click()} title="Camera — photograph the lyrics" />
-                      <AttachBtn kind="gallery" disabled={ocrProcessing} onClick={() => publicImageInputRef.current && publicImageInputRef.current.click()} title="Gallery — pick a photo of the lyrics" />
-                      <AttachBtn kind="document" disabled={ocrProcessing} onClick={() => publicPdfInputRef.current && publicPdfInputRef.current.click()} title="Document — PDF of the lyrics" />
-                      <AttachBtn kind="ai" disabled={ocrProcessing} onClick={() => publicAiInputRef.current && publicAiInputRef.current.click()} title="Read with AI — photo or PDF, including handwriting" />
+                      <AttachBtn kind="camera" disabled={ocrProcessing} onClick={() => publicCameraInputRef.current && publicCameraInputRef.current.click()} title="Camera — photograph the lyrics (read with AI)" />
+                      <AttachBtn kind="gallery" disabled={ocrProcessing} onClick={() => publicImageInputRef.current && publicImageInputRef.current.click()} title="Gallery — pick a photo of the lyrics (read with AI)" />
+                      <AttachBtn kind="document" disabled={ocrProcessing} onClick={() => publicPdfInputRef.current && publicPdfInputRef.current.click()} title="Document — PDF of the lyrics (read with AI)" />
                     </div>
                   </div>
-                  <input ref={publicAiInputRef} type="file" accept="image/*,application/pdf" className="hidden"
-                    onChange={(e) => { const f = e.target.files && e.target.files[0]; if (f) handleAiRead(f, setPublicBhajanForm); e.target.value = ''; }} />
                   <input ref={publicCameraInputRef} type="file" accept="image/*" capture="environment" className="hidden"
-                    onChange={(e) => { const f = e.target.files && e.target.files[0]; if (f) handleImageFileForOcr(f, 'photo', setPublicBhajanForm); e.target.value = ''; }} />
+                    onChange={(e) => { const f = e.target.files && e.target.files[0]; if (f) handleAiRead(f, setPublicBhajanForm); e.target.value = ''; }} />
                   <input ref={publicImageInputRef} type="file" accept="image/*" className="hidden"
-                    onChange={(e) => { const f = e.target.files && e.target.files[0]; if (f) handleImageFileForOcr(f, 'image', setPublicBhajanForm); e.target.value = ''; }} />
+                    onChange={(e) => { const f = e.target.files && e.target.files[0]; if (f) handleAiRead(f, setPublicBhajanForm); e.target.value = ''; }} />
                   <input ref={publicPdfInputRef} type="file" accept="application/pdf,.pdf" className="hidden"
-                    onChange={(e) => { const f = e.target.files && e.target.files[0]; if (f) handlePdfFileForOcr(f, setPublicBhajanForm); e.target.value = ''; }} />
+                    onChange={(e) => { const f = e.target.files && e.target.files[0]; if (f) handleAiRead(f, setPublicBhajanForm); e.target.value = ''; }} />
 
                   {ocrProcessing && (
                     <div className="mb-2 p-3 bg-[#FFFCF8] border border-[#0B5A70]/15 rounded-lg">
                       <div className="w-full bg-[#0B5A70]/10 rounded-full h-2 mb-2"><div className="bg-[#0B5A70] h-2 rounded-full transition-all" style={{ width: ocrProgress + '%' }} /></div>
                       <p className="text-xs font-semibold text-[#0B5A70]">{ocrMessage || 'Reading…'}</p>
-                      {!localStorage.getItem('sankirtan-tesseract-langs-cached') && <p className="text-[11px] mt-1 text-gray-500">First use downloads the reader (~15 MB) once; later scans are quick.</p>}
                     </div>
                   )}
                   {!ocrProcessing && ocrMessage && <p className="text-xs font-semibold text-[#0B5A70] mb-2">{ocrMessage}</p>}
