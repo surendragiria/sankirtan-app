@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo, useLayoutEffect } from 'react';
+import { recordingsSupported, Recorder, saveRecording, listRecordings, getRecordingBlob, deleteRecording, recordingsUsage, requestPersistentStorage, fmtDuration, fmtBytes, extForMime, safeFileName } from './recordings';
 import { createPortal } from 'react-dom';
 
 // ==============================================
@@ -1084,7 +1085,7 @@ const DEFAULT_KEYWORDS = [
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.10.28.s135';
+const APP_VERSION = '2026.10.28.s136';
 const AUTO_SCROLL_VIEWS = ['live-program', 'bhajan-detail', 'public-bhajan-detail'];
 const LIVE_SCROLL_STEPS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 
@@ -2065,6 +2066,7 @@ const IconLock = (p) => <Icon {...p} path={<><rect x="5" y="11" width="14" heigh
 const IconShare = (p) => <Icon {...p} path={<><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><path d="M8.6 10.5l6.8-3.9M8.6 13.5l6.8 3.9" /></>} />;
 const IconListPlus = (p) => <Icon {...p} path={<><path d="M4 6h12M4 12h12M4 18h7" /><path d="M18 14v6M15 17h6" /></>} />;
 const IconStar = ({ filled, ...p }) => <Icon {...p} path={<path fill={filled ? 'currentColor' : 'none'} d="M12 3l2.8 5.9 6.4.8-4.7 4.5 1.2 6.4L12 17.5 6.3 20.6l1.2-6.4L2.8 9.7l6.4-.8L12 3z" />} />;
+const IconMic = (p) => <Icon {...p} path={<><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0014 0M12 18v3M9 21h6" /></>} />;
 const IconPencil = (p) => <Icon {...p} path={<path d="M4 20h4l10-10a2.83 2.83 0 00-4-4L4 16v4zm9-13l4 4" />} />;
 
 // SESSION 48: BhajanTitle renders a title stored as
@@ -2697,6 +2699,62 @@ const LyricsEditorSheet = ({ open, onClose, onCancel, darkMode, inputId, value, 
         />
         <CaretChips inputId={inputId}>{chips}</CaretChips>
       </div>
+    </div>
+  );
+};
+
+// SESSION 136: recording button (idle mic / red timer while recording)
+const RecButton = ({ active, elapsed, onClick, darkMode, compact }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    className={active
+      ? `${compact ? 'h-8 px-2.5' : 'h-9 px-3'} rounded-full text-xs font-bold flex items-center gap-1.5 bg-red-600 text-white shadow-md`
+      : `${compact ? 'w-8 h-8 rounded-lg' : 'w-9 h-9 rounded-full'} flex items-center justify-center transition-colors ${darkMode ? 'bg-[#1e2e33] text-gray-300 hover:bg-[#0B5A70]/20' : 'bg-[#0B5A70]/8 text-[#0B5A70] hover:bg-[#0B5A70]/15'}`}
+    title={active ? 'Stop & save recording' : 'Record this bhajan (saved on this phone)'}
+    aria-label={active ? 'Stop recording' : 'Start recording'}
+    aria-pressed={active}
+  >
+    {active ? <><span className="w-2 h-2 rounded-full bg-white animate-pulse" aria-hidden="true" />{fmtDuration(elapsed)}</> : <IconMic size={compact ? 16 : 18} />}
+  </button>
+);
+
+// SESSION 136: list of on-device recordings for a bhajan or a program
+const RecordingsPanel = ({ rows, usage, darkMode, playing, onPlay, onShare, onDelete, isIOSBrowser }) => {
+  if (!rows || rows.length === 0) return null;
+  return (
+    <div className={`rounded-xl mb-4 border ${darkMode ? 'bg-[#1e2e33]/60 border-[#0B5A70]/20' : 'bg-[#FFFCF8] border-[#0B5A70]/12'}`}>
+      <div className={`px-3 py-2 text-[11px] font-semibold uppercase tracking-wide flex items-center justify-between ${darkMode ? 'text-gray-400' : 'text-[#0B5A70]/70'}`}>
+        <span>🎙 Recordings · on this phone</span>
+        {usage && usage.count > 0 && <span className="normal-case tracking-normal font-normal">{usage.count} · {fmtBytes(usage.bytes)}</span>}
+      </div>
+      <ul className={`divide-y ${darkMode ? 'divide-[#0B5A70]/15' : 'divide-[#0B5A70]/8'}`}>
+        {rows.map(r => (
+          <li key={r.id} className="px-3 py-2">
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={() => onPlay(r)} className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${playing && playing.id === r.id ? 'bg-[#E65100] text-white' : (darkMode ? 'bg-[#0B5A70]/30 text-teal-200' : 'bg-[#0B5A70]/10 text-[#0B5A70]')}`} aria-label={playing && playing.id === r.id ? 'Close player' : 'Play'}>
+                {playing && playing.id === r.id ? '■' : '▶'}
+              </button>
+              <div className="flex-1 min-w-0">
+                <p className={`text-sm font-semibold truncate ${darkMode ? 'text-gray-100' : 'text-gray-900'}`}>{r.bhajanTitle || 'Recording'}</p>
+                <p className={`text-[11px] ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                  {new Date(r.createdAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })} · {fmtDuration(r.duration)} · {fmtBytes(r.size || 0)}{r.programName ? ` · ${r.programName}` : ''}
+                </p>
+              </div>
+              <button type="button" onClick={() => onShare(r)} className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${darkMode ? 'text-gray-300 hover:bg-[#0B5A70]/20' : 'text-[#0B5A70] hover:bg-[#0B5A70]/10'}`} title="Share / save file" aria-label="Share recording"><IconShare size={16} /></button>
+              <button type="button" onClick={() => onDelete(r)} className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${darkMode ? 'text-gray-500 hover:text-red-300' : 'text-gray-400 hover:text-red-600'}`} title="Delete" aria-label="Delete recording">🗑</button>
+            </div>
+            {playing && playing.id === r.id && (
+              <audio controls autoPlay src={playing.url} className="w-full mt-2 h-9" />
+            )}
+          </li>
+        ))}
+      </ul>
+      {isIOSBrowser && (
+        <p className={`px-3 py-2 text-[11px] border-t ${darkMode ? 'text-amber-200/80 border-[#0B5A70]/15' : 'text-amber-800 bg-amber-50/60 border-amber-100'}`}>
+          iPhone tip: add Sankirtan to your Home Screen (Share → Add to Home Screen) so Safari never clears these recordings.
+        </p>
+      )}
     </div>
   );
 };
@@ -7084,6 +7142,113 @@ const App = () => {
   };
 
   // SESSION 75: ⭐ star / unstar a library bhajan.
+  // ==============================================
+  // SESSION 136: ON-DEVICE RECORDINGS
+  // ==============================================
+  const recorderRef = useRef(null);
+  const [recState, setRecState] = useState(null); // { bhajanId, bhajanTitle, programId, programName, elapsed } | null
+  const [recRows, setRecRows] = useState([]);
+  const [recUsage, setRecUsage] = useState(null);
+  const [recPlaying, setRecPlaying] = useState(null); // { id, url }
+  const recStateRef = useRef(null);
+  useEffect(() => { recStateRef.current = recState; }, [recState]);
+  const isIOSBrowser = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window.navigator.standalone === true || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches));
+
+  const refreshRecordings = useCallback(async (filter) => {
+    try {
+      const rows = await listRecordings({ ...filter, uid: user ? user.uid : undefined });
+      setRecRows(rows);
+      setRecUsage(await recordingsUsage());
+    } catch { setRecRows([]); }
+  }, [user]);
+
+  const startRecording = async (ctx) => {
+    if (!recordingsSupported()) { showToast('Recording is not supported in this browser', 'error'); return false; }
+    try {
+      const rec = recorderRef.current || (recorderRef.current = new Recorder());
+      await rec.start((elapsed) => setRecState(prev => (prev ? { ...prev, elapsed } : prev)));
+      setRecState({ ...ctx, elapsed: 0 });
+      requestPersistentStorage();
+      return true;
+    } catch (e) {
+      const denied = e && (e.name === 'NotAllowedError' || e.name === 'SecurityError');
+      showToast(denied ? 'Microphone access was refused — allow it in your phone settings for Sankirtan' : 'Could not start recording: ' + (e.message || e.name), 'error');
+      return false;
+    }
+  };
+  const stopRecording = async (opts = {}) => {
+    const rec = recorderRef.current;
+    const ctx = recStateRef.current;
+    if (!rec || !rec.active) { setRecState(null); return; }
+    let out = null;
+    try { out = await rec.stop(); } catch (e) { console.log('stop failed', e); }
+    setRecState(null);
+    if (!out || !ctx) return;
+    if (out.duration < 2 || !out.blob.size) { if (!opts.silent) showToast('Recording too short — discarded'); return; }
+    try {
+      await saveRecording({
+        id: 'rec_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+        uid: user ? user.uid : null,
+        bhajanId: ctx.bhajanId || null, bhajanTitle: ctx.bhajanTitle || '',
+        programId: ctx.programId || null, programName: ctx.programName || '',
+        createdAt: Date.now(), duration: out.duration, mime: out.mime
+      }, out.blob);
+      if (!opts.silent) showToast(`🎙 Saved · ${fmtDuration(out.duration)} · on this phone`);
+      if (currentView === 'bhajan-detail' && selectedBhajan) refreshRecordings({ bhajanId: selectedBhajan.savedFromPublicId || selectedBhajan.id });
+      else if (currentView === 'program-detail' && selectedProgram) refreshRecordings({ programId: selectedProgram.id });
+    } catch (e) {
+      showToast('Could not save the recording: ' + (e.message || 'storage error'), 'error');
+    }
+  };
+  const toggleRecording = (ctx) => { if (recStateRef.current) stopRecording(); else startRecording(ctx); };
+  // Live mode: moving to another bhajan splits the recording per bhajan.
+  const switchRecordingTo = async (ctx) => { if (!recStateRef.current) return; await stopRecording({ silent: true }); await startRecording(ctx); };
+  const recCtxFor = (bhajan, program) => bhajan ? ({ bhajanId: bhajan.savedFromPublicId || bhajan.id, bhajanTitle: (bhajan.title || '').split(' / ')[0], programId: program ? program.id : null, programName: program ? program.name : '' }) : null;
+
+  // Leaving the reading/live pages stops and saves an active recording.
+  useEffect(() => {
+    if (recStateRef.current && !['bhajan-detail', 'live-program'].includes(currentView)) stopRecording();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentView]);
+  // Load the lists when a bhajan or program page opens.
+  useEffect(() => {
+    if (recPlaying) { try { URL.revokeObjectURL(recPlaying.url); } catch {} setRecPlaying(null); }
+    if (currentView === 'bhajan-detail' && selectedBhajan) refreshRecordings({ bhajanId: selectedBhajan.savedFromPublicId || selectedBhajan.id });
+    else if (currentView === 'program-detail' && selectedProgram) refreshRecordings({ programId: selectedProgram.id });
+    else setRecRows([]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentView, selectedBhajan && selectedBhajan.id, selectedProgram && selectedProgram.id, refreshRecordings]);
+
+  const playRecording = async (r) => {
+    if (recPlaying && recPlaying.id === r.id) { try { URL.revokeObjectURL(recPlaying.url); } catch {} setRecPlaying(null); return; }
+    const blob = await getRecordingBlob(r.id);
+    if (!blob) { showToast('Recording file is missing', 'error'); return; }
+    if (recPlaying) { try { URL.revokeObjectURL(recPlaying.url); } catch {} }
+    setRecPlaying({ id: r.id, url: URL.createObjectURL(blob) });
+  };
+  const shareRecording = async (r) => {
+    const blob = await getRecordingBlob(r.id);
+    if (!blob) { showToast('Recording file is missing', 'error'); return; }
+    const name = `${safeFileName(r.bhajanTitle || 'bhajan')} ${new Date(r.createdAt).toLocaleDateString('en-IN').replace(/\//g, '-')}.${extForMime(r.mime || blob.type)}`;
+    const file = new File([blob], name, { type: blob.type || r.mime || 'audio/webm' });
+    try {
+      if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: r.bhajanTitle || 'Recording' }); return; }
+    } catch (e) { if (e && e.name === 'AbortError') return; }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+    showToast('Saved to your downloads');
+  };
+  const removeRecording = (r) => askConfirm(
+    { title: 'Delete recording?', message: `${r.bhajanTitle || 'Recording'} · ${fmtDuration(r.duration)} will be removed from this phone.`, confirmLabel: '🗑️ Delete' },
+    async () => {
+      if (recPlaying && recPlaying.id === r.id) { try { URL.revokeObjectURL(recPlaying.url); } catch {} setRecPlaying(null); }
+      await deleteRecording(r.id);
+      setRecRows(rows => rows.filter(x => x.id !== r.id));
+      setRecUsage(await recordingsUsage());
+    }
+  );
+
   const toggleStarred = async (bhajanIn) => {
     if (!user || !bhajanIn) return;
     const bhajan = await materializeBhajan(bhajanIn);
@@ -7439,15 +7604,19 @@ const App = () => {
 
   const liveNext = () => {
     if (selectedProgram && liveProgramIndex < selectedProgram.bhajanIds.length - 1) {
+      const nb = getBhajanById(selectedProgram.bhajanIds[liveProgramIndex + 1]);
       setLiveProgramIndex(liveProgramIndex + 1);
       window.scrollTo(0, 0);
+      if (nb) switchRecordingTo(recCtxFor(nb, selectedProgram)); // SESSION 136: one recording per bhajan
     }
   };
 
   const livePrev = () => {
     if (liveProgramIndex > 0) {
+      const pb = getBhajanById(selectedProgram.bhajanIds[liveProgramIndex - 1]);
       setLiveProgramIndex(liveProgramIndex - 1);
       window.scrollTo(0, 0);
+      if (pb) switchRecordingTo(recCtxFor(pb, selectedProgram));
     }
   };
 
@@ -8036,6 +8205,9 @@ const App = () => {
 
           {/* Font Size Controls */}
           <div className="max-w-4xl mx-auto px-4 pb-2 flex items-center justify-center gap-2 flex-wrap" data-live-controls>
+            {recordingsSupported() && (
+              <RecButton compact darkMode={darkMode} active={!!recState} elapsed={recState ? recState.elapsed : 0} onClick={() => toggleRecording(recCtxFor(currentBhajan, selectedProgram))} />
+            )}
             <button
               onClick={() => setLiveFontSize(Math.max(14, liveFontSize - 2))}
               className={`w-8 h-8 rounded-lg font-bold ${liveBtnMuted}`}
@@ -9402,6 +9574,9 @@ const App = () => {
                       into any playlist/program/parody without
                       leaving the reading view. Only shown for
                       logged-in users (guests have no programs). */}
+                  {recordingsSupported() && (
+                    <RecButton darkMode={darkMode} active={!!recState} elapsed={recState ? recState.elapsed : 0} onClick={() => toggleRecording(recCtxFor(selectedBhajan, null))} />
+                  )}
                   {user && (
                     <button
                       onClick={() => setAddToProgramFor(selectedBhajan)}
@@ -9601,6 +9776,8 @@ const App = () => {
                     )}
                   </div>
                 )}
+
+                <RecordingsPanel rows={recRows} usage={recUsage} darkMode={darkMode} playing={recPlaying} onPlay={playRecording} onShare={shareRecording} onDelete={removeRecording} isIOSBrowser={isIOSBrowser} />
 
                 <div className={`border-t pt-4 ${darkMode ? 'border-[#0B5A70]/15' : 'border-[#0B5A70]/8'}`}>
                   <div className="flex items-center justify-end gap-1 mb-2 flex-wrap" data-live-controls>
@@ -10484,6 +10661,8 @@ const App = () => {
                   </div>
                 );
               })()}
+
+              <RecordingsPanel rows={recRows} usage={recUsage} darkMode={darkMode} playing={recPlaying} onPlay={playRecording} onShare={shareRecording} onDelete={removeRecording} isIOSBrowser={isIOSBrowser} />
 
               <div className="mb-4">
                 <div className="flex items-center justify-between mb-2">
