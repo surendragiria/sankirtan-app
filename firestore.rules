@@ -166,6 +166,18 @@ service cloud.firestore {
     }
 
     // ============================================
+    // METRICS (Session 138) - one anonymous "+1" per app open, per day.
+    // Anyone (guests too) may add increments; only the admin reads.
+    // ============================================
+    match /metrics/{dayKey} {
+      allow read: if isAdmin();
+      allow create, update: if request.resource.data.keys().hasOnly(['day', 'total', 'signedIn', 'guest', 'platform', 'mode'])
+        && request.resource.data.total is int
+        && request.resource.data.total == (resource == null ? 1 : resource.data.get('total', 0) + 1);
+      allow delete: if isAdmin();
+    }
+
+    // ============================================
     // APP CONFIG - dropdown lists, deity/category options
     // ============================================
     match /appConfig/{doc} {

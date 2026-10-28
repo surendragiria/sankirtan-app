@@ -1083,9 +1083,20 @@ const DEFAULT_KEYWORDS = [
   'gujarati', 'filmy', 'folk', 'traditional', 'peaceful'
 ];
 
+// SESSION 138: where is the app running? Used for the admin usage report.
+const detectAccess = () => {
+  const ua = navigator.userAgent || '';
+  const platform = /iPad|iPhone|iPod/.test(ua) ? 'ios' : /Android/.test(ua) ? 'android' : 'desktop';
+  const twa = typeof document !== 'undefined' && /^android-app:\/\//.test(document.referrer || '');
+  const standalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
+  const mode = twa ? 'playstore' : standalone ? 'installed' : 'browser';
+  return { platform, mode };
+};
+const dayKey = (d = new Date()) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.10.28.s137';
+const APP_VERSION = '2026.10.28.s138';
 const AUTO_SCROLL_VIEWS = ['live-program', 'bhajan-detail', 'public-bhajan-detail'];
 const LIVE_SCROLL_STEPS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 
@@ -3271,6 +3282,36 @@ const App = () => {
   // report over all users' libraries (collection-group read, admin-only in
   // the rules). "Authored" = not saved from the public library and not a
   // legacy copy of a public title.
+  const [usersReport, setUsersReport] = useState(null); // null | 'loading' | {...} | { error }
+  const loadUsersReport = async () => {
+    if (!isAdmin) return;
+    setUsersReport('loading');
+    try {
+      const db = window.firebase.firestore();
+      const ms = (t) => (t && t.toMillis ? t.toMillis() : (t && t.seconds ? t.seconds * 1000 : 0));
+      const now = Date.now(), d7 = now - 7 * 864e5, d30 = now - 30 * 864e5;
+      const snap = await db.collection('users').get();
+      const users = []; snap.forEach(d => users.push({ id: d.id, ...d.data() }));
+      const r = { total: users.length, new7: 0, new30: 0, active7: 0, active30: 0, platform: { ios: 0, android: 0, desktop: 0, unknown: 0 }, mode: { playstore: 0, installed: 0, browser: 0, unknown: 0 }, withBhajans: 0, withPrograms: 0, recent: [], inactive: [] };
+      users.forEach(u => {
+        const c = ms(u.createdAt), a = ms(u.lastActive);
+        if (c >= d7) r.new7++; if (c >= d30) r.new30++;
+        if (a >= d7) r.active7++; if (a >= d30) r.active30++;
+        const acc = u.access || {};
+        r.platform[acc.platform || 'unknown'] = (r.platform[acc.platform || 'unknown'] || 0) + 1;
+        r.mode[acc.mode || 'unknown'] = (r.mode[acc.mode || 'unknown'] || 0) + 1;
+        if (u.stats && u.stats.bhajanCount > 0) r.withBhajans++;
+      });
+      r.recent = users.filter(u => ms(u.createdAt)).sort((a, b) => ms(b.createdAt) - ms(a.createdAt)).slice(0, 10)
+        .map(u => ({ id: u.id, name: u.displayName || u.email || u.id, email: u.email || '', created: ms(u.createdAt), active: ms(u.lastActive), platform: (u.access || {}).platform || '', mode: (u.access || {}).mode || '', sessions: (u.access || {}).sessions || 0, version: (u.access || {}).appVersion || '' }));
+      // daily visits for the last 14 days
+      const days = []; for (let i = 13; i >= 0; i--) days.push(dayKey(new Date(now - i * 864e5)));
+      const docs = await Promise.all(days.map(k => db.collection('metrics').doc(k).get().catch(() => null)));
+      r.daily = days.map((k, i) => { const d = docs[i] && docs[i].exists ? docs[i].data() : {}; return { day: k, total: d.total || 0, signedIn: d.signedIn || 0, guest: d.guest || 0, mode: d.mode || {}, platform: d.platform || {} }; });
+      r.at = now;
+      setUsersReport(r);
+    } catch (e) { setUsersReport({ error: e.message }); }
+  };
   const [authorReport, setAuthorReport] = useState(null); // null | 'loading' | { rows, totalUsers, totalAuthored, at }
   const loadAuthorReport = async () => {
     if (!isAdmin) return;
@@ -3569,6 +3610,24 @@ const App = () => {
       return updated;
     });
   }, [RECENT_KEY]);
+
+  // SESSION 138: one anonymous visit tick per session into metrics/{day}
+  // (counts by platform and install mode; nothing personal is written).
+  useEffect(() => {
+    if (loading || !window.firebase) return;
+    if (window.__sankirtanVisitLogged) return;
+    window.__sankirtanVisitLogged = true;
+    try {
+      const acc = detectAccess();
+      const inc = window.firebase.firestore.FieldValue.increment(1);
+      const patch = { day: dayKey(), total: inc };
+      patch['platform.' + acc.platform] = inc;
+      patch['mode.' + acc.mode] = inc;
+      patch[user ? 'signedIn' : 'guest'] = inc;
+      window.firebase.firestore().collection('metrics').doc(dayKey()).set(patch, { merge: true }).catch(() => {});
+    } catch (e) { /* non-fatal */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading]);
 
   // Global ESC key handler
   useEffect(() => {
@@ -5042,6 +5101,17 @@ const App = () => {
         setUserProfile(profile);
 
         loadConfigLists();
+        // SESSION 138: light usage telemetry on the user's own profile.
+        try {
+          const acc = detectAccess();
+          db.collection('users').doc(firebaseUser.uid).update({
+            lastActive: window.firebase.firestore.FieldValue.serverTimestamp(),
+            'access.platform': acc.platform,
+            'access.mode': acc.mode,
+            'access.appVersion': APP_VERSION,
+            'access.sessions': window.firebase.firestore.FieldValue.increment(1)
+          }).catch(() => {});
+        } catch (e) { /* non-fatal */ }
 
         // SESSION 64: the automatic first-login feature tour is retired —
         // new users land straight in the library. (Singer's Guide in the
@@ -12532,6 +12602,81 @@ const App = () => {
                     Tip: batch-curate a week at a time — pick tomorrow, then use the arrow to jump ahead.
                   </div>
                 </div>
+              </div>
+
+              {/* SESSION 138: USERS & ACCESS REPORT */}
+              <div className="bg-[#FFFCF8] rounded-2xl shadow-[0_2px_12px_rgba(11,90,112,0.06)] p-6 mb-6 border border-teal-200/60">
+                <div className="flex items-start justify-between gap-3 mb-1">
+                  <h3 className="text-lg font-bold text-[#0B5A70]">👥 Users & access</h3>
+                  <button onClick={loadUsersReport} disabled={usersReport === 'loading'} className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-[#0B5A70] text-white disabled:opacity-50">
+                    {usersReport === 'loading' ? 'Loading…' : (usersReport && usersReport.total !== undefined ? '↻ Refresh' : 'Load report')}
+                  </button>
+                </div>
+                <p className="text-sm text-gray-600 mb-3">Registrations, activity, and how people open the app (Play Store app · installed from browser · plain browser). Visit counts include guests.</p>
+                {usersReport && usersReport.error && <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">⚠️ {usersReport.error}</div>}
+                {usersReport && usersReport.total !== undefined && (() => {
+                  const r = usersReport;
+                  const tile = (label, value, sub) => (
+                    <div className="rounded-xl border border-[#0B5A70]/10 bg-white p-3">
+                      <p className="text-[11px] uppercase tracking-wide text-gray-500">{label}</p>
+                      <p className="text-2xl font-bold text-[#0B5A70] leading-tight">{value}</p>
+                      {sub && <p className="text-[11px] text-gray-500">{sub}</p>}
+                    </div>
+                  );
+                  const maxDay = Math.max(1, ...r.daily.map(d => d.total));
+                  const pct = (n) => (r.total ? Math.round((n / r.total) * 100) : 0);
+                  return (
+                    <>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">
+                        {tile('Registered', r.total, `+${r.new7} this week · +${r.new30} this month`)}
+                        {tile('Active 7 days', r.active7, `${r.active30} in 30 days`)}
+                        {tile('Play Store app', r.mode.playstore, `${pct(r.mode.playstore)}% of users`)}
+                        {tile('Installed (web)', r.mode.installed, `${r.mode.browser} browser only · ${r.mode.unknown} not seen since update`)}
+                      </div>
+                      <div className="grid md:grid-cols-2 gap-4 mb-4">
+                        <div>
+                          <p className="text-xs font-semibold text-[#0B5A70] mb-1.5">Platform</p>
+                          {[['iPhone / iPad', r.platform.ios], ['Android', r.platform.android], ['Desktop', r.platform.desktop], ['Not seen yet', r.platform.unknown]].map(([l, n]) => (
+                            <div key={l} className="flex items-center gap-2 text-xs mb-1">
+                              <span className="w-24 text-gray-600">{l}</span>
+                              <div className="flex-1 h-2 rounded bg-[#0B5A70]/8"><div className="h-2 rounded bg-[#0B5A70]" style={{ width: pct(n) + '%' }} /></div>
+                              <span className="w-14 text-right text-gray-600">{n} · {pct(n)}%</span>
+                            </div>
+                          ))}
+                          <p className="text-[11px] text-gray-500 mt-2">{r.withBhajans} users have added or saved bhajans.</p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-semibold text-[#0B5A70] mb-1.5">Daily opens · last 14 days (signed-in + guests)</p>
+                          <div className="flex items-end gap-1 h-24">
+                            {r.daily.map(d => (
+                              <div key={d.day} className="flex-1 flex flex-col items-center justify-end h-full" title={`${d.day}: ${d.total} opens · ${d.signedIn} signed in · ${d.guest} guests · Play Store ${d.mode.playstore || 0} · installed ${d.mode.installed || 0} · browser ${d.mode.browser || 0}`}>
+                                <div className="w-full rounded-t bg-[#E65100]/80" style={{ height: Math.max(2, Math.round((d.total / maxDay) * 88)) + 'px' }} />
+                                <span className="text-[9px] text-gray-400 mt-0.5">{d.day.slice(8)}</span>
+                              </div>
+                            ))}
+                          </div>
+                          <p className="text-[11px] text-gray-500 mt-1">Today: {r.daily[13].total} · this week: {r.daily.slice(7).reduce((n, d) => n + d.total, 0)} · hover a bar for the split.</p>
+                        </div>
+                      </div>
+                      <p className="text-xs font-semibold text-[#0B5A70] mb-1">Latest sign-ups</p>
+                      <ul className="divide-y divide-[#0B5A70]/8">
+                        {r.recent.map(u => (
+                          <li key={u.id} className="py-1.5 flex items-center justify-between gap-2 text-xs">
+                            <div className="min-w-0">
+                              <p className="font-semibold text-[#0B5A70] truncate">{u.name}</p>
+                              <p className="text-gray-500 truncate">{u.email}</p>
+                            </div>
+                            <div className="text-right text-gray-500 flex-shrink-0">
+                              <p>joined {new Date(u.created).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}{u.active ? ` · last ${new Date(u.active).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}` : ''}</p>
+                              <p>{[u.platform, u.mode, u.sessions ? `${u.sessions} opens` : '', u.version ? u.version.replace(/^\d{4}\.\d{2}\.\d{2}\./, '') : ''].filter(Boolean).join(' · ') || 'not seen since this update'}</p>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                      <p className="text-[11px] text-gray-400 mt-2">Access data is recorded from version s138 onward, so older users show "not seen" until they open the app again. Loaded {new Date(r.at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}.</p>
+                    </>
+                  );
+                })()}
               </div>
 
               {/* SESSION 134: TOP AUTHORS REPORT */}
