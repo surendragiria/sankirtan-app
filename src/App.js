@@ -1096,7 +1096,7 @@ const dayKey = (d = new Date()) => d.getFullYear() + '-' + String(d.getMonth() +
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.10.28.s139';
+const APP_VERSION = '2026.10.31.s140';
 const AUTO_SCROLL_VIEWS = ['live-program', 'bhajan-detail', 'public-bhajan-detail'];
 const LIVE_SCROLL_STEPS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 
@@ -13465,8 +13465,8 @@ const App = () => {
         {showScrollTop && (
           <button
             onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-            className={`fixed right-6 z-40 w-11 h-11 rounded-full shadow-lg flex items-center justify-center transition-all ${
-              showTabBar ? 'bottom-20' : 'bottom-6'
+            className={`fixed z-40 rounded-full shadow-lg flex items-center justify-center transition-all ${
+              currentView === 'library' ? 'right-[22px] bottom-[164px] w-9 h-9 text-sm' : (showTabBar ? 'right-6 bottom-20 w-11 h-11' : 'right-6 bottom-6 w-11 h-11')
             } ${
               darkMode
                 ? 'bg-[#0B5A70] text-white hover:bg-[#094a5d]'
