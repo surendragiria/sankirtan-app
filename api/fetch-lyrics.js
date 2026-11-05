@@ -150,8 +150,13 @@ const lyricsFromJsonLd = (html) => {
   return out;
 };
 
+const { requireUser } = require('./_auth');
+
 module.exports = async (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
+  // SESSION 141: signed-in users only, 150 fetches per user per day
+  const user = await requireUser(req, res, 'fetchLyrics', 150);
+  if (!user) return;
   const raw = (req.query && req.query.url) || '';
   let url;
   try { url = new URL(String(raw).trim()); } catch { return res.status(400).json({ ok: false, error: 'Enter a full link starting with http:// or https://' }); }

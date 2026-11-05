@@ -42,9 +42,14 @@ const readJson = (req) => new Promise((resolve, reject) => {
   req.on('error', reject);
 });
 
+const { requireUser } = require('./_auth');
+
 module.exports = async (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
   if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'POST only' });
+  // SESSION 141: signed-in users only, 40 reads per user per day
+  const user = await requireUser(req, res, 'ocr', 40);
+  if (!user) return;
   const key = process.env.GEMINI_API_KEY;
   if (!key) return res.status(503).json({ ok: false, error: 'AI reading is not set up yet (missing GEMINI_API_KEY)' });
 

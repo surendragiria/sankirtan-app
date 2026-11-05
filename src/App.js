@@ -1083,6 +1083,16 @@ const DEFAULT_KEYWORDS = [
   'gujarati', 'filmy', 'folk', 'traditional', 'peaceful'
 ];
 
+// SESSION 141: our serverless functions accept signed-in users only.
+const authHeader = async () => {
+  try {
+    const u = window.firebase && window.firebase.auth().currentUser;
+    if (!u) return {};
+    const t = await u.getIdToken();
+    return t ? { Authorization: 'Bearer ' + t } : {};
+  } catch { return {}; }
+};
+
 // SESSION 138: where is the app running? Used for the admin usage report.
 const detectAccess = () => {
   const ua = navigator.userAgent || '';
@@ -1096,7 +1106,7 @@ const dayKey = (d = new Date()) => d.getFullYear() + '-' + String(d.getMonth() +
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.10.31.s140';
+const APP_VERSION = '2026.11.05.s141';
 const AUTO_SCROLL_VIEWS = ['live-program', 'bhajan-detail', 'public-bhajan-detail'];
 const LIVE_SCROLL_STEPS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 
@@ -4562,7 +4572,7 @@ const App = () => {
         }
 
         const firebaseConfig = {
-          apiKey: "AIzaSyDTfTsY4NH2jjN-Sb_5rmFRNSrB6y4sJMA",
+          apiKey: "AIzaSyDTfTsY4NH2jjN-Sb_5rmFRNSrB6y4sJMA", // public project identifier (not a secret)
           authDomain: "sankirtan-app-ebc18.firebaseapp.com",
           projectId: "sankirtan-app-ebc18",
           storageBucket: "sankirtan-app-ebc18.firebasestorage.app",
@@ -4574,6 +4584,17 @@ const App = () => {
         if (!window.firebase.apps || window.firebase.apps.length === 0) {
           window.firebase.initializeApp(firebaseConfig);
         }
+        // SESSION 141: Firebase App Check — proves requests come from the real
+        // app (reCAPTCHA v3). Active only when REACT_APP_APPCHECK_SITE_KEY is
+        // set at build time (Vercel env var); enforcement is switched on in
+        // the Firebase console once the metrics look clean.
+        try {
+          const siteKey = process.env.REACT_APP_APPCHECK_SITE_KEY;
+          if (siteKey && window.firebase.appCheck) {
+            if (window.location.hostname === 'localhost') window.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
+            window.firebase.appCheck().activate(siteKey, true);
+          }
+        } catch (acErr) { console.log('App Check not activated:', acErr && acErr.message); }
 
         try {
           await window.firebase.auth().setPersistence(
@@ -5312,7 +5333,7 @@ const App = () => {
         b64 = dataUrl.split(',')[1];
       }
       setOcrProgress(60);
-      const r = await fetch('/api/ocr', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mime, data: b64 }) });
+      const r = await fetch('/api/ocr', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(await authHeader()) }, body: JSON.stringify({ mime, data: b64 }) });
       const j = await r.json().catch(() => ({}));
       if (!j.ok) throw new Error(j.error || 'AI could not read this file');
       setOcrProgress(100);
@@ -6882,7 +6903,7 @@ const App = () => {
     if (!u) return;
     setFetchBusy(true); setFetchResult(null); setFetchShowFull(false);
     try {
-      const r = await fetch('/api/fetch-lyrics?url=' + encodeURIComponent(u));
+      const r = await fetch('/api/fetch-lyrics?url=' + encodeURIComponent(u), { headers: await authHeader() });
       const j = await r.json();
       if (!j.ok || !j.lyrics) {
         // Blocked for our server, or nothing found: try the site's wiki API from this browser.

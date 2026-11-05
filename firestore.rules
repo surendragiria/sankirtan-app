@@ -43,6 +43,11 @@ service cloud.firestore {
       match /saved/{savedId} {
         allow read, write: if isSignedIn() && request.auth.uid == userId;
       }
+      // Session 141: per-day API usage counters written by our serverless
+      // functions on the user's behalf (with the user's own token).
+      match /usage/{dayKey} {
+        allow read, write: if isSignedIn() && request.auth.uid == userId;
+      }
     }
 
     // ============================================
