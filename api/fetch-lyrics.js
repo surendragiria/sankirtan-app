@@ -154,8 +154,8 @@ const { requireUser } = require('./_auth');
 
 module.exports = async (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
-  // SESSION 141: signed-in users only, 150 fetches per user per day
-  const user = await requireUser(req, res, 'fetchLyrics', 150);
+  // SESSION 142: admin only (the fetch card lives in the admin panel)
+  const user = await requireUser(req, res, 'fetchLyrics', 300, { adminOnly: true });
   if (!user) return;
   const raw = (req.query && req.query.url) || '';
   let url;

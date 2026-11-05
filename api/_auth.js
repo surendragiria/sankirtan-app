@@ -8,6 +8,7 @@
 
 const PROJECT_ID = process.env.FIREBASE_PROJECT_ID || 'sankirtan-app-ebc18';
 const WEB_API_KEY = process.env.FIREBASE_WEB_API_KEY || 'AIzaSyDTfTsY4NH2jjN-Sb_5rmFRNSrB6y4sJMA';
+const ADMIN_UID = process.env.ADMIN_UID || 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
 
 const dayKey = () => new Date().toISOString().slice(0, 10);
 
@@ -55,10 +56,14 @@ async function checkDailyQuota(user, feature, limit) {
 }
 
 // Common gate: 401 when not signed in, 429 when over the daily cap.
-async function requireUser(req, res, feature, limit) {
+async function requireUser(req, res, feature, limit, opts = {}) {
   const user = await verifyIdToken(req);
   if (!user) {
     res.status(401).json({ ok: false, error: 'Please sign in to use this feature' });
+    return null;
+  }
+  if (opts.adminOnly && user.uid !== ADMIN_UID) {
+    res.status(403).json({ ok: false, error: 'This feature is available to the admin only' });
     return null;
   }
   const q = await checkDailyQuota(user, feature, limit);
