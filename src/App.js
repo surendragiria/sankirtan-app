@@ -1083,6 +1083,17 @@ const DEFAULT_KEYWORDS = [
   'gujarati', 'filmy', 'folk', 'traditional', 'peaceful'
 ];
 
+// SESSION 145: content-gap tests shared by the admin stats card and the library filter.
+const GAP_TESTS = {
+  video: (b) => !getYouTubeVideoId(b.source),
+  dhun: (b) => !b.dhun,
+  scale: (b) => !b.scale,
+  mood: (b) => !b.keywords || b.keywords.length === 0,
+  short: (b) => !b.lyrics || b.lyrics.trim().length < 80,
+  unread: (b) => !(b.readCount > 0)
+};
+const GAP_LABELS = { video: 'No YouTube link', dhun: 'No तर्ज़ / dhun', scale: 'No scale', mood: 'No mood tags', short: 'Very short lyrics', unread: 'Never read' };
+
 // SESSION 141: our serverless functions accept signed-in users only.
 const authHeader = async () => {
   try {
@@ -1106,7 +1117,7 @@ const dayKey = (d = new Date()) => d.getFullYear() + '-' + String(d.getMonth() +
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.11.11.s144';
+const APP_VERSION = '2026.11.11.s145';
 const AUTO_SCROLL_VIEWS = ['live-program', 'bhajan-detail', 'public-bhajan-detail'];
 const LIVE_SCROLL_STEPS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 
@@ -3187,6 +3198,8 @@ const App = () => {
   const [libraryStarredOnly, setLibraryStarredOnly] = useState(false);
   // SESSION 85: admin review workflow
   const [unreviewedOnly, setUnreviewedOnly] = useState(false);
+  // SESSION 145: admin "content gap" filter for the library (from the stats card)
+  const [libraryGap, setLibraryGap] = useState(null); // 'video'|'dhun'|'scale'|'mood'|'short'|'unread'|null
   // SESSION 111: library page rework state
   const [librarySort, setLibrarySort] = useState(() => { try { return localStorage.getItem('sankirtan-library-sort') || 'az'; } catch { return 'az'; } });
   useEffect(() => { try { localStorage.setItem('sankirtan-library-sort', librarySort); } catch {} }, [librarySort]);
@@ -6528,6 +6541,11 @@ const App = () => {
         const pb = publicBhajans.find(x => x.id === pubId);
         if (!pb || pb.reviewStatus === 'reviewed') return false;
       }
+      if (libraryGap) {
+        const pb = publicBhajans.find(x => x.id === (bhajan.savedFromPublicId || bhajan.id));
+        if (!pb) return false;
+        if (!GAP_TESTS[libraryGap](pb)) return false;
+      }
       if (q && searchTier(bhajan, q) < 0) return false;
       if (filterDeity && bhajan.deity !== filterDeity) return false;
       if (filterCategory && bhajan.category !== filterCategory) return false;
@@ -6560,7 +6578,7 @@ const App = () => {
     });
     // SESSION 71: when searching, title matches come first.
     return rankByTier(sorted, q);
-  }, [bhajans, libraryStarredOnly, unreviewedOnly, publicBhajans, debouncedSearchQuery, filterDeity, filterCategory, libraryFilterKeyword, librarySort]);
+  }, [bhajans, libraryStarredOnly, unreviewedOnly, libraryGap, publicBhajans, debouncedSearchQuery, filterDeity, filterCategory, libraryFilterKeyword, librarySort]);
 
   const filteredPrograms = useMemo(() => {
     if (!programSearchQuery) return programs;
@@ -9301,8 +9319,8 @@ const App = () => {
           {currentView === 'library' && (() => {
             // SESSION 111: Library page rework — search first, one filter
             // row, explicit sort, A–Z rail, Continue strip, FAB for adding.
-            const anyFilter = !!(searchQuery || filterDeity || filterCategory || libraryFilterKeyword || libraryStarredOnly || unreviewedOnly);
-            const clearAll = () => { setSearchQuery(''); setFilterDeity(''); setFilterCategory(''); setLibraryFilterKeyword(''); setLibraryStarredOnly(false); setUnreviewedOnly(false); };
+            const anyFilter = !!(searchQuery || filterDeity || filterCategory || libraryFilterKeyword || libraryStarredOnly || unreviewedOnly || libraryGap);
+            const clearAll = () => { setSearchQuery(''); setFilterDeity(''); setFilterCategory(''); setLibraryFilterKeyword(''); setLibraryStarredOnly(false); setUnreviewedOnly(false); setLibraryGap(null); };
             const chipBase = 'px-3 py-1.5 rounded-full text-xs font-semibold border flex-shrink-0 transition-all flex items-center gap-1';
             const chipOn = 'bg-[#0B5A70] text-white border-[#0B5A70] shadow-sm';
             const chipOff = darkMode ? 'bg-transparent text-teal-200 border-[#0B5A70]/40' : 'bg-white text-[#0B5A70] border-[#0B5A70]/25';
@@ -9415,6 +9433,11 @@ const App = () => {
                         <button onClick={() => setLibrarySheet('deity')} className={`${chipBase} ${filterDeity ? chipOn : chipOff}`}>{filterDeity || 'Deity'} <span className="opacity-70 text-[10px]">▼</span></button>
                         <button onClick={() => setLibrarySheet('type')} className={`${chipBase} ${filterCategory ? chipOn : chipOff}`}>{filterCategory || 'Type'} <span className="opacity-70 text-[10px]">▼</span></button>
                         <button onClick={() => setLibrarySheet('sort')} className={`${chipBase} ${chipOff}`} title="Sort & view">⇅ {sortLabel}</button>
+                        {isAdmin && libraryGap && (
+                          <button onClick={() => setLibraryGap(null)} className={`${chipBase} bg-amber-500 text-white border-amber-500 shadow-sm`} title="Content gap filter — tap to clear">
+                            🧩 {GAP_LABELS[libraryGap]} ✕
+                          </button>
+                        )}
                         {isAdmin && (
                           <button onClick={() => setUnreviewedOnly(v => !v)} aria-pressed={unreviewedOnly} className={`${chipBase} ${unreviewedOnly ? 'bg-purple-700 text-white border-purple-700 shadow-sm' : (darkMode ? 'bg-transparent text-purple-200 border-purple-400/40' : 'bg-white text-purple-700 border-purple-300')}`} title="Admin: show only bhajans not yet reviewed">
                             ⚠ {publicBhajans.filter(b => b.reviewStatus !== 'reviewed').length}
@@ -12441,11 +12464,18 @@ const App = () => {
                       <h4 className="font-bold text-[#0B5A70] mb-1">Content gaps</h4>
                       <p className="text-xs text-gray-500 mb-3">Bhajans missing something — worth filling in.</p>
                       <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-sm">
-                        {[['No YouTube link', noVideo], ['No तर्ज़ / dhun', noDhun], ['No scale', noScale], ['No mood tags', noMood], ['Very short lyrics', shortLyrics], ['Never read', neverRead]].map(([k, v]) => (
-                          <div key={k} className="flex items-center justify-between rounded-lg px-3 py-2 bg-amber-50 border border-amber-200/60">
-                            <span className="text-gray-700">{k}</span>
-                            <span className="font-bold text-amber-800">{v}</span>
-                          </div>
+                        {[['video', noVideo], ['dhun', noDhun], ['scale', noScale], ['mood', noMood], ['short', shortLyrics], ['unread', neverRead]].map(([k, v]) => (
+                          <button
+                            key={k}
+                            type="button"
+                            disabled={!v}
+                            onClick={() => { setLibraryGap(k); setUnreviewedOnly(false); setSearchQuery(''); setCurrentView('library'); window.scrollTo(0, 0); }}
+                            className="flex items-center justify-between rounded-lg px-3 py-2 bg-amber-50 border border-amber-200/60 text-left hover:bg-amber-100 active:scale-[0.98] transition disabled:opacity-50"
+                            title={v ? `Open these ${v} in the Library to fix them` : 'Nothing to fix'}
+                          >
+                            <span className="text-gray-700">{GAP_LABELS[k]}</span>
+                            <span className="font-bold text-amber-800">{v} <span className="opacity-60 font-normal">→</span></span>
+                          </button>
                         ))}
                       </div>
                     </div>
