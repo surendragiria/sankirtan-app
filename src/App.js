@@ -1106,7 +1106,7 @@ const dayKey = (d = new Date()) => d.getFullYear() + '-' + String(d.getMonth() +
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.11.11.s143';
+const APP_VERSION = '2026.11.11.s144';
 const AUTO_SCROLL_VIEWS = ['live-program', 'bhajan-detail', 'public-bhajan-detail'];
 const LIVE_SCROLL_STEPS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 
@@ -5079,7 +5079,10 @@ const App = () => {
 
     const saved = new Set();
     bhajans.forEach(b => {
-      if (b.savedFromPublicId) {
+      // SESSION 144: virtual entries (public bhajans shown in the library
+      // without a personal copy) must NOT count as saved — they made
+      // star/notes fail with "Already in your library".
+      if (b.savedFromPublicId && !b.virtual) {
         saved.add(b.savedFromPublicId);
       }
     });
@@ -7232,6 +7235,12 @@ const App = () => {
   // copy before a personal write. Returns the bhajan to operate on.
   const materializeBhajan = async (bhajan) => {
     if (!bhajan || !bhajan.virtual) return bhajan;
+    // SESSION 144: if a personal copy already exists, use it instead of trying to save again.
+    const existing = ownedBhajans.find(b => !b.virtual && (b.id === bhajan.id || b.savedFromPublicId === bhajan.id));
+    if (existing) {
+      setSelectedBhajan(prev => (prev && prev.id === bhajan.id ? { ...prev, ...existing, virtual: false } : prev));
+      return existing;
+    }
     const pub = publicBhajans.find(b => b.id === bhajan.id) || bhajan;
     const saved = await saveToMyLibrary(pub, { silent: true });
     if (!saved) return null;
