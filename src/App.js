@@ -1106,7 +1106,7 @@ const dayKey = (d = new Date()) => d.getFullYear() + '-' + String(d.getMonth() +
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.11.05.s142';
+const APP_VERSION = '2026.11.11.s143';
 const AUTO_SCROLL_VIEWS = ['live-program', 'bhajan-detail', 'public-bhajan-detail'];
 const LIVE_SCROLL_STEPS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 
@@ -5921,6 +5921,13 @@ const App = () => {
       (HINDI_FALLBACK_MAP[lowerWord] ? [HINDI_FALLBACK_MAP[lowerWord]] : null);
   };
 
+  // SESSION 143: the Hindi typing handlers work on any field — form fields by
+  // name, and 'notes' = the private notes draft on the reading page.
+  const getHindiField = (fieldName) => (fieldName === 'notes' ? (notesDraft || '') : (bhajanForm[fieldName] || ''));
+  const setHindiField = (fieldName, v) => {
+    if (fieldName === 'notes') setNotesDraft(v);
+    else setBhajanForm(prev => ({ ...prev, [fieldName]: v }));
+  };
   const handleHindiKeyDown = (e, fieldName) => {
     if (!hindiTypingEnabled) return;
     if (e.key !== ' ' && e.key !== 'Enter' && e.key !== '.') return;
@@ -5950,9 +5957,9 @@ const App = () => {
       setShowSuggestions(false);
       setCurrentWord('');
       // SESSION 115: edit in place (no caret/scroll jump); fall back to state replace
-      if (replaceRangeInField(target, wordStart, cursorPos, replacement + separator, (v) => setBhajanForm(prev => ({ ...prev, [fieldName]: v })))) return;
+      if (replaceRangeInField(target, wordStart, cursorPos, replacement + separator, (v) => setHindiField(fieldName, v))) return;
       const newValue = value.substring(0, wordStart) + replacement + separator + value.substring(cursorPos);
-      setBhajanForm(prev => ({ ...prev, [fieldName]: newValue }));
+      setHindiField(fieldName, newValue);
       setTimeout(() => {
         const newCursor = wordStart + replacement.length + 1;
         target.selectionStart = newCursor;
@@ -5965,14 +5972,14 @@ const App = () => {
 
   const handleHindiInput = (e, fieldName) => {
     const value = e.target.value;
-    const oldValue = bhajanForm[fieldName] || '';
+    const oldValue = getHindiField(fieldName) || '';
     if (fieldName === 'lyrics') pushLyricsHistory('bhajan', oldValue);
 
     const spaceJustTyped = value.length > oldValue.length &&
                            (value.endsWith(' ') || value.endsWith('\n') || value.endsWith('.')) &&
                            !oldValue.endsWith(value.slice(-1));
 
-    setBhajanForm(prev => ({ ...prev, [fieldName]: value }));
+    setHindiField(fieldName, value);
 
     if (!hindiTypingEnabled) {
       setShowSuggestions(false);
@@ -6008,8 +6015,8 @@ const App = () => {
           setCurrentWord('');
           // SESSION 115: swap the word in place after this input event settles
           requestAnimationFrame(() => {
-            if (replaceRangeInField(target, wordStart, value.length, replacement + separator, (v) => setBhajanForm(prev => ({ ...prev, [fieldName]: v })))) return;
-            setBhajanForm(prev => ({ ...prev, [fieldName]: newValue }));
+            if (replaceRangeInField(target, wordStart, value.length, replacement + separator, (v) => setHindiField(fieldName, v))) return;
+            setHindiField(fieldName, newValue);
             setTimeout(() => {
               const newCursor = wordStart + replacement.length + 1;
               target.selectionStart = newCursor;
@@ -6066,9 +6073,9 @@ const App = () => {
     setCurrentWord('');
     // SESSION 121: picking the plain English chip must not get re-converted on the space that follows
     keepEnglishRef.current = /^[a-zA-Z]+$/.test(suggestion) ? suggestion : null;
-    if (replaceRangeInField(fieldElement, wordStart, cursorPos, suggestion + ' ', (v) => setBhajanForm(prev => ({ ...prev, [fieldName]: v })))) return;
+    if (replaceRangeInField(fieldElement, wordStart, cursorPos, suggestion + ' ', (v) => setHindiField(fieldName, v))) return;
     const newValue = value.substring(0, wordStart) + suggestion + ' ' + value.substring(cursorPos);
-    setBhajanForm(prev => ({ ...prev, [fieldName]: newValue }));
+    setHindiField(fieldName, newValue);
     requestAnimationFrame(() => {
       fieldElement.focus();
       const newCursor = wordStart + suggestion.length + 1;
@@ -9851,14 +9858,35 @@ const App = () => {
                       </button>
                     ) : (
                       <div className="p-3">
-                        <textarea
-                          value={notesDraft}
-                          onChange={(e) => setNotesDraft(e.target.value)}
-                          rows={3}
-                          autoFocus
-                          placeholder="e.g. Start from C#, Ramesh ji sings 2nd antara, slow tempo"
-                          className={`w-full text-sm p-2 rounded-lg border outline-none ${darkMode ? 'bg-[#162226] border-[#0B5A70]/30 text-gray-100' : 'bg-white border-amber-300 text-gray-800'}`}
-                        />
+                        <div className="relative">
+                          <textarea
+                            id="hindi-input-notes"
+                            value={notesDraft}
+                            onChange={(e) => handleHindiInput(e, 'notes')}
+                            onKeyDown={(e) => handleHindiKeyDown(e, 'notes')}
+                            onFocus={() => setActiveTypingField('notes')}
+                            onBlur={() => setTimeout(() => setShowSuggestions(false), 300)}
+                            rows={3}
+                            autoFocus
+                            placeholder={hindiTypingEnabled ? 'e.g. shuru C# se, ramesh ji dusra antara … (space converts to Hindi)' : 'e.g. Start from C#, Ramesh ji sings 2nd antara, slow tempo'}
+                            className={`w-full text-sm p-2 pr-12 rounded-lg border outline-none ${darkMode ? 'bg-[#162226] border-[#0B5A70]/30 text-gray-100' : 'bg-white border-amber-300 text-gray-800'}`}
+                            style={{ fontFamily: LYRICS_FONT }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setHindiTypingEnabled(v => !v)}
+                            className={`absolute right-2 top-2 px-1.5 py-0.5 rounded text-[10px] font-bold border ${hindiTypingEnabled ? 'bg-[#0B5A70] text-white border-[#0B5A70]' : (darkMode ? 'bg-[#1e2e33] text-gray-300 border-[#0B5A70]/30' : 'bg-white text-gray-600 border-gray-300')}`}
+                            title={hindiTypingEnabled ? 'Hindi typing on — English letters become Hindi on space. Tap for plain typing.' : 'Plain typing — tap to type Hindi with English letters'}
+                            aria-pressed={hindiTypingEnabled}
+                          >
+                            {hindiTypingEnabled ? 'हिं' : 'EN'}
+                          </button>
+                          {hindiTypingEnabled && showSuggestions && activeTypingField === 'notes' && transliterationSuggestions.length > 0 && (
+                            <CaretChips inputId="hindi-input-notes">
+                              <TransliterationChips currentWord={currentWord} suggestions={transliterationSuggestions} onPick={(sug) => applySuggestion(sug, 'notes')} darkMode={darkMode} />
+                            </CaretChips>
+                          )}
+                        </div>
                         <div className="flex justify-end gap-2 mt-2">
                           <button onClick={() => setNotesDraft(null)} className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>Cancel</button>
                           <button onClick={() => saveBhajanNotes(selectedBhajan, notesDraft)} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-[#E65100] text-white">Save</button>
