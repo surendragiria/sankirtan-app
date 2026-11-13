@@ -1117,7 +1117,7 @@ const dayKey = (d = new Date()) => d.getFullYear() + '-' + String(d.getMonth() +
 
 // Admin user ID (client-side check only hides UI — enforce in Firestore rules!)
 const ADMIN_UID = 'ukY1LbmeVCYv803ipg0wJgyEL1F2';
-const APP_VERSION = '2026.11.11.s145';
+const APP_VERSION = '2026.11.13.s146';
 const AUTO_SCROLL_VIEWS = ['live-program', 'bhajan-detail', 'public-bhajan-detail'];
 const LIVE_SCROLL_STEPS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 
@@ -1188,13 +1188,48 @@ const foldSearchKey = (str) => {
     .replace(/w/g, 'v')
     .replace(/z/g, 'j')
     .replace(/q/g, 'k')
+    .replace(/^(.{2,}[^aeiou])a$/, '$1')  // SESSION 146: trailing schwa (rama → ram, lakha → lak) — before the y rule
     .replace(/y(?![aeiou])/g, 'i')      // jay → jai, but shyam keeps y
     .replace(/ee|ii/g, 'i')
     .replace(/oo|uu/g, 'u')
     .replace(/aa/g, 'a')
-    .replace(/([bcdfghjklmnpqrstvxyz])\1/g, '$1')
-    .replace(/^(.{3,}[^aeiou])a$/, '$1'));
+    .replace(/ai/g, 'i')                 // SESSION 146: kanhaiya / kanhiya, hai / hi
+    .replace(/m$/, 'n')                  // SESSION 146: keshavam / केशवं
+    .replace(/([bcdfghjklmnpqrstvxyz])\1/g, '$1'));
   return t.replace(/[^\p{L}\p{M}\p{N}\s]/gu, ' ').replace(/\s+/g, ' ').trim();
+};
+
+// SESSION 146: Devanagari → rough Latin, so an English-letter query
+// ("kanhiya mittal", "sanjay mittal ji") finds names stored in Hindi.
+// Output goes through foldSearchKey, whose Latin folds (kh→k, aa→a, ee→i,
+// doubled letters, trailing schwa) make both sides line up well enough.
+const DEV_CONS = { 'क': 'k', 'ख': 'kh', 'ग': 'g', 'घ': 'gh', 'ङ': 'n', 'च': 'ch', 'छ': 'chh', 'ज': 'j', 'झ': 'jh', 'ञ': 'n', 'ट': 't', 'ठ': 'th', 'ड': 'd', 'ढ': 'dh', 'ण': 'n', 'त': 't', 'थ': 'th', 'द': 'd', 'ध': 'dh', 'न': 'n', 'प': 'p', 'फ': 'ph', 'ब': 'b', 'भ': 'bh', 'म': 'm', 'य': 'y', 'र': 'r', 'ल': 'l', 'ळ': 'l', 'व': 'v', 'श': 'sh', 'ष': 'sh', 'स': 's', 'ह': 'h', 'क़': 'q', 'ख़': 'kh', 'ग़': 'g', 'ज़': 'z', 'ड़': 'r', 'ढ़': 'rh', 'फ़': 'f', 'य़': 'y' };
+const DEV_VOW = { 'ॐ': 'om', 'अ': 'a', 'आ': 'a', 'इ': 'i', 'ई': 'i', 'उ': 'u', 'ऊ': 'u', 'ऋ': 'ri', 'ए': 'e', 'ऐ': 'ai', 'ओ': 'o', 'औ': 'au', 'ऑ': 'o', 'ऍ': 'e' };
+const DEV_MATRA = { 'ा': 'a', 'ि': 'i', 'ी': 'i', 'ु': 'u', 'ू': 'u', 'ृ': 'ri', 'े': 'e', 'ै': 'ai', 'ो': 'o', 'ौ': 'au', 'ॉ': 'o', 'ॅ': 'e' };
+const devToLatin = (str) => {
+  if (!str || !/[\u0900-\u097F]/.test(str)) return '';
+  const chars = Array.from(String(str).normalize('NFC'));
+  let out = '';
+  let pendingA = false; // a consonant just emitted: inherent 'a' unless a matra/virama follows
+  const flush = () => { if (pendingA) { out += 'a'; pendingA = false; } };
+  for (let i = 0; i < chars.length; i++) {
+    const c = chars[i];
+    if (c === '़') continue;                           // nukta (already in the combined keys we care about)
+    if (DEV_CONS[c] !== undefined) { flush(); out += DEV_CONS[c]; pendingA = true; continue; }
+    if (DEV_MATRA[c] !== undefined) { out += DEV_MATRA[c]; pendingA = false; continue; }
+    if (c === '्') { pendingA = false; continue; }      // virama
+    if (DEV_VOW[c] !== undefined) { flush(); out += DEV_VOW[c]; continue; }
+    if (c === 'ं' || c === 'ँ') { flush(); out += 'n'; continue; }
+    if (c === 'ः') { flush(); out += 'h'; continue; }
+    if (c === '।' || c === '॥') { flush(); out += ' '; continue; }
+    if (/[\u0966-\u096F]/.test(c)) { flush(); out += String(c.charCodeAt(0) - 0x966); continue; }
+    // anything else (space, Latin, punctuation): word boundary → drop the schwa at word end
+    pendingA = false; out += c;
+  }
+  flush();
+  // Schwa deletion: word-final 'a' is silent (राम → ram), and so is the
+  // 'a' in V·C·a·C·V (जगदीश → jagdish, not jagadish).
+  return out.replace(/([^aeiou\s])a\b/g, '$1').replace(/([aeiou][^aeiou\s])a(?=[^aeiou\s][aeiou])/g, '$1');
 };
 
 // Per-bhajan folded text, cached on the object (Firestore snapshots hand
@@ -1203,10 +1238,15 @@ const searchIndexCache = new WeakMap();
 const getSearchIndex = (b) => {
   let idx = searchIndexCache.get(b);
   if (idx) return idx;
+  const metaRaw = [b.dhun, b.singer, b.lyricist, ...(b.keywords || [])].filter(Boolean).join(' ');
   idx = {
     title: foldSearchKey(b.title),
-    meta: foldSearchKey([b.dhun, b.singer, b.lyricist, ...(b.keywords || [])].filter(Boolean).join(' ')),
-    lyrics: foldSearchKey(b.lyrics)
+    meta: foldSearchKey(metaRaw),
+    lyrics: foldSearchKey(b.lyrics),
+    // SESSION 146: romanised copies so English-letter queries match Hindi text
+    titleL: foldSearchKey(devToLatin(b.title)),
+    metaL: foldSearchKey(devToLatin(metaRaw)),
+    lyricsL: foldSearchKey(devToLatin(b.lyrics))
   };
   searchIndexCache.set(b, idx);
   return idx;
@@ -1224,15 +1264,15 @@ const searchTier = (b, foldedQuery) => {
   const idx = getSearchIndex(b);
   const words = foldedQuery.split(' ').filter(Boolean);
   const hit = (field) => field && words.every(w => field.includes(w));
-  if (hit(idx.title)) return 0;
-  if (hit(idx.meta)) return 1;
-  if (hit(idx.lyrics)) return 2;
+  if (hit(idx.title) || hit(idx.titleL)) return 0;
+  if (hit(idx.meta) || hit(idx.metaL)) return 1;
+  if (hit(idx.lyrics) || hit(idx.lyricsL)) return 2;
   if (words.length < 3) return -1;
   const need = Math.ceil(words.length / 2);
   const count = (field) => (field ? words.filter(w => field.includes(w)).length : 0);
   let best = -1;
   [idx.title, idx.meta, idx.lyrics].forEach((field, fi) => {
-    const c = count(field);
+    const c = Math.max(count(field), count([idx.titleL, idx.metaL, idx.lyricsL][fi]));
     if (c >= need) {
       const tier = 10 + fi * 100 + (words.length - c);
       if (best < 0 || tier < best) best = tier;
@@ -9357,7 +9397,7 @@ const App = () => {
                     onChange={(e) => setSearchQuery(e.target.value)}
                     onFocus={() => setSearchFocus('library')}
                     onBlur={() => setTimeout(() => setSearchFocus(f => (f === 'library' ? null : f)), 150)}
-                    placeholder={`Search ${bhajans.length} bhajan${bhajans.length === 1 ? '' : 's'}…`}
+                    placeholder={`Search ${bhajans.length} bhajans, singers, lyricists…`}
                     aria-label="Search my library"
                     className={`w-full pl-10 pr-24 py-3 border rounded-xl focus:ring-4 outline-none ${
                       darkMode
