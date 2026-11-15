@@ -38,7 +38,7 @@
   </div>
   <div class="container">
     <h1>Privacy Policy</h1>
-    <p class="subtitle">Effective Date: 20 July 2026 · Last Updated: 5 October 2026</p>
+    <p class="subtitle">Effective Date: 20 July 2026 · Last Updated: 15 November 2026</p>
 
     <h2>1. Introduction</h2>
     <p>Sankirtan ("the App", "we", "us", "our") is a devotional music platform that allows users to browse, save, organize, and perform bhajans. This Privacy Policy explains what information we collect, how we use it, and your rights regarding your data.</p>
@@ -51,6 +51,8 @@
       <li><strong>Account Information:</strong> When you sign in with Google, we receive your Google display name, email address, and profile photo URL. We do not receive or store your Google password.</li>
       <li><strong>User-Generated Content:</strong> Bhajans you add to your personal library, programs/setlists you create, keywords and tags you assign, and feedback you submit through the app.</li>
       <li><strong>Venue Information:</strong> If you enter a venue name when creating a program, this is stored in your account. We do not track your physical location.</li>
+      <li><strong>Images for lyrics extraction (optional):</strong> If you choose "Add via AI" and upload a photo, image or PDF of a bhajan, the file is sent to our server and passed to Google's Gemini API solely to extract the text. The file is processed in memory and is not stored by us; only the extracted text is returned to you to review and save. This feature is available to signed-in users only and is subject to a daily limit.</li>
+      <li><strong>Voice recordings (optional, on your device only):</strong> If you use the Record feature while singing, the app asks your browser for microphone access and saves the recording in your browser's local storage on your device. Recordings are <strong>never uploaded</strong> to our servers and are not visible to us or to any other user. You can play, rename, share (via your phone's share sheet) or delete recordings yourself at any time. Microphone access can be revoked in your browser or phone settings.</li>
     </ul>
 
     <h3>2.2 Information Collected Automatically</h3>
@@ -65,6 +67,7 @@
       <li>We do not collect payment or financial information.</li>
       <li>We do not collect precise geolocation data.</li>
       <li>We do not collect contacts, call logs, or SMS data.</li>
+      <li>We do not receive, store or listen to your voice recordings; they never leave your device unless you share them.</li>
       <li>We do not use cookies for advertising or tracking.</li>
       <li>We do not collect data from minors knowingly. The App is not directed at children under 13.</li>
     </ul>
@@ -77,6 +80,7 @@
       <li>Display your profile name and photo within the app.</li>
       <li>Improve the app's performance and user experience through aggregated, anonymized analytics.</li>
       <li>Respond to feedback you submit.</li>
+      <li>Extract bhajan text from an image or PDF you choose to upload (AI lyrics extraction).</li>
     </ul>
     <p>We do <strong>not</strong> sell, rent, or share your personal information with any third party for marketing or advertising purposes.</p>
 
@@ -93,6 +97,7 @@
       <li>You may delete individual bhajans or programs from your library at any time through the app.</li>
       <li>To request complete deletion of your account and all associated data, contact us at the email provided below. We will process deletion requests within 30 days.</li>
       <li>Cached data in your browser's local storage can be cleared through your browser settings at any time.</li>
+      <li>Voice recordings are stored only on your device. Delete them from the Recordings list in the app, or clear the app's site data in your browser; deleting your account does not affect recordings already on your phone, and uninstalling the app removes them.</li>
     </ul>
 
     <h2>6. Third-Party Services</h2>
@@ -102,7 +107,8 @@
       <tr><td>Google Firebase (Firestore)</td><td>Data storage</td></tr>
       <tr><td>Google Firebase (Analytics)</td><td>Usage analytics</td></tr>
       <tr><td>Vercel</td><td>App hosting</td></tr>
-      <tr><td>Tesseract.js</td><td>On-device OCR (runs in your browser; no data sent to any server)</td></tr>
+      <tr><td>Google Gemini API (Google LLC)</td><td>Extracting bhajan text from an image or PDF you upload through "Add via AI". Files are sent only when you use that feature and are not retained by us. Governed by Google's Privacy Policy (<a href="https://policies.google.com/privacy">policies.google.com/privacy</a>).</td></tr>
+      <tr><td>Your browser's microphone &amp; local storage</td><td>Optional Record feature. Audio is captured and stored on your device only; no third-party service receives it.</td></tr>
       <tr><td>YouTube (Google LLC)</td><td>Embedded video playback when you tap Listen on a bhajan. Loaded in privacy-enhanced mode from youtube-nocookie.com. Governed by YouTube's own terms (<a href="https://www.youtube.com/t/terms">youtube.com/t/terms</a>) and Google's Privacy Policy (<a href="https://policies.google.com/privacy">policies.google.com/privacy</a>).</td></tr>
     </table>
 
