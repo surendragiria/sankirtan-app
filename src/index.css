@@ -15,6 +15,15 @@ html {
   scroll-behavior: smooth;
 }
 
+/* SESSION 147: no sideways wobble. A long unbroken lyric line, a wide chip
+   strip or a shadow could make the page a few px wider than the phone, so a
+   light touch slid the whole screen left/right. Clip the root horizontally
+   and let long tokens wrap anywhere. */
+html, body { overflow-x: hidden; max-width: 100%; }
+#root { overflow-x: clip; }
+@supports not (overflow-x: clip) { #root { overflow-x: hidden; } }
+pre, .whitespace-pre-wrap, .whitespace-pre-line { max-width: 100%; overflow-wrap: anywhere; word-break: break-word; }
+
 /* SESSION 76: program print sheet (Print / PDF from the program menu) */
 #sk-print { display: none; }
 @media print {
